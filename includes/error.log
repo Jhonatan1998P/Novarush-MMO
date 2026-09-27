@@ -1,0 +1,781 @@
+[10-Oct-2025 06:43:10] PHP Parse error:  syntax error, unexpected '[' in C:\xampp\htdocs\ogame2\includes\GeneralFunctions.php on line 165
+[10-Oct-2025 06:49:54] PHP Parse error:  syntax error, unexpected '(' in C:\xampp\htdocs\ogame2\includes\GeneralFunctions.php on line 165
+[10-Oct-2025 06:49:58] PHP Parse error:  syntax error, unexpected '(' in C:\xampp\htdocs\ogame2\includes\GeneralFunctions.php on line 165
+[10-Oct-2025 06:58:42] PHP Parse error:  syntax error, unexpected '}' in C:\xampp\htdocs\ogame2\includes\GeneralFunctions.php on line 186
+[10-Oct-2025 06:59:48] PHP Parse error:  syntax error, unexpected '}' in C:\xampp\htdocs\ogame2\includes\GeneralFunctions.php on line 186
+[10-Oct-2025 07:00:10] PHP Parse error:  syntax error, unexpected '}' in C:\xampp\htdocs\ogame2\includes\GeneralFunctions.php on line 186
+[10-Oct-2025 07:00:38] PHP Parse error:  syntax error, unexpected $end in C:\xampp\htdocs\ogame2\includes\GeneralFunctions.php on line 758
+[10-Oct-2025 07:01:05] PHP Parse error:  syntax error, unexpected $end in C:\xampp\htdocs\ogame2\includes\GeneralFunctions.php on line 756
+[10-Oct-2025 08:54:25] USER ERROR: "Position is not empty: 1:1:2!"
+File: C:\xampp\htdocs\ogame2\includes\classes\PlayerUtil.class.php | Line: 98
+URL: http://localhost/ogame2/install/index.php?mode=install&step=8 | Version: 2.8.1 (FILE)
+Stack trace:
+#0 /install/index.php(557): PlayerUtil::createPlayer(1, 'Admin', '$2a$09$localhos...', '97adriancf@gmai...', 'en', 1, 1, 2, NULL, 3)
+#1 {main}
+[10-Oct-2025 09:05:42] USER ERROR: "Position is not empty: 1:1:2!"
+File: C:\xampp\htdocs\ogame2\includes\classes\PlayerUtil.class.php | Line: 98
+URL: http://localhost/ogame2/install/index.php?mode=install&step=8 | Version: 2.8.1 (FILE)
+Stack trace:
+#0 /install/index.php(557): PlayerUtil::createPlayer(1, 'Admin', '$2a$09$localhos...', '97adriancf@gmai...', 'en', 1, 1, 2, NULL, 3)
+#1 {main}
+[10-Oct-2025 09:06:35] NOTICE: "Undefined index: infogame"
+File: C:\xampp\htdocs\ogame2\cache\en_nsc^110038cb3fa4b24378db58b8dace70cb069b4498_5.extends.page.index.default.tpl.cache.php | Line: 178
+URL: http://localhost/ogame2/index.php | Version: 2.8.1
+Stack trace:
+#0 /cache/en_nsc^110038cb3fa4b24378db58b8dace70cb069b4498_5.extends.page.index.default.tpl.cache.php(178): errorHandler(8, 'Undefined index...', 'C:/xampp/htdocs...', 178, Array)
+#1 /includes/libs/Smarty/sysplugins/smarty_internal_runtime_inheritance.php(248): Block_13778496568e8b07ba6d912_99485260-&gt;callBlock(Object(Smarty_Internal_Template))
+#2 /includes/libs/Smarty/sysplugins/smarty_internal_runtime_inheritance.php(184): Smarty_Internal_Runtime_Inheritance-&gt;callBlock(Object(Block_13778496568e8b07ba6d912_99485260), Object(Smarty_Internal_Template))
+#3 /includes/libs/Smarty/sysplugins/smarty_internal_runtime_inheritance.php(186): Smarty_Internal_Runtime_Inheritance-&gt;process(Object(Smarty_Internal_Template), Object(Block_13778496568e8b07ba6d912_99485260), Object(Block_30860134068e8b07c0adf81_40878154))
+#4 /includes/libs/Smarty/sysplugins/smarty_internal_runtime_inheritance.php(156): Smarty_Internal_Runtime_Inheritance-&gt;process(Object(Smarty_Internal_Template), Object(Block_30860134068e8b07c0adf81_40878154))
+#5 /cache/en_nsc^110038cb3fa4b24378db58b8dace70cb069b4498_5.extends.page.index.default.tpl.cache.php(584): Smarty_Internal_Runtime_Inheritance-&gt;instanceBlock(Object(Smarty_Internal_Template), 'Block_308601340...', 'content')
+#6 /includes/libs/Smarty/sysplugins/smarty_template_resource_base.php(123): content_68e8b07bdd8cc5_07514682(Object(Smarty_Internal_Template))
+#7 /includes/libs/Smarty/sysplugins/smarty_internal_template.php(376): Smarty_Template_Resource_Base-&gt;getRenderedTemplateCode(Object(Smarty_Internal_Template), 'content_68e8b07...')
+#8 /cache/en_nsc^110038cb3fa4b24378db58b8dace70cb069b4498_5.extends.page.index.default.tpl.cache.php(64): Smarty_Internal_Template-&gt;_subTemplateRender('file:layout.nor...', NULL, 'en.nsc', 9999, 604800, Array, 2, false, 'dabceea90fa536c...', 'content_68e8b07...')
+#9 /includes/libs/Smarty/sysplugins/smarty_template_resource_base.php(123): content_68e8b07c118526_28375069(Object(Smarty_Internal_Template))
+#10 /includes/libs/Smarty/sysplugins/smarty_template_compiled.php(114): Smarty_Template_Resource_Base-&gt;getRenderedTemplateCode(Object(Smarty_Internal_Template))
+#11 /includes/libs/Smarty/sysplugins/smarty_internal_runtime_updatecache.php(38): Smarty_Template_Compiled-&gt;render(Object(Smarty_Internal_Template))
+#12 /includes/libs/Smarty/sysplugins/smarty_template_cached.php(143): Smarty_Internal_Runtime_UpdateCache-&gt;updateCache(Object(Smarty_Template_Cached), Object(Smarty_Internal_Template), false)
+#13 /includes/libs/Smarty/sysplugins/smarty_internal_template.php(211): Smarty_Template_Cached-&gt;render(Object(Smarty_Internal_Template), false)
+#14 /includes/libs/Smarty/sysplugins/smarty_internal_templatebase.php(232): Smarty_Internal_Template-&gt;render(false, 1)
+#15 /includes/libs/Smarty/sysplugins/smarty_internal_templatebase.php(134): Smarty_Internal_TemplateBase-&gt;_execute('extends:layout....', NULL, NULL, NULL, 1)
+#16 /includes/classes/class.template.php(148): Smarty_Internal_TemplateBase-&gt;display('extends:layout....')
+#17 /includes/pages/login/AbstractLoginPage.class.php(169): template-&gt;display('extends:layout....')
+#18 /includes/pages/login/ShowIndexPage.class.php(79): AbstractLoginPage-&gt;display('page.index.defa...')
+#19 /index.php(57): ShowIndexPage-&gt;show()
+#20 {main}
+[10-Oct-2025 09:07:38] NOTICE: "Undefined index: infogame"
+File: C:\xampp\htdocs\ogame2\cache\en_nsc^110038cb3fa4b24378db58b8dace70cb069b4498_5.extends.page.index.default.tpl.cache.php | Line: 178
+URL: http://localhost/ogame2/index.php | Version: 2.8.1
+Stack trace:
+#0 /cache/en_nsc^110038cb3fa4b24378db58b8dace70cb069b4498_5.extends.page.index.default.tpl.cache.php(178): errorHandler(8, 'Undefined index...', 'C:/xampp/htdocs...', 178, Array)
+#1 /includes/libs/Smarty/sysplugins/smarty_internal_runtime_inheritance.php(248): Block_145657767968e8b0ba71e2c7_00035082-&gt;callBlock(Object(Smarty_Internal_Template))
+#2 /includes/libs/Smarty/sysplugins/smarty_internal_runtime_inheritance.php(184): Smarty_Internal_Runtime_Inheritance-&gt;callBlock(Object(Block_145657767968e8b0ba71e2c7_00035082), Object(Smarty_Internal_Template))
+#3 /includes/libs/Smarty/sysplugins/smarty_internal_runtime_inheritance.php(186): Smarty_Internal_Runtime_Inheritance-&gt;process(Object(Smarty_Internal_Template), Object(Block_145657767968e8b0ba71e2c7_00035082), Object(Block_1087195468e8b0ba9f19d2_79798448))
+#4 /includes/libs/Smarty/sysplugins/smarty_internal_runtime_inheritance.php(156): Smarty_Internal_Runtime_Inheritance-&gt;process(Object(Smarty_Internal_Template), Object(Block_1087195468e8b0ba9f19d2_79798448))
+#5 /cache/en_nsc^110038cb3fa4b24378db58b8dace70cb069b4498_5.extends.page.index.default.tpl.cache.php(584): Smarty_Internal_Runtime_Inheritance-&gt;instanceBlock(Object(Smarty_Internal_Template), 'Block_108719546...', 'content')
+#6 /includes/libs/Smarty/sysplugins/smarty_template_resource_base.php(123): content_68e8b0ba8c5336_62078814(Object(Smarty_Internal_Template))
+#7 /includes/libs/Smarty/sysplugins/smarty_internal_template.php(376): Smarty_Template_Resource_Base-&gt;getRenderedTemplateCode(Object(Smarty_Internal_Template), 'content_68e8b0b...')
+#8 /cache/en_nsc^110038cb3fa4b24378db58b8dace70cb069b4498_5.extends.page.index.default.tpl.cache.php(64): Smarty_Internal_Template-&gt;_subTemplateRender('file:layout.nor...', NULL, 'en.nsc', 9999, 604800, Array, 2, false, 'dabceea90fa536c...', 'content_68e8b0b...')
+#9 /includes/libs/Smarty/sysplugins/smarty_template_resource_base.php(123): content_68e8b0baa4fa66_02955701(Object(Smarty_Internal_Template))
+#10 /includes/libs/Smarty/sysplugins/smarty_template_compiled.php(114): Smarty_Template_Resource_Base-&gt;getRenderedTemplateCode(Object(Smarty_Internal_Template))
+#11 /includes/libs/Smarty/sysplugins/smarty_internal_runtime_updatecache.php(38): Smarty_Template_Compiled-&gt;render(Object(Smarty_Internal_Template))
+#12 /includes/libs/Smarty/sysplugins/smarty_template_cached.php(143): Smarty_Internal_Runtime_UpdateCache-&gt;updateCache(Object(Smarty_Template_Cached), Object(Smarty_Internal_Template), false)
+#13 /includes/libs/Smarty/sysplugins/smarty_internal_template.php(211): Smarty_Template_Cached-&gt;render(Object(Smarty_Internal_Template), false)
+#14 /includes/libs/Smarty/sysplugins/smarty_internal_templatebase.php(232): Smarty_Internal_Template-&gt;render(false, 1)
+#15 /includes/libs/Smarty/sysplugins/smarty_internal_templatebase.php(134): Smarty_Internal_TemplateBase-&gt;_execute('extends:layout....', NULL, NULL, NULL, 1)
+#16 /includes/classes/class.template.php(148): Smarty_Internal_TemplateBase-&gt;display('extends:layout....')
+#17 /includes/pages/login/AbstractLoginPage.class.php(169): template-&gt;display('extends:layout....')
+#18 /includes/pages/login/ShowIndexPage.class.php(79): AbstractLoginPage-&gt;display('page.index.defa...')
+#19 /index.php(57): ShowIndexPage-&gt;show()
+#20 {main}
+[10-Oct-2025 09:07:42] NOTICE: "Undefined index: infogame"
+File: C:\xampp\htdocs\ogame2\cache\en_nsc^110038cb3fa4b24378db58b8dace70cb069b4498_5.extends.page.index.default.tpl.cache.php | Line: 178
+URL: http://localhost/ogame2/index.php | Version: 2.8.1
+Stack trace:
+#0 /cache/en_nsc^110038cb3fa4b24378db58b8dace70cb069b4498_5.extends.page.index.default.tpl.cache.php(178): errorHandler(8, 'Undefined index...', 'C:/xampp/htdocs...', 178, Array)
+#1 /includes/libs/Smarty/sysplugins/smarty_internal_runtime_inheritance.php(248): Block_80533503068e8b0be41f068_33376289-&gt;callBlock(Object(Smarty_Internal_Template))
+#2 /includes/libs/Smarty/sysplugins/smarty_internal_runtime_inheritance.php(184): Smarty_Internal_Runtime_Inheritance-&gt;callBlock(Object(Block_80533503068e8b0be41f068_33376289), Object(Smarty_Internal_Template))
+#3 /includes/libs/Smarty/sysplugins/smarty_internal_runtime_inheritance.php(186): Smarty_Internal_Runtime_Inheritance-&gt;process(Object(Smarty_Internal_Template), Object(Block_80533503068e8b0be41f068_33376289), Object(Block_153207194768e8b0be6d9333_05422800))
+#4 /includes/libs/Smarty/sysplugins/smarty_internal_runtime_inheritance.php(156): Smarty_Internal_Runtime_Inheritance-&gt;process(Object(Smarty_Internal_Template), Object(Block_153207194768e8b0be6d9333_05422800))
+#5 /cache/en_nsc^110038cb3fa4b24378db58b8dace70cb069b4498_5.extends.page.index.default.tpl.cache.php(584): Smarty_Internal_Runtime_Inheritance-&gt;instanceBlock(Object(Smarty_Internal_Template), 'Block_153207194...', 'content')
+#6 /includes/libs/Smarty/sysplugins/smarty_template_resource_base.php(123): content_68e8b0be5aab31_75173771(Object(Smarty_Internal_Template))
+#7 /includes/libs/Smarty/sysplugins/smarty_internal_template.php(376): Smarty_Template_Resource_Base-&gt;getRenderedTemplateCode(Object(Smarty_Internal_Template), 'content_68e8b0b...')
+#8 /cache/en_nsc^110038cb3fa4b24378db58b8dace70cb069b4498_5.extends.page.index.default.tpl.cache.php(64): Smarty_Internal_Template-&gt;_subTemplateRender('file:layout.nor...', NULL, 'en.nsc', 9999, 604800, Array, 2, false, 'dabceea90fa536c...', 'content_68e8b0b...')
+#9 /includes/libs/Smarty/sysplugins/smarty_template_resource_base.php(123): content_68e8b0be7360a9_98513691(Object(Smarty_Internal_Template))
+#10 /includes/libs/Smarty/sysplugins/smarty_template_compiled.php(114): Smarty_Template_Resource_Base-&gt;getRenderedTemplateCode(Object(Smarty_Internal_Template))
+#11 /includes/libs/Smarty/sysplugins/smarty_internal_runtime_updatecache.php(38): Smarty_Template_Compiled-&gt;render(Object(Smarty_Internal_Template))
+#12 /includes/libs/Smarty/sysplugins/smarty_template_cached.php(143): Smarty_Internal_Runtime_UpdateCache-&gt;updateCache(Object(Smarty_Template_Cached), Object(Smarty_Internal_Template), false)
+#13 /includes/libs/Smarty/sysplugins/smarty_internal_template.php(211): Smarty_Template_Cached-&gt;render(Object(Smarty_Internal_Template), false)
+#14 /includes/libs/Smarty/sysplugins/smarty_internal_templatebase.php(232): Smarty_Internal_Template-&gt;render(false, 1)
+#15 /includes/libs/Smarty/sysplugins/smarty_internal_templatebase.php(134): Smarty_Internal_TemplateBase-&gt;_execute('extends:layout....', NULL, NULL, NULL, 1)
+#16 /includes/classes/class.template.php(148): Smarty_Internal_TemplateBase-&gt;display('extends:layout....')
+#17 /includes/pages/login/AbstractLoginPage.class.php(169): template-&gt;display('extends:layout....')
+#18 /includes/pages/login/ShowIndexPage.class.php(79): AbstractLoginPage-&gt;display('page.index.defa...')
+#19 /index.php(57): ShowIndexPage-&gt;show()
+#20 {main}
+[10-Oct-2025 09:07:46] NOTICE: "Undefined index: infogame"
+File: C:\xampp\htdocs\ogame2\cache\en_nsc^110038cb3fa4b24378db58b8dace70cb069b4498_5.extends.page.index.default.tpl.cache.php | Line: 178
+URL: http://localhost/ogame2/index.php | Version: 2.8.1
+Stack trace:
+#0 /cache/en_nsc^110038cb3fa4b24378db58b8dace70cb069b4498_5.extends.page.index.default.tpl.cache.php(178): errorHandler(8, 'Undefined index...', 'C:/xampp/htdocs...', 178, Array)
+#1 /includes/libs/Smarty/sysplugins/smarty_internal_runtime_inheritance.php(248): Block_155568115268e8b0c25ac846_99691982-&gt;callBlock(Object(Smarty_Internal_Template))
+#2 /includes/libs/Smarty/sysplugins/smarty_internal_runtime_inheritance.php(184): Smarty_Internal_Runtime_Inheritance-&gt;callBlock(Object(Block_155568115268e8b0c25ac846_99691982), Object(Smarty_Internal_Template))
+#3 /includes/libs/Smarty/sysplugins/smarty_internal_runtime_inheritance.php(186): Smarty_Internal_Runtime_Inheritance-&gt;process(Object(Smarty_Internal_Template), Object(Block_155568115268e8b0c25ac846_99691982), Object(Block_33014304168e8b0c2866f58_02451532))
+#4 /includes/libs/Smarty/sysplugins/smarty_internal_runtime_inheritance.php(156): Smarty_Internal_Runtime_Inheritance-&gt;process(Object(Smarty_Internal_Template), Object(Block_33014304168e8b0c2866f58_02451532))
+#5 /cache/en_nsc^110038cb3fa4b24378db58b8dace70cb069b4498_5.extends.page.index.default.tpl.cache.php(584): Smarty_Internal_Runtime_Inheritance-&gt;instanceBlock(Object(Smarty_Internal_Template), 'Block_330143041...', 'content')
+#6 /includes/libs/Smarty/sysplugins/smarty_template_resource_base.php(123): content_68e8b0c2737781_08828616(Object(Smarty_Internal_Template))
+#7 /includes/libs/Smarty/sysplugins/smarty_internal_template.php(376): Smarty_Template_Resource_Base-&gt;getRenderedTemplateCode(Object(Smarty_Internal_Template), 'content_68e8b0c...')
+#8 /cache/en_nsc^110038cb3fa4b24378db58b8dace70cb069b4498_5.extends.page.index.default.tpl.cache.php(64): Smarty_Internal_Template-&gt;_subTemplateRender('file:layout.nor...', NULL, 'en.nsc', 9999, 604800, Array, 2, false, 'dabceea90fa536c...', 'content_68e8b0c...')
+#9 /includes/libs/Smarty/sysplugins/smarty_template_resource_base.php(123): content_68e8b0c28d0645_28262440(Object(Smarty_Internal_Template))
+#10 /includes/libs/Smarty/sysplugins/smarty_template_compiled.php(114): Smarty_Template_Resource_Base-&gt;getRenderedTemplateCode(Object(Smarty_Internal_Template))
+#11 /includes/libs/Smarty/sysplugins/smarty_internal_runtime_updatecache.php(38): Smarty_Template_Compiled-&gt;render(Object(Smarty_Internal_Template))
+#12 /includes/libs/Smarty/sysplugins/smarty_template_cached.php(143): Smarty_Internal_Runtime_UpdateCache-&gt;updateCache(Object(Smarty_Template_Cached), Object(Smarty_Internal_Template), false)
+#13 /includes/libs/Smarty/sysplugins/smarty_internal_template.php(211): Smarty_Template_Cached-&gt;render(Object(Smarty_Internal_Template), false)
+#14 /includes/libs/Smarty/sysplugins/smarty_internal_templatebase.php(232): Smarty_Internal_Template-&gt;render(false, 1)
+#15 /includes/libs/Smarty/sysplugins/smarty_internal_templatebase.php(134): Smarty_Internal_TemplateBase-&gt;_execute('extends:layout....', NULL, NULL, NULL, 1)
+#16 /includes/classes/class.template.php(148): Smarty_Internal_TemplateBase-&gt;display('extends:layout....')
+#17 /includes/pages/login/AbstractLoginPage.class.php(169): template-&gt;display('extends:layout....')
+#18 /includes/pages/login/ShowIndexPage.class.php(79): AbstractLoginPage-&gt;display('page.index.defa...')
+#19 /index.php(57): ShowIndexPage-&gt;show()
+#20 {main}
+[10-Oct-2025 09:07:49] NOTICE: "Undefined index: infogame"
+File: C:\xampp\htdocs\ogame2\cache\en_nsc^110038cb3fa4b24378db58b8dace70cb069b4498_5.extends.page.index.default.tpl.cache.php | Line: 178
+URL: http://localhost/ogame2/index.php | Version: 2.8.1
+Stack trace:
+#0 /cache/en_nsc^110038cb3fa4b24378db58b8dace70cb069b4498_5.extends.page.index.default.tpl.cache.php(178): errorHandler(8, 'Undefined index...', 'C:/xampp/htdocs...', 178, Array)
+#1 /includes/libs/Smarty/sysplugins/smarty_internal_runtime_inheritance.php(248): Block_110147649468e8b0c5941255_22750662-&gt;callBlock(Object(Smarty_Internal_Template))
+#2 /includes/libs/Smarty/sysplugins/smarty_internal_runtime_inheritance.php(184): Smarty_Internal_Runtime_Inheritance-&gt;callBlock(Object(Block_110147649468e8b0c5941255_22750662), Object(Smarty_Internal_Template))
+#3 /includes/libs/Smarty/sysplugins/smarty_internal_runtime_inheritance.php(186): Smarty_Internal_Runtime_Inheritance-&gt;process(Object(Smarty_Internal_Template), Object(Block_110147649468e8b0c5941255_22750662), Object(Block_209860697268e8b0c5bfd204_97287499))
+#4 /includes/libs/Smarty/sysplugins/smarty_internal_runtime_inheritance.php(156): Smarty_Internal_Runtime_Inheritance-&gt;process(Object(Smarty_Internal_Template), Object(Block_209860697268e8b0c5bfd204_97287499))
+#5 /cache/en_nsc^110038cb3fa4b24378db58b8dace70cb069b4498_5.extends.page.index.default.tpl.cache.php(584): Smarty_Internal_Runtime_Inheritance-&gt;instanceBlock(Object(Smarty_Internal_Template), 'Block_209860697...', 'content')
+#6 /includes/libs/Smarty/sysplugins/smarty_template_resource_base.php(123): content_68e8b0c5ad08d5_50768579(Object(Smarty_Internal_Template))
+#7 /includes/libs/Smarty/sysplugins/smarty_internal_template.php(376): Smarty_Template_Resource_Base-&gt;getRenderedTemplateCode(Object(Smarty_Internal_Template), 'content_68e8b0c...')
+#8 /cache/en_nsc^110038cb3fa4b24378db58b8dace70cb069b4498_5.extends.page.index.default.tpl.cache.php(64): Smarty_Internal_Template-&gt;_subTemplateRender('file:layout.nor...', NULL, 'en.nsc', 9999, 604800, Array, 2, false, 'dabceea90fa536c...', 'content_68e8b0c...')
+#9 /includes/libs/Smarty/sysplugins/smarty_template_resource_base.php(123): content_68e8b0c5c5d628_25118804(Object(Smarty_Internal_Template))
+#10 /includes/libs/Smarty/sysplugins/smarty_template_compiled.php(114): Smarty_Template_Resource_Base-&gt;getRenderedTemplateCode(Object(Smarty_Internal_Template))
+#11 /includes/libs/Smarty/sysplugins/smarty_internal_runtime_updatecache.php(38): Smarty_Template_Compiled-&gt;render(Object(Smarty_Internal_Template))
+#12 /includes/libs/Smarty/sysplugins/smarty_template_cached.php(143): Smarty_Internal_Runtime_UpdateCache-&gt;updateCache(Object(Smarty_Template_Cached), Object(Smarty_Internal_Template), false)
+#13 /includes/libs/Smarty/sysplugins/smarty_internal_template.php(211): Smarty_Template_Cached-&gt;render(Object(Smarty_Internal_Template), false)
+#14 /includes/libs/Smarty/sysplugins/smarty_internal_templatebase.php(232): Smarty_Internal_Template-&gt;render(false, 1)
+#15 /includes/libs/Smarty/sysplugins/smarty_internal_templatebase.php(134): Smarty_Internal_TemplateBase-&gt;_execute('extends:layout....', NULL, NULL, NULL, 1)
+#16 /includes/classes/class.template.php(148): Smarty_Internal_TemplateBase-&gt;display('extends:layout....')
+#17 /includes/pages/login/AbstractLoginPage.class.php(169): template-&gt;display('extends:layout....')
+#18 /includes/pages/login/ShowIndexPage.class.php(79): AbstractLoginPage-&gt;display('page.index.defa...')
+#19 /index.php(57): ShowIndexPage-&gt;show()
+#20 {main}
+[10-Oct-2025 09:07:53] NOTICE: "Undefined index: infogame"
+File: C:\xampp\htdocs\ogame2\cache\en_nsc^110038cb3fa4b24378db58b8dace70cb069b4498_5.extends.page.index.default.tpl.cache.php | Line: 178
+URL: http://localhost/ogame2/index.php | Version: 2.8.1
+Stack trace:
+#0 /cache/en_nsc^110038cb3fa4b24378db58b8dace70cb069b4498_5.extends.page.index.default.tpl.cache.php(178): errorHandler(8, 'Undefined index...', 'C:/xampp/htdocs...', 178, Array)
+#1 /includes/libs/Smarty/sysplugins/smarty_internal_runtime_inheritance.php(248): Block_105615664668e8b0c978f8c7_22670401-&gt;callBlock(Object(Smarty_Internal_Template))
+#2 /includes/libs/Smarty/sysplugins/smarty_internal_runtime_inheritance.php(184): Smarty_Internal_Runtime_Inheritance-&gt;callBlock(Object(Block_105615664668e8b0c978f8c7_22670401), Object(Smarty_Internal_Template))
+#3 /includes/libs/Smarty/sysplugins/smarty_internal_runtime_inheritance.php(186): Smarty_Internal_Runtime_Inheritance-&gt;process(Object(Smarty_Internal_Template), Object(Block_105615664668e8b0c978f8c7_22670401), Object(Block_40927359968e8b0c9a73c24_28868410))
+#4 /includes/libs/Smarty/sysplugins/smarty_internal_runtime_inheritance.php(156): Smarty_Internal_Runtime_Inheritance-&gt;process(Object(Smarty_Internal_Template), Object(Block_40927359968e8b0c9a73c24_28868410))
+#5 /cache/en_nsc^110038cb3fa4b24378db58b8dace70cb069b4498_5.extends.page.index.default.tpl.cache.php(584): Smarty_Internal_Runtime_Inheritance-&gt;instanceBlock(Object(Smarty_Internal_Template), 'Block_409273599...', 'content')
+#6 /includes/libs/Smarty/sysplugins/smarty_template_resource_base.php(123): content_68e8b0c9937a12_18255503(Object(Smarty_Internal_Template))
+#7 /includes/libs/Smarty/sysplugins/smarty_internal_template.php(376): Smarty_Template_Resource_Base-&gt;getRenderedTemplateCode(Object(Smarty_Internal_Template), 'content_68e8b0c...')
+#8 /cache/en_nsc^110038cb3fa4b24378db58b8dace70cb069b4498_5.extends.page.index.default.tpl.cache.php(64): Smarty_Internal_Template-&gt;_subTemplateRender('file:layout.nor...', NULL, 'en.nsc', 9999, 604800, Array, 2, false, 'dabceea90fa536c...', 'content_68e8b0c...')
+#9 /includes/libs/Smarty/sysplugins/smarty_template_resource_base.php(123): content_68e8b0c9ad0f63_65462289(Object(Smarty_Internal_Template))
+#10 /includes/libs/Smarty/sysplugins/smarty_template_compiled.php(114): Smarty_Template_Resource_Base-&gt;getRenderedTemplateCode(Object(Smarty_Internal_Template))
+#11 /includes/libs/Smarty/sysplugins/smarty_internal_runtime_updatecache.php(38): Smarty_Template_Compiled-&gt;render(Object(Smarty_Internal_Template))
+#12 /includes/libs/Smarty/sysplugins/smarty_template_cached.php(143): Smarty_Internal_Runtime_UpdateCache-&gt;updateCache(Object(Smarty_Template_Cached), Object(Smarty_Internal_Template), false)
+#13 /includes/libs/Smarty/sysplugins/smarty_internal_template.php(211): Smarty_Template_Cached-&gt;render(Object(Smarty_Internal_Template), false)
+#14 /includes/libs/Smarty/sysplugins/smarty_internal_templatebase.php(232): Smarty_Internal_Template-&gt;render(false, 1)
+#15 /includes/libs/Smarty/sysplugins/smarty_internal_templatebase.php(134): Smarty_Internal_TemplateBase-&gt;_execute('extends:layout....', NULL, NULL, NULL, 1)
+#16 /includes/classes/class.template.php(148): Smarty_Internal_TemplateBase-&gt;display('extends:layout....')
+#17 /includes/pages/login/AbstractLoginPage.class.php(169): template-&gt;display('extends:layout....')
+#18 /includes/pages/login/ShowIndexPage.class.php(79): AbstractLoginPage-&gt;display('page.index.defa...')
+#19 /index.php(57): ShowIndexPage-&gt;show()
+#20 {main}
+[10-Oct-2025 21:33:56] NOTICE: "Undefined index: infogame"
+File: C:\xampp\htdocs\ogame2\cache\en_nsc^110038cb3fa4b24378db58b8dace70cb069b4498_5.extends.page.index.default.tpl.cache.php | Line: 178
+URL: http://localhost/ogame2/index.php?code=3 | Version: 2.8.1
+Stack trace:
+#0 /cache/en_nsc^110038cb3fa4b24378db58b8dace70cb069b4498_5.extends.page.index.default.tpl.cache.php(178): errorHandler(8, 'Undefined index...', 'C:/xampp/htdocs...', 178, Array)
+#1 /includes/libs/Smarty/sysplugins/smarty_internal_runtime_inheritance.php(248): Block_121380622768e95fa9b014a8_36072907-&gt;callBlock(Object(Smarty_Internal_Template))
+#2 /includes/libs/Smarty/sysplugins/smarty_internal_runtime_inheritance.php(184): Smarty_Internal_Runtime_Inheritance-&gt;callBlock(Object(Block_121380622768e95fa9b014a8_36072907), Object(Smarty_Internal_Template))
+#3 /includes/libs/Smarty/sysplugins/smarty_internal_runtime_inheritance.php(186): Smarty_Internal_Runtime_Inheritance-&gt;process(Object(Smarty_Internal_Template), Object(Block_121380622768e95fa9b014a8_36072907), Object(Block_96538839368e95fab93d253_57924385))
+#4 /includes/libs/Smarty/sysplugins/smarty_internal_runtime_inheritance.php(156): Smarty_Internal_Runtime_Inheritance-&gt;process(Object(Smarty_Internal_Template), Object(Block_96538839368e95fab93d253_57924385))
+#5 /cache/en_nsc^110038cb3fa4b24378db58b8dace70cb069b4498_5.extends.page.index.default.tpl.cache.php(584): Smarty_Internal_Runtime_Inheritance-&gt;instanceBlock(Object(Smarty_Internal_Template), 'Block_965388393...', 'content')
+#6 /includes/libs/Smarty/sysplugins/smarty_template_resource_base.php(123): content_68e95fab100b25_14985670(Object(Smarty_Internal_Template))
+#7 /includes/libs/Smarty/sysplugins/smarty_internal_template.php(376): Smarty_Template_Resource_Base-&gt;getRenderedTemplateCode(Object(Smarty_Internal_Template), 'content_68e95fa...')
+#8 /cache/en_nsc^110038cb3fa4b24378db58b8dace70cb069b4498_5.extends.page.index.default.tpl.cache.php(64): Smarty_Internal_Template-&gt;_subTemplateRender('file:layout.nor...', NULL, 'en.nsc', 9999, 604800, Array, 2, false, 'dabceea90fa536c...', 'content_68e95fa...')
+#9 /includes/libs/Smarty/sysplugins/smarty_template_resource_base.php(123): content_68e95faba7cc40_44470821(Object(Smarty_Internal_Template))
+#10 /includes/libs/Smarty/sysplugins/smarty_template_compiled.php(114): Smarty_Template_Resource_Base-&gt;getRenderedTemplateCode(Object(Smarty_Internal_Template))
+#11 /includes/libs/Smarty/sysplugins/smarty_internal_runtime_updatecache.php(38): Smarty_Template_Compiled-&gt;render(Object(Smarty_Internal_Template))
+#12 /includes/libs/Smarty/sysplugins/smarty_template_cached.php(143): Smarty_Internal_Runtime_UpdateCache-&gt;updateCache(Object(Smarty_Template_Cached), Object(Smarty_Internal_Template), false)
+#13 /includes/libs/Smarty/sysplugins/smarty_internal_template.php(211): Smarty_Template_Cached-&gt;render(Object(Smarty_Internal_Template), false)
+#14 /includes/libs/Smarty/sysplugins/smarty_internal_templatebase.php(232): Smarty_Internal_Template-&gt;render(false, 1)
+#15 /includes/libs/Smarty/sysplugins/smarty_internal_templatebase.php(134): Smarty_Internal_TemplateBase-&gt;_execute('extends:layout....', NULL, NULL, NULL, 1)
+#16 /includes/classes/class.template.php(148): Smarty_Internal_TemplateBase-&gt;display('extends:layout....')
+#17 /includes/pages/login/AbstractLoginPage.class.php(169): template-&gt;display('extends:layout....')
+#18 /includes/pages/login/ShowIndexPage.class.php(79): AbstractLoginPage-&gt;display('page.index.defa...')
+#19 /index.php(57): ShowIndexPage-&gt;show()
+#20 {main}
+[10-Oct-2025 21:34:25] NOTICE: "Undefined index: infogame"
+File: C:\xampp\htdocs\ogame2\cache\en_nsc^110038cb3fa4b24378db58b8dace70cb069b4498_5.extends.page.index.default.tpl.cache.php | Line: 178
+URL: http://localhost/ogame2/index.php?code=3 | Version: 2.8.1
+Stack trace:
+#0 /cache/en_nsc^110038cb3fa4b24378db58b8dace70cb069b4498_5.extends.page.index.default.tpl.cache.php(178): errorHandler(8, 'Undefined index...', 'C:/xampp/htdocs...', 178, Array)
+#1 /includes/libs/Smarty/sysplugins/smarty_internal_runtime_inheritance.php(248): Block_121380622768e95fa9b014a8_36072907-&gt;callBlock(Object(Smarty_Internal_Template))
+#2 /includes/libs/Smarty/sysplugins/smarty_internal_runtime_inheritance.php(184): Smarty_Internal_Runtime_Inheritance-&gt;callBlock(Object(Block_121380622768e95fa9b014a8_36072907), Object(Smarty_Internal_Template))
+#3 /includes/libs/Smarty/sysplugins/smarty_internal_runtime_inheritance.php(186): Smarty_Internal_Runtime_Inheritance-&gt;process(Object(Smarty_Internal_Template), Object(Block_121380622768e95fa9b014a8_36072907), Object(Block_96538839368e95fab93d253_57924385))
+#4 /includes/libs/Smarty/sysplugins/smarty_internal_runtime_inheritance.php(156): Smarty_Internal_Runtime_Inheritance-&gt;process(Object(Smarty_Internal_Template), Object(Block_96538839368e95fab93d253_57924385))
+#5 /cache/en_nsc^110038cb3fa4b24378db58b8dace70cb069b4498_5.extends.page.index.default.tpl.cache.php(584): Smarty_Internal_Runtime_Inheritance-&gt;instanceBlock(Object(Smarty_Internal_Template), 'Block_965388393...', 'content')
+#6 /includes/libs/Smarty/sysplugins/smarty_template_resource_base.php(123): content_68e95fab100b25_14985670(Object(Smarty_Internal_Template))
+#7 /includes/libs/Smarty/sysplugins/smarty_internal_template.php(376): Smarty_Template_Resource_Base-&gt;getRenderedTemplateCode(Object(Smarty_Internal_Template), 'content_68e95fa...')
+#8 /cache/en_nsc^110038cb3fa4b24378db58b8dace70cb069b4498_5.extends.page.index.default.tpl.cache.php(64): Smarty_Internal_Template-&gt;_subTemplateRender('file:layout.nor...', NULL, 'en.nsc', 9999, 604800, Array, 2, false, 'dabceea90fa536c...', 'content_68e95fa...')
+#9 /includes/libs/Smarty/sysplugins/smarty_template_resource_base.php(123): content_68e95faba7cc40_44470821(Object(Smarty_Internal_Template))
+#10 /includes/libs/Smarty/sysplugins/smarty_template_compiled.php(114): Smarty_Template_Resource_Base-&gt;getRenderedTemplateCode(Object(Smarty_Internal_Template))
+#11 /includes/libs/Smarty/sysplugins/smarty_internal_runtime_updatecache.php(38): Smarty_Template_Compiled-&gt;render(Object(Smarty_Internal_Template))
+#12 /includes/libs/Smarty/sysplugins/smarty_template_cached.php(143): Smarty_Internal_Runtime_UpdateCache-&gt;updateCache(Object(Smarty_Template_Cached), Object(Smarty_Internal_Template), false)
+#13 /includes/libs/Smarty/sysplugins/smarty_internal_template.php(211): Smarty_Template_Cached-&gt;render(Object(Smarty_Internal_Template), false)
+#14 /includes/libs/Smarty/sysplugins/smarty_internal_templatebase.php(232): Smarty_Internal_Template-&gt;render(false, 1)
+#15 /includes/libs/Smarty/sysplugins/smarty_internal_templatebase.php(134): Smarty_Internal_TemplateBase-&gt;_execute('extends:layout....', NULL, NULL, NULL, 1)
+#16 /includes/classes/class.template.php(148): Smarty_Internal_TemplateBase-&gt;display('extends:layout....')
+#17 /includes/pages/login/AbstractLoginPage.class.php(169): template-&gt;display('extends:layout....')
+#18 /includes/pages/login/ShowIndexPage.class.php(79): AbstractLoginPage-&gt;display('page.index.defa...')
+#19 /index.php(57): ShowIndexPage-&gt;show()
+#20 {main}
+[10-Oct-2025 21:34:36] NOTICE: "Undefined index: infogame"
+File: C:\xampp\htdocs\ogame2\cache\en_nsc^110038cb3fa4b24378db58b8dace70cb069b4498_5.extends.page.index.default.tpl.cache.php | Line: 178
+URL: http://localhost/ogame2/index.php?code=3 | Version: 2.8.1
+Stack trace:
+#0 /cache/en_nsc^110038cb3fa4b24378db58b8dace70cb069b4498_5.extends.page.index.default.tpl.cache.php(178): errorHandler(8, 'Undefined index...', 'C:/xampp/htdocs...', 178, Array)
+#1 /includes/libs/Smarty/sysplugins/smarty_internal_runtime_inheritance.php(248): Block_121380622768e95fa9b014a8_36072907-&gt;callBlock(Object(Smarty_Internal_Template))
+#2 /includes/libs/Smarty/sysplugins/smarty_internal_runtime_inheritance.php(184): Smarty_Internal_Runtime_Inheritance-&gt;callBlock(Object(Block_121380622768e95fa9b014a8_36072907), Object(Smarty_Internal_Template))
+#3 /includes/libs/Smarty/sysplugins/smarty_internal_runtime_inheritance.php(186): Smarty_Internal_Runtime_Inheritance-&gt;process(Object(Smarty_Internal_Template), Object(Block_121380622768e95fa9b014a8_36072907), Object(Block_96538839368e95fab93d253_57924385))
+#4 /includes/libs/Smarty/sysplugins/smarty_internal_runtime_inheritance.php(156): Smarty_Internal_Runtime_Inheritance-&gt;process(Object(Smarty_Internal_Template), Object(Block_96538839368e95fab93d253_57924385))
+#5 /cache/en_nsc^110038cb3fa4b24378db58b8dace70cb069b4498_5.extends.page.index.default.tpl.cache.php(584): Smarty_Internal_Runtime_Inheritance-&gt;instanceBlock(Object(Smarty_Internal_Template), 'Block_965388393...', 'content')
+#6 /includes/libs/Smarty/sysplugins/smarty_template_resource_base.php(123): content_68e95fab100b25_14985670(Object(Smarty_Internal_Template))
+#7 /includes/libs/Smarty/sysplugins/smarty_internal_template.php(376): Smarty_Template_Resource_Base-&gt;getRenderedTemplateCode(Object(Smarty_Internal_Template), 'content_68e95fa...')
+#8 /cache/en_nsc^110038cb3fa4b24378db58b8dace70cb069b4498_5.extends.page.index.default.tpl.cache.php(64): Smarty_Internal_Template-&gt;_subTemplateRender('file:layout.nor...', NULL, 'en.nsc', 9999, 604800, Array, 2, false, 'dabceea90fa536c...', 'content_68e95fa...')
+#9 /includes/libs/Smarty/sysplugins/smarty_template_resource_base.php(123): content_68e95faba7cc40_44470821(Object(Smarty_Internal_Template))
+#10 /includes/libs/Smarty/sysplugins/smarty_template_compiled.php(114): Smarty_Template_Resource_Base-&gt;getRenderedTemplateCode(Object(Smarty_Internal_Template))
+#11 /includes/libs/Smarty/sysplugins/smarty_internal_runtime_updatecache.php(38): Smarty_Template_Compiled-&gt;render(Object(Smarty_Internal_Template))
+#12 /includes/libs/Smarty/sysplugins/smarty_template_cached.php(143): Smarty_Internal_Runtime_UpdateCache-&gt;updateCache(Object(Smarty_Template_Cached), Object(Smarty_Internal_Template), false)
+#13 /includes/libs/Smarty/sysplugins/smarty_internal_template.php(211): Smarty_Template_Cached-&gt;render(Object(Smarty_Internal_Template), false)
+#14 /includes/libs/Smarty/sysplugins/smarty_internal_templatebase.php(232): Smarty_Internal_Template-&gt;render(false, 1)
+#15 /includes/libs/Smarty/sysplugins/smarty_internal_templatebase.php(134): Smarty_Internal_TemplateBase-&gt;_execute('extends:layout....', NULL, NULL, NULL, 1)
+#16 /includes/classes/class.template.php(148): Smarty_Internal_TemplateBase-&gt;display('extends:layout....')
+#17 /includes/pages/login/AbstractLoginPage.class.php(169): template-&gt;display('extends:layout....')
+#18 /includes/pages/login/ShowIndexPage.class.php(79): AbstractLoginPage-&gt;display('page.index.defa...')
+#19 /index.php(57): ShowIndexPage-&gt;show()
+#20 {main}
+[10-Oct-2025 21:34:37] NOTICE: "Undefined index: infogame"
+File: C:\xampp\htdocs\ogame2\cache\en_nsc^110038cb3fa4b24378db58b8dace70cb069b4498_5.extends.page.index.default.tpl.cache.php | Line: 178
+URL: http://localhost/ogame2/index.php?code=3 | Version: 2.8.1
+Stack trace:
+#0 /cache/en_nsc^110038cb3fa4b24378db58b8dace70cb069b4498_5.extends.page.index.default.tpl.cache.php(178): errorHandler(8, 'Undefined index...', 'C:/xampp/htdocs...', 178, Array)
+#1 /includes/libs/Smarty/sysplugins/smarty_internal_runtime_inheritance.php(248): Block_121380622768e95fa9b014a8_36072907-&gt;callBlock(Object(Smarty_Internal_Template))
+#2 /includes/libs/Smarty/sysplugins/smarty_internal_runtime_inheritance.php(184): Smarty_Internal_Runtime_Inheritance-&gt;callBlock(Object(Block_121380622768e95fa9b014a8_36072907), Object(Smarty_Internal_Template))
+#3 /includes/libs/Smarty/sysplugins/smarty_internal_runtime_inheritance.php(186): Smarty_Internal_Runtime_Inheritance-&gt;process(Object(Smarty_Internal_Template), Object(Block_121380622768e95fa9b014a8_36072907), Object(Block_96538839368e95fab93d253_57924385))
+#4 /includes/libs/Smarty/sysplugins/smarty_internal_runtime_inheritance.php(156): Smarty_Internal_Runtime_Inheritance-&gt;process(Object(Smarty_Internal_Template), Object(Block_96538839368e95fab93d253_57924385))
+#5 /cache/en_nsc^110038cb3fa4b24378db58b8dace70cb069b4498_5.extends.page.index.default.tpl.cache.php(584): Smarty_Internal_Runtime_Inheritance-&gt;instanceBlock(Object(Smarty_Internal_Template), 'Block_965388393...', 'content')
+#6 /includes/libs/Smarty/sysplugins/smarty_template_resource_base.php(123): content_68e95fab100b25_14985670(Object(Smarty_Internal_Template))
+#7 /includes/libs/Smarty/sysplugins/smarty_internal_template.php(376): Smarty_Template_Resource_Base-&gt;getRenderedTemplateCode(Object(Smarty_Internal_Template), 'content_68e95fa...')
+#8 /cache/en_nsc^110038cb3fa4b24378db58b8dace70cb069b4498_5.extends.page.index.default.tpl.cache.php(64): Smarty_Internal_Template-&gt;_subTemplateRender('file:layout.nor...', NULL, 'en.nsc', 9999, 604800, Array, 2, false, 'dabceea90fa536c...', 'content_68e95fa...')
+#9 /includes/libs/Smarty/sysplugins/smarty_template_resource_base.php(123): content_68e95faba7cc40_44470821(Object(Smarty_Internal_Template))
+#10 /includes/libs/Smarty/sysplugins/smarty_template_compiled.php(114): Smarty_Template_Resource_Base-&gt;getRenderedTemplateCode(Object(Smarty_Internal_Template))
+#11 /includes/libs/Smarty/sysplugins/smarty_internal_runtime_updatecache.php(38): Smarty_Template_Compiled-&gt;render(Object(Smarty_Internal_Template))
+#12 /includes/libs/Smarty/sysplugins/smarty_template_cached.php(143): Smarty_Internal_Runtime_UpdateCache-&gt;updateCache(Object(Smarty_Template_Cached), Object(Smarty_Internal_Template), false)
+#13 /includes/libs/Smarty/sysplugins/smarty_internal_template.php(211): Smarty_Template_Cached-&gt;render(Object(Smarty_Internal_Template), false)
+#14 /includes/libs/Smarty/sysplugins/smarty_internal_templatebase.php(232): Smarty_Internal_Template-&gt;render(false, 1)
+#15 /includes/libs/Smarty/sysplugins/smarty_internal_templatebase.php(134): Smarty_Internal_TemplateBase-&gt;_execute('extends:layout....', NULL, NULL, NULL, 1)
+#16 /includes/classes/class.template.php(148): Smarty_Internal_TemplateBase-&gt;display('extends:layout....')
+#17 /includes/pages/login/AbstractLoginPage.class.php(169): template-&gt;display('extends:layout....')
+#18 /includes/pages/login/ShowIndexPage.class.php(79): AbstractLoginPage-&gt;display('page.index.defa...')
+#19 /index.php(57): ShowIndexPage-&gt;show()
+#20 {main}
+[10-Oct-2025 21:34:39] NOTICE: "Undefined index: infogame"
+File: C:\xampp\htdocs\ogame2\cache\en_nsc^110038cb3fa4b24378db58b8dace70cb069b4498_5.extends.page.index.default.tpl.cache.php | Line: 178
+URL: http://localhost/ogame2/index.php?code=3 | Version: 2.8.1
+Stack trace:
+#0 /cache/en_nsc^110038cb3fa4b24378db58b8dace70cb069b4498_5.extends.page.index.default.tpl.cache.php(178): errorHandler(8, 'Undefined index...', 'C:/xampp/htdocs...', 178, Array)
+#1 /includes/libs/Smarty/sysplugins/smarty_internal_runtime_inheritance.php(248): Block_121380622768e95fa9b014a8_36072907-&gt;callBlock(Object(Smarty_Internal_Template))
+#2 /includes/libs/Smarty/sysplugins/smarty_internal_runtime_inheritance.php(184): Smarty_Internal_Runtime_Inheritance-&gt;callBlock(Object(Block_121380622768e95fa9b014a8_36072907), Object(Smarty_Internal_Template))
+#3 /includes/libs/Smarty/sysplugins/smarty_internal_runtime_inheritance.php(186): Smarty_Internal_Runtime_Inheritance-&gt;process(Object(Smarty_Internal_Template), Object(Block_121380622768e95fa9b014a8_36072907), Object(Block_96538839368e95fab93d253_57924385))
+#4 /includes/libs/Smarty/sysplugins/smarty_internal_runtime_inheritance.php(156): Smarty_Internal_Runtime_Inheritance-&gt;process(Object(Smarty_Internal_Template), Object(Block_96538839368e95fab93d253_57924385))
+#5 /cache/en_nsc^110038cb3fa4b24378db58b8dace70cb069b4498_5.extends.page.index.default.tpl.cache.php(584): Smarty_Internal_Runtime_Inheritance-&gt;instanceBlock(Object(Smarty_Internal_Template), 'Block_965388393...', 'content')
+#6 /includes/libs/Smarty/sysplugins/smarty_template_resource_base.php(123): content_68e95fab100b25_14985670(Object(Smarty_Internal_Template))
+#7 /includes/libs/Smarty/sysplugins/smarty_internal_template.php(376): Smarty_Template_Resource_Base-&gt;getRenderedTemplateCode(Object(Smarty_Internal_Template), 'content_68e95fa...')
+#8 /cache/en_nsc^110038cb3fa4b24378db58b8dace70cb069b4498_5.extends.page.index.default.tpl.cache.php(64): Smarty_Internal_Template-&gt;_subTemplateRender('file:layout.nor...', NULL, 'en.nsc', 9999, 604800, Array, 2, false, 'dabceea90fa536c...', 'content_68e95fa...')
+#9 /includes/libs/Smarty/sysplugins/smarty_template_resource_base.php(123): content_68e95faba7cc40_44470821(Object(Smarty_Internal_Template))
+#10 /includes/libs/Smarty/sysplugins/smarty_template_compiled.php(114): Smarty_Template_Resource_Base-&gt;getRenderedTemplateCode(Object(Smarty_Internal_Template))
+#11 /includes/libs/Smarty/sysplugins/smarty_internal_runtime_updatecache.php(38): Smarty_Template_Compiled-&gt;render(Object(Smarty_Internal_Template))
+#12 /includes/libs/Smarty/sysplugins/smarty_template_cached.php(143): Smarty_Internal_Runtime_UpdateCache-&gt;updateCache(Object(Smarty_Template_Cached), Object(Smarty_Internal_Template), false)
+#13 /includes/libs/Smarty/sysplugins/smarty_internal_template.php(211): Smarty_Template_Cached-&gt;render(Object(Smarty_Internal_Template), false)
+#14 /includes/libs/Smarty/sysplugins/smarty_internal_templatebase.php(232): Smarty_Internal_Template-&gt;render(false, 1)
+#15 /includes/libs/Smarty/sysplugins/smarty_internal_templatebase.php(134): Smarty_Internal_TemplateBase-&gt;_execute('extends:layout....', NULL, NULL, NULL, 1)
+#16 /includes/classes/class.template.php(148): Smarty_Internal_TemplateBase-&gt;display('extends:layout....')
+#17 /includes/pages/login/AbstractLoginPage.class.php(169): template-&gt;display('extends:layout....')
+#18 /includes/pages/login/ShowIndexPage.class.php(79): AbstractLoginPage-&gt;display('page.index.defa...')
+#19 /index.php(57): ShowIndexPage-&gt;show()
+#20 {main}
+[10-Oct-2025 21:34:41] NOTICE: "Undefined index: infogame"
+File: C:\xampp\htdocs\ogame2\cache\en_nsc^110038cb3fa4b24378db58b8dace70cb069b4498_5.extends.page.index.default.tpl.cache.php | Line: 178
+URL: http://localhost/ogame2/index.php?code=3 | Version: 2.8.1
+Stack trace:
+#0 /cache/en_nsc^110038cb3fa4b24378db58b8dace70cb069b4498_5.extends.page.index.default.tpl.cache.php(178): errorHandler(8, 'Undefined index...', 'C:/xampp/htdocs...', 178, Array)
+#1 /includes/libs/Smarty/sysplugins/smarty_internal_runtime_inheritance.php(248): Block_121380622768e95fa9b014a8_36072907-&gt;callBlock(Object(Smarty_Internal_Template))
+#2 /includes/libs/Smarty/sysplugins/smarty_internal_runtime_inheritance.php(184): Smarty_Internal_Runtime_Inheritance-&gt;callBlock(Object(Block_121380622768e95fa9b014a8_36072907), Object(Smarty_Internal_Template))
+#3 /includes/libs/Smarty/sysplugins/smarty_internal_runtime_inheritance.php(186): Smarty_Internal_Runtime_Inheritance-&gt;process(Object(Smarty_Internal_Template), Object(Block_121380622768e95fa9b014a8_36072907), Object(Block_96538839368e95fab93d253_57924385))
+#4 /includes/libs/Smarty/sysplugins/smarty_internal_runtime_inheritance.php(156): Smarty_Internal_Runtime_Inheritance-&gt;process(Object(Smarty_Internal_Template), Object(Block_96538839368e95fab93d253_57924385))
+#5 /cache/en_nsc^110038cb3fa4b24378db58b8dace70cb069b4498_5.extends.page.index.default.tpl.cache.php(584): Smarty_Internal_Runtime_Inheritance-&gt;instanceBlock(Object(Smarty_Internal_Template), 'Block_965388393...', 'content')
+#6 /includes/libs/Smarty/sysplugins/smarty_template_resource_base.php(123): content_68e95fab100b25_14985670(Object(Smarty_Internal_Template))
+#7 /includes/libs/Smarty/sysplugins/smarty_internal_template.php(376): Smarty_Template_Resource_Base-&gt;getRenderedTemplateCode(Object(Smarty_Internal_Template), 'content_68e95fa...')
+#8 /cache/en_nsc^110038cb3fa4b24378db58b8dace70cb069b4498_5.extends.page.index.default.tpl.cache.php(64): Smarty_Internal_Template-&gt;_subTemplateRender('file:layout.nor...', NULL, 'en.nsc', 9999, 604800, Array, 2, false, 'dabceea90fa536c...', 'content_68e95fa...')
+#9 /includes/libs/Smarty/sysplugins/smarty_template_resource_base.php(123): content_68e95faba7cc40_44470821(Object(Smarty_Internal_Template))
+#10 /includes/libs/Smarty/sysplugins/smarty_template_compiled.php(114): Smarty_Template_Resource_Base-&gt;getRenderedTemplateCode(Object(Smarty_Internal_Template))
+#11 /includes/libs/Smarty/sysplugins/smarty_internal_runtime_updatecache.php(38): Smarty_Template_Compiled-&gt;render(Object(Smarty_Internal_Template))
+#12 /includes/libs/Smarty/sysplugins/smarty_template_cached.php(143): Smarty_Internal_Runtime_UpdateCache-&gt;updateCache(Object(Smarty_Template_Cached), Object(Smarty_Internal_Template), false)
+#13 /includes/libs/Smarty/sysplugins/smarty_internal_template.php(211): Smarty_Template_Cached-&gt;render(Object(Smarty_Internal_Template), false)
+#14 /includes/libs/Smarty/sysplugins/smarty_internal_templatebase.php(232): Smarty_Internal_Template-&gt;render(false, 1)
+#15 /includes/libs/Smarty/sysplugins/smarty_internal_templatebase.php(134): Smarty_Internal_TemplateBase-&gt;_execute('extends:layout....', NULL, NULL, NULL, 1)
+#16 /includes/classes/class.template.php(148): Smarty_Internal_TemplateBase-&gt;display('extends:layout....')
+#17 /includes/pages/login/AbstractLoginPage.class.php(169): template-&gt;display('extends:layout....')
+#18 /includes/pages/login/ShowIndexPage.class.php(79): AbstractLoginPage-&gt;display('page.index.defa...')
+#19 /index.php(57): ShowIndexPage-&gt;show()
+#20 {main}
+[10-Oct-2025 21:34:42] NOTICE: "Undefined index: infogame"
+File: C:\xampp\htdocs\ogame2\cache\en_nsc^110038cb3fa4b24378db58b8dace70cb069b4498_5.extends.page.index.default.tpl.cache.php | Line: 178
+URL: http://localhost/ogame2/index.php?code=3 | Version: 2.8.1
+Stack trace:
+#0 /cache/en_nsc^110038cb3fa4b24378db58b8dace70cb069b4498_5.extends.page.index.default.tpl.cache.php(178): errorHandler(8, 'Undefined index...', 'C:/xampp/htdocs...', 178, Array)
+#1 /includes/libs/Smarty/sysplugins/smarty_internal_runtime_inheritance.php(248): Block_121380622768e95fa9b014a8_36072907-&gt;callBlock(Object(Smarty_Internal_Template))
+#2 /includes/libs/Smarty/sysplugins/smarty_internal_runtime_inheritance.php(184): Smarty_Internal_Runtime_Inheritance-&gt;callBlock(Object(Block_121380622768e95fa9b014a8_36072907), Object(Smarty_Internal_Template))
+#3 /includes/libs/Smarty/sysplugins/smarty_internal_runtime_inheritance.php(186): Smarty_Internal_Runtime_Inheritance-&gt;process(Object(Smarty_Internal_Template), Object(Block_121380622768e95fa9b014a8_36072907), Object(Block_96538839368e95fab93d253_57924385))
+#4 /includes/libs/Smarty/sysplugins/smarty_internal_runtime_inheritance.php(156): Smarty_Internal_Runtime_Inheritance-&gt;process(Object(Smarty_Internal_Template), Object(Block_96538839368e95fab93d253_57924385))
+#5 /cache/en_nsc^110038cb3fa4b24378db58b8dace70cb069b4498_5.extends.page.index.default.tpl.cache.php(584): Smarty_Internal_Runtime_Inheritance-&gt;instanceBlock(Object(Smarty_Internal_Template), 'Block_965388393...', 'content')
+#6 /includes/libs/Smarty/sysplugins/smarty_template_resource_base.php(123): content_68e95fab100b25_14985670(Object(Smarty_Internal_Template))
+#7 /includes/libs/Smarty/sysplugins/smarty_internal_template.php(376): Smarty_Template_Resource_Base-&gt;getRenderedTemplateCode(Object(Smarty_Internal_Template), 'content_68e95fa...')
+#8 /cache/en_nsc^110038cb3fa4b24378db58b8dace70cb069b4498_5.extends.page.index.default.tpl.cache.php(64): Smarty_Internal_Template-&gt;_subTemplateRender('file:layout.nor...', NULL, 'en.nsc', 9999, 604800, Array, 2, false, 'dabceea90fa536c...', 'content_68e95fa...')
+#9 /includes/libs/Smarty/sysplugins/smarty_template_resource_base.php(123): content_68e95faba7cc40_44470821(Object(Smarty_Internal_Template))
+#10 /includes/libs/Smarty/sysplugins/smarty_template_compiled.php(114): Smarty_Template_Resource_Base-&gt;getRenderedTemplateCode(Object(Smarty_Internal_Template))
+#11 /includes/libs/Smarty/sysplugins/smarty_internal_runtime_updatecache.php(38): Smarty_Template_Compiled-&gt;render(Object(Smarty_Internal_Template))
+#12 /includes/libs/Smarty/sysplugins/smarty_template_cached.php(143): Smarty_Internal_Runtime_UpdateCache-&gt;updateCache(Object(Smarty_Template_Cached), Object(Smarty_Internal_Template), false)
+#13 /includes/libs/Smarty/sysplugins/smarty_internal_template.php(211): Smarty_Template_Cached-&gt;render(Object(Smarty_Internal_Template), false)
+#14 /includes/libs/Smarty/sysplugins/smarty_internal_templatebase.php(232): Smarty_Internal_Template-&gt;render(false, 1)
+#15 /includes/libs/Smarty/sysplugins/smarty_internal_templatebase.php(134): Smarty_Internal_TemplateBase-&gt;_execute('extends:layout....', NULL, NULL, NULL, 1)
+#16 /includes/classes/class.template.php(148): Smarty_Internal_TemplateBase-&gt;display('extends:layout....')
+#17 /includes/pages/login/AbstractLoginPage.class.php(169): template-&gt;display('extends:layout....')
+#18 /includes/pages/login/ShowIndexPage.class.php(79): AbstractLoginPage-&gt;display('page.index.defa...')
+#19 /index.php(57): ShowIndexPage-&gt;show()
+#20 {main}
+[10-Oct-2025 21:35:39] NOTICE: "Undefined index: infogame"
+File: C:\xampp\htdocs\ogame2\cache\en_nsc^110038cb3fa4b24378db58b8dace70cb069b4498_5.extends.page.index.default.tpl.cache.php | Line: 178
+URL: http://localhost/ogame2/index.php?code=3 | Version: 2.8.1
+Stack trace:
+#0 /cache/en_nsc^110038cb3fa4b24378db58b8dace70cb069b4498_5.extends.page.index.default.tpl.cache.php(178): errorHandler(8, 'Undefined index...', 'C:/xampp/htdocs...', 178, Array)
+#1 /includes/libs/Smarty/sysplugins/smarty_internal_runtime_inheritance.php(248): Block_121380622768e95fa9b014a8_36072907-&gt;callBlock(Object(Smarty_Internal_Template))
+#2 /includes/libs/Smarty/sysplugins/smarty_internal_runtime_inheritance.php(184): Smarty_Internal_Runtime_Inheritance-&gt;callBlock(Object(Block_121380622768e95fa9b014a8_36072907), Object(Smarty_Internal_Template))
+#3 /includes/libs/Smarty/sysplugins/smarty_internal_runtime_inheritance.php(186): Smarty_Internal_Runtime_Inheritance-&gt;process(Object(Smarty_Internal_Template), Object(Block_121380622768e95fa9b014a8_36072907), Object(Block_96538839368e95fab93d253_57924385))
+#4 /includes/libs/Smarty/sysplugins/smarty_internal_runtime_inheritance.php(156): Smarty_Internal_Runtime_Inheritance-&gt;process(Object(Smarty_Internal_Template), Object(Block_96538839368e95fab93d253_57924385))
+#5 /cache/en_nsc^110038cb3fa4b24378db58b8dace70cb069b4498_5.extends.page.index.default.tpl.cache.php(584): Smarty_Internal_Runtime_Inheritance-&gt;instanceBlock(Object(Smarty_Internal_Template), 'Block_965388393...', 'content')
+#6 /includes/libs/Smarty/sysplugins/smarty_template_resource_base.php(123): content_68e95fab100b25_14985670(Object(Smarty_Internal_Template))
+#7 /includes/libs/Smarty/sysplugins/smarty_internal_template.php(376): Smarty_Template_Resource_Base-&gt;getRenderedTemplateCode(Object(Smarty_Internal_Template), 'content_68e95fa...')
+#8 /cache/en_nsc^110038cb3fa4b24378db58b8dace70cb069b4498_5.extends.page.index.default.tpl.cache.php(64): Smarty_Internal_Template-&gt;_subTemplateRender('file:layout.nor...', NULL, 'en.nsc', 9999, 604800, Array, 2, false, 'dabceea90fa536c...', 'content_68e95fa...')
+#9 /includes/libs/Smarty/sysplugins/smarty_template_resource_base.php(123): content_68e95faba7cc40_44470821(Object(Smarty_Internal_Template))
+#10 /includes/libs/Smarty/sysplugins/smarty_template_compiled.php(114): Smarty_Template_Resource_Base-&gt;getRenderedTemplateCode(Object(Smarty_Internal_Template))
+#11 /includes/libs/Smarty/sysplugins/smarty_internal_runtime_updatecache.php(38): Smarty_Template_Compiled-&gt;render(Object(Smarty_Internal_Template))
+#12 /includes/libs/Smarty/sysplugins/smarty_template_cached.php(143): Smarty_Internal_Runtime_UpdateCache-&gt;updateCache(Object(Smarty_Template_Cached), Object(Smarty_Internal_Template), false)
+#13 /includes/libs/Smarty/sysplugins/smarty_internal_template.php(211): Smarty_Template_Cached-&gt;render(Object(Smarty_Internal_Template), false)
+#14 /includes/libs/Smarty/sysplugins/smarty_internal_templatebase.php(232): Smarty_Internal_Template-&gt;render(false, 1)
+#15 /includes/libs/Smarty/sysplugins/smarty_internal_templatebase.php(134): Smarty_Internal_TemplateBase-&gt;_execute('extends:layout....', NULL, NULL, NULL, 1)
+#16 /includes/classes/class.template.php(148): Smarty_Internal_TemplateBase-&gt;display('extends:layout....')
+#17 /includes/pages/login/AbstractLoginPage.class.php(169): template-&gt;display('extends:layout....')
+#18 /includes/pages/login/ShowIndexPage.class.php(79): AbstractLoginPage-&gt;display('page.index.defa...')
+#19 /index.php(57): ShowIndexPage-&gt;show()
+#20 {main}
+[10-Oct-2025 21:35:57] NOTICE: "Undefined index: infogame"
+File: C:\xampp\htdocs\ogame2\cache\en_nsc^110038cb3fa4b24378db58b8dace70cb069b4498_5.extends.page.index.default.tpl.cache.php | Line: 178
+URL: http://localhost/ogame2/index.php?code=3 | Version: 2.8.1
+Stack trace:
+#0 /cache/en_nsc^110038cb3fa4b24378db58b8dace70cb069b4498_5.extends.page.index.default.tpl.cache.php(178): errorHandler(8, 'Undefined index...', 'C:/xampp/htdocs...', 178, Array)
+#1 /includes/libs/Smarty/sysplugins/smarty_internal_runtime_inheritance.php(248): Block_121380622768e95fa9b014a8_36072907-&gt;callBlock(Object(Smarty_Internal_Template))
+#2 /includes/libs/Smarty/sysplugins/smarty_internal_runtime_inheritance.php(184): Smarty_Internal_Runtime_Inheritance-&gt;callBlock(Object(Block_121380622768e95fa9b014a8_36072907), Object(Smarty_Internal_Template))
+#3 /includes/libs/Smarty/sysplugins/smarty_internal_runtime_inheritance.php(186): Smarty_Internal_Runtime_Inheritance-&gt;process(Object(Smarty_Internal_Template), Object(Block_121380622768e95fa9b014a8_36072907), Object(Block_96538839368e95fab93d253_57924385))
+#4 /includes/libs/Smarty/sysplugins/smarty_internal_runtime_inheritance.php(156): Smarty_Internal_Runtime_Inheritance-&gt;process(Object(Smarty_Internal_Template), Object(Block_96538839368e95fab93d253_57924385))
+#5 /cache/en_nsc^110038cb3fa4b24378db58b8dace70cb069b4498_5.extends.page.index.default.tpl.cache.php(584): Smarty_Internal_Runtime_Inheritance-&gt;instanceBlock(Object(Smarty_Internal_Template), 'Block_965388393...', 'content')
+#6 /includes/libs/Smarty/sysplugins/smarty_template_resource_base.php(123): content_68e95fab100b25_14985670(Object(Smarty_Internal_Template))
+#7 /includes/libs/Smarty/sysplugins/smarty_internal_template.php(376): Smarty_Template_Resource_Base-&gt;getRenderedTemplateCode(Object(Smarty_Internal_Template), 'content_68e95fa...')
+#8 /cache/en_nsc^110038cb3fa4b24378db58b8dace70cb069b4498_5.extends.page.index.default.tpl.cache.php(64): Smarty_Internal_Template-&gt;_subTemplateRender('file:layout.nor...', NULL, 'en.nsc', 9999, 604800, Array, 2, false, 'dabceea90fa536c...', 'content_68e95fa...')
+#9 /includes/libs/Smarty/sysplugins/smarty_template_resource_base.php(123): content_68e95faba7cc40_44470821(Object(Smarty_Internal_Template))
+#10 /includes/libs/Smarty/sysplugins/smarty_template_compiled.php(114): Smarty_Template_Resource_Base-&gt;getRenderedTemplateCode(Object(Smarty_Internal_Template))
+#11 /includes/libs/Smarty/sysplugins/smarty_internal_runtime_updatecache.php(38): Smarty_Template_Compiled-&gt;render(Object(Smarty_Internal_Template))
+#12 /includes/libs/Smarty/sysplugins/smarty_template_cached.php(143): Smarty_Internal_Runtime_UpdateCache-&gt;updateCache(Object(Smarty_Template_Cached), Object(Smarty_Internal_Template), false)
+#13 /includes/libs/Smarty/sysplugins/smarty_internal_template.php(211): Smarty_Template_Cached-&gt;render(Object(Smarty_Internal_Template), false)
+#14 /includes/libs/Smarty/sysplugins/smarty_internal_templatebase.php(232): Smarty_Internal_Template-&gt;render(false, 1)
+#15 /includes/libs/Smarty/sysplugins/smarty_internal_templatebase.php(134): Smarty_Internal_TemplateBase-&gt;_execute('extends:layout....', NULL, NULL, NULL, 1)
+#16 /includes/classes/class.template.php(148): Smarty_Internal_TemplateBase-&gt;display('extends:layout....')
+#17 /includes/pages/login/AbstractLoginPage.class.php(169): template-&gt;display('extends:layout....')
+#18 /includes/pages/login/ShowIndexPage.class.php(79): AbstractLoginPage-&gt;display('page.index.defa...')
+#19 /index.php(57): ShowIndexPage-&gt;show()
+#20 {main}
+[10-Oct-2025 21:36:22] NOTICE: "Undefined index: infogame"
+File: C:\xampp\htdocs\ogame2\cache\en_nsc^110038cb3fa4b24378db58b8dace70cb069b4498_5.extends.page.index.default.tpl.cache.php | Line: 178
+URL: http://localhost/ogame2/index.php?code=3 | Version: 2.8.1
+Stack trace:
+#0 /cache/en_nsc^110038cb3fa4b24378db58b8dace70cb069b4498_5.extends.page.index.default.tpl.cache.php(178): errorHandler(8, 'Undefined index...', 'C:/xampp/htdocs...', 178, Array)
+#1 /includes/libs/Smarty/sysplugins/smarty_internal_runtime_inheritance.php(248): Block_121380622768e95fa9b014a8_36072907-&gt;callBlock(Object(Smarty_Internal_Template))
+#2 /includes/libs/Smarty/sysplugins/smarty_internal_runtime_inheritance.php(184): Smarty_Internal_Runtime_Inheritance-&gt;callBlock(Object(Block_121380622768e95fa9b014a8_36072907), Object(Smarty_Internal_Template))
+#3 /includes/libs/Smarty/sysplugins/smarty_internal_runtime_inheritance.php(186): Smarty_Internal_Runtime_Inheritance-&gt;process(Object(Smarty_Internal_Template), Object(Block_121380622768e95fa9b014a8_36072907), Object(Block_96538839368e95fab93d253_57924385))
+#4 /includes/libs/Smarty/sysplugins/smarty_internal_runtime_inheritance.php(156): Smarty_Internal_Runtime_Inheritance-&gt;process(Object(Smarty_Internal_Template), Object(Block_96538839368e95fab93d253_57924385))
+#5 /cache/en_nsc^110038cb3fa4b24378db58b8dace70cb069b4498_5.extends.page.index.default.tpl.cache.php(584): Smarty_Internal_Runtime_Inheritance-&gt;instanceBlock(Object(Smarty_Internal_Template), 'Block_965388393...', 'content')
+#6 /includes/libs/Smarty/sysplugins/smarty_template_resource_base.php(123): content_68e95fab100b25_14985670(Object(Smarty_Internal_Template))
+#7 /includes/libs/Smarty/sysplugins/smarty_internal_template.php(376): Smarty_Template_Resource_Base-&gt;getRenderedTemplateCode(Object(Smarty_Internal_Template), 'content_68e95fa...')
+#8 /cache/en_nsc^110038cb3fa4b24378db58b8dace70cb069b4498_5.extends.page.index.default.tpl.cache.php(64): Smarty_Internal_Template-&gt;_subTemplateRender('file:layout.nor...', NULL, 'en.nsc', 9999, 604800, Array, 2, false, 'dabceea90fa536c...', 'content_68e95fa...')
+#9 /includes/libs/Smarty/sysplugins/smarty_template_resource_base.php(123): content_68e95faba7cc40_44470821(Object(Smarty_Internal_Template))
+#10 /includes/libs/Smarty/sysplugins/smarty_template_compiled.php(114): Smarty_Template_Resource_Base-&gt;getRenderedTemplateCode(Object(Smarty_Internal_Template))
+#11 /includes/libs/Smarty/sysplugins/smarty_internal_runtime_updatecache.php(38): Smarty_Template_Compiled-&gt;render(Object(Smarty_Internal_Template))
+#12 /includes/libs/Smarty/sysplugins/smarty_template_cached.php(143): Smarty_Internal_Runtime_UpdateCache-&gt;updateCache(Object(Smarty_Template_Cached), Object(Smarty_Internal_Template), false)
+#13 /includes/libs/Smarty/sysplugins/smarty_internal_template.php(211): Smarty_Template_Cached-&gt;render(Object(Smarty_Internal_Template), false)
+#14 /includes/libs/Smarty/sysplugins/smarty_internal_templatebase.php(232): Smarty_Internal_Template-&gt;render(false, 1)
+#15 /includes/libs/Smarty/sysplugins/smarty_internal_templatebase.php(134): Smarty_Internal_TemplateBase-&gt;_execute('extends:layout....', NULL, NULL, NULL, 1)
+#16 /includes/classes/class.template.php(148): Smarty_Internal_TemplateBase-&gt;display('extends:layout....')
+#17 /includes/pages/login/AbstractLoginPage.class.php(169): template-&gt;display('extends:layout....')
+#18 /includes/pages/login/ShowIndexPage.class.php(79): AbstractLoginPage-&gt;display('page.index.defa...')
+#19 /index.php(57): ShowIndexPage-&gt;show()
+#20 {main}
+[10-Oct-2025 23:44:31] NOTICE: "Undefined index: infoList"
+File: C:\xampp\htdocs\ogame2\cache\en_nsc^110038cb3fa4b24378db58b8dace70cb069b4498_5.extends.page.index.default.tpl.cache.php | Line: 183
+URL: http://localhost/ogame2/index.php?code=3 | Version: 2.8.1
+Stack trace:
+#0 /cache/en_nsc^110038cb3fa4b24378db58b8dace70cb069b4498_5.extends.page.index.default.tpl.cache.php(183): errorHandler(8, 'Undefined index...', 'C:/xampp/htdocs...', 183, Array)
+#1 /includes/libs/Smarty/sysplugins/smarty_internal_runtime_inheritance.php(248): Block_121380622768e95fa9b014a8_36072907-&gt;callBlock(Object(Smarty_Internal_Template))
+#2 /includes/libs/Smarty/sysplugins/smarty_internal_runtime_inheritance.php(184): Smarty_Internal_Runtime_Inheritance-&gt;callBlock(Object(Block_121380622768e95fa9b014a8_36072907), Object(Smarty_Internal_Template))
+#3 /includes/libs/Smarty/sysplugins/smarty_internal_runtime_inheritance.php(186): Smarty_Internal_Runtime_Inheritance-&gt;process(Object(Smarty_Internal_Template), Object(Block_121380622768e95fa9b014a8_36072907), Object(Block_96538839368e95fab93d253_57924385))
+#4 /includes/libs/Smarty/sysplugins/smarty_internal_runtime_inheritance.php(156): Smarty_Internal_Runtime_Inheritance-&gt;process(Object(Smarty_Internal_Template), Object(Block_96538839368e95fab93d253_57924385))
+#5 /cache/en_nsc^110038cb3fa4b24378db58b8dace70cb069b4498_5.extends.page.index.default.tpl.cache.php(585): Smarty_Internal_Runtime_Inheritance-&gt;instanceBlock(Object(Smarty_Internal_Template), 'Block_965388393...', 'content')
+#6 /includes/libs/Smarty/sysplugins/smarty_template_resource_base.php(123): content_68e95fab100b25_14985670(Object(Smarty_Internal_Template))
+#7 /includes/libs/Smarty/sysplugins/smarty_internal_template.php(376): Smarty_Template_Resource_Base-&gt;getRenderedTemplateCode(Object(Smarty_Internal_Template), 'content_68e95fa...')
+#8 /cache/en_nsc^110038cb3fa4b24378db58b8dace70cb069b4498_5.extends.page.index.default.tpl.cache.php(64): Smarty_Internal_Template-&gt;_subTemplateRender('file:layout.nor...', NULL, 'en.nsc', 9999, 604800, Array, 2, false, 'dabceea90fa536c...', 'content_68e95fa...')
+#9 /includes/libs/Smarty/sysplugins/smarty_template_resource_base.php(123): content_68e95faba7cc40_44470821(Object(Smarty_Internal_Template))
+#10 /includes/libs/Smarty/sysplugins/smarty_template_compiled.php(114): Smarty_Template_Resource_Base-&gt;getRenderedTemplateCode(Object(Smarty_Internal_Template))
+#11 /includes/libs/Smarty/sysplugins/smarty_internal_runtime_updatecache.php(38): Smarty_Template_Compiled-&gt;render(Object(Smarty_Internal_Template))
+#12 /includes/libs/Smarty/sysplugins/smarty_template_cached.php(143): Smarty_Internal_Runtime_UpdateCache-&gt;updateCache(Object(Smarty_Template_Cached), Object(Smarty_Internal_Template), false)
+#13 /includes/libs/Smarty/sysplugins/smarty_internal_template.php(211): Smarty_Template_Cached-&gt;render(Object(Smarty_Internal_Template), false)
+#14 /includes/libs/Smarty/sysplugins/smarty_internal_templatebase.php(232): Smarty_Internal_Template-&gt;render(false, 1)
+#15 /includes/libs/Smarty/sysplugins/smarty_internal_templatebase.php(134): Smarty_Internal_TemplateBase-&gt;_execute('extends:layout....', NULL, NULL, NULL, 1)
+#16 /includes/classes/class.template.php(148): Smarty_Internal_TemplateBase-&gt;display('extends:layout....')
+#17 /includes/pages/login/AbstractLoginPage.class.php(169): template-&gt;display('extends:layout....')
+#18 /includes/pages/login/ShowIndexPage.class.php(79): AbstractLoginPage-&gt;display('page.index.defa...')
+#19 /index.php(57): ShowIndexPage-&gt;show()
+#20 {main}
+[10-Oct-2025 23:45:49] NOTICE: "Undefined index: infogame"
+File: C:\xampp\htdocs\ogame2\cache\en_nsc^110038cb3fa4b24378db58b8dace70cb069b4498_5.extends.page.index.default.tpl.cache.php | Line: 179
+URL: http://localhost/ogame2/index.php?code=3 | Version: 2.8.1
+Stack trace:
+#0 /cache/en_nsc^110038cb3fa4b24378db58b8dace70cb069b4498_5.extends.page.index.default.tpl.cache.php(179): errorHandler(8, 'Undefined index...', 'C:/xampp/htdocs...', 179, Array)
+#1 /includes/libs/Smarty/sysplugins/smarty_internal_runtime_inheritance.php(248): Block_121380622768e95fa9b014a8_36072907-&gt;callBlock(Object(Smarty_Internal_Template))
+#2 /includes/libs/Smarty/sysplugins/smarty_internal_runtime_inheritance.php(184): Smarty_Internal_Runtime_Inheritance-&gt;callBlock(Object(Block_121380622768e95fa9b014a8_36072907), Object(Smarty_Internal_Template))
+#3 /includes/libs/Smarty/sysplugins/smarty_internal_runtime_inheritance.php(186): Smarty_Internal_Runtime_Inheritance-&gt;process(Object(Smarty_Internal_Template), Object(Block_121380622768e95fa9b014a8_36072907), Object(Block_96538839368e95fab93d253_57924385))
+#4 /includes/libs/Smarty/sysplugins/smarty_internal_runtime_inheritance.php(156): Smarty_Internal_Runtime_Inheritance-&gt;process(Object(Smarty_Internal_Template), Object(Block_96538839368e95fab93d253_57924385))
+#5 /cache/en_nsc^110038cb3fa4b24378db58b8dace70cb069b4498_5.extends.page.index.default.tpl.cache.php(585): Smarty_Internal_Runtime_Inheritance-&gt;instanceBlock(Object(Smarty_Internal_Template), 'Block_965388393...', 'content')
+#6 /includes/libs/Smarty/sysplugins/smarty_template_resource_base.php(123): content_68e95fab100b25_14985670(Object(Smarty_Internal_Template))
+#7 /includes/libs/Smarty/sysplugins/smarty_internal_template.php(376): Smarty_Template_Resource_Base-&gt;getRenderedTemplateCode(Object(Smarty_Internal_Template), 'content_68e95fa...')
+#8 /cache/en_nsc^110038cb3fa4b24378db58b8dace70cb069b4498_5.extends.page.index.default.tpl.cache.php(64): Smarty_Internal_Template-&gt;_subTemplateRender('file:layout.nor...', NULL, 'en.nsc', 9999, 604800, Array, 2, false, 'dabceea90fa536c...', 'content_68e95fa...')
+#9 /includes/libs/Smarty/sysplugins/smarty_template_resource_base.php(123): content_68e95faba7cc40_44470821(Object(Smarty_Internal_Template))
+#10 /includes/libs/Smarty/sysplugins/smarty_template_compiled.php(114): Smarty_Template_Resource_Base-&gt;getRenderedTemplateCode(Object(Smarty_Internal_Template))
+#11 /includes/libs/Smarty/sysplugins/smarty_internal_runtime_updatecache.php(38): Smarty_Template_Compiled-&gt;render(Object(Smarty_Internal_Template))
+#12 /includes/libs/Smarty/sysplugins/smarty_template_cached.php(143): Smarty_Internal_Runtime_UpdateCache-&gt;updateCache(Object(Smarty_Template_Cached), Object(Smarty_Internal_Template), false)
+#13 /includes/libs/Smarty/sysplugins/smarty_internal_template.php(211): Smarty_Template_Cached-&gt;render(Object(Smarty_Internal_Template), false)
+#14 /includes/libs/Smarty/sysplugins/smarty_internal_templatebase.php(232): Smarty_Internal_Template-&gt;render(false, 1)
+#15 /includes/libs/Smarty/sysplugins/smarty_internal_templatebase.php(134): Smarty_Internal_TemplateBase-&gt;_execute('extends:layout....', NULL, NULL, NULL, 1)
+#16 /includes/classes/class.template.php(148): Smarty_Internal_TemplateBase-&gt;display('extends:layout....')
+#17 /includes/pages/login/AbstractLoginPage.class.php(169): template-&gt;display('extends:layout....')
+#18 /includes/pages/login/ShowIndexPage.class.php(79): AbstractLoginPage-&gt;display('page.index.defa...')
+#19 /index.php(57): ShowIndexPage-&gt;show()
+#20 {main}
+[10-Oct-2025 23:47:14] NOTICE: "Undefined index: infoList"
+File: C:\xampp\htdocs\ogame2\cache\en_nsc^110038cb3fa4b24378db58b8dace70cb069b4498_5.extends.page.index.default.tpl.cache.php | Line: 183
+URL: http://localhost/ogame2/index.php?code=3 | Version: 2.8.1
+Stack trace:
+#0 /cache/en_nsc^110038cb3fa4b24378db58b8dace70cb069b4498_5.extends.page.index.default.tpl.cache.php(183): errorHandler(8, 'Undefined index...', 'C:/xampp/htdocs...', 183, Array)
+#1 /includes/libs/Smarty/sysplugins/smarty_internal_runtime_inheritance.php(248): Block_121380622768e95fa9b014a8_36072907-&gt;callBlock(Object(Smarty_Internal_Template))
+#2 /includes/libs/Smarty/sysplugins/smarty_internal_runtime_inheritance.php(184): Smarty_Internal_Runtime_Inheritance-&gt;callBlock(Object(Block_121380622768e95fa9b014a8_36072907), Object(Smarty_Internal_Template))
+#3 /includes/libs/Smarty/sysplugins/smarty_internal_runtime_inheritance.php(186): Smarty_Internal_Runtime_Inheritance-&gt;process(Object(Smarty_Internal_Template), Object(Block_121380622768e95fa9b014a8_36072907), Object(Block_96538839368e95fab93d253_57924385))
+#4 /includes/libs/Smarty/sysplugins/smarty_internal_runtime_inheritance.php(156): Smarty_Internal_Runtime_Inheritance-&gt;process(Object(Smarty_Internal_Template), Object(Block_96538839368e95fab93d253_57924385))
+#5 /cache/en_nsc^110038cb3fa4b24378db58b8dace70cb069b4498_5.extends.page.index.default.tpl.cache.php(585): Smarty_Internal_Runtime_Inheritance-&gt;instanceBlock(Object(Smarty_Internal_Template), 'Block_965388393...', 'content')
+#6 /includes/libs/Smarty/sysplugins/smarty_template_resource_base.php(123): content_68e95fab100b25_14985670(Object(Smarty_Internal_Template))
+#7 /includes/libs/Smarty/sysplugins/smarty_internal_template.php(376): Smarty_Template_Resource_Base-&gt;getRenderedTemplateCode(Object(Smarty_Internal_Template), 'content_68e95fa...')
+#8 /cache/en_nsc^110038cb3fa4b24378db58b8dace70cb069b4498_5.extends.page.index.default.tpl.cache.php(64): Smarty_Internal_Template-&gt;_subTemplateRender('file:layout.nor...', NULL, 'en.nsc', 9999, 604800, Array, 2, false, 'dabceea90fa536c...', 'content_68e95fa...')
+#9 /includes/libs/Smarty/sysplugins/smarty_template_resource_base.php(123): content_68e95faba7cc40_44470821(Object(Smarty_Internal_Template))
+#10 /includes/libs/Smarty/sysplugins/smarty_template_compiled.php(114): Smarty_Template_Resource_Base-&gt;getRenderedTemplateCode(Object(Smarty_Internal_Template))
+#11 /includes/libs/Smarty/sysplugins/smarty_internal_runtime_updatecache.php(38): Smarty_Template_Compiled-&gt;render(Object(Smarty_Internal_Template))
+#12 /includes/libs/Smarty/sysplugins/smarty_template_cached.php(143): Smarty_Internal_Runtime_UpdateCache-&gt;updateCache(Object(Smarty_Template_Cached), Object(Smarty_Internal_Template), false)
+#13 /includes/libs/Smarty/sysplugins/smarty_internal_template.php(211): Smarty_Template_Cached-&gt;render(Object(Smarty_Internal_Template), false)
+#14 /includes/libs/Smarty/sysplugins/smarty_internal_templatebase.php(232): Smarty_Internal_Template-&gt;render(false, 1)
+#15 /includes/libs/Smarty/sysplugins/smarty_internal_templatebase.php(134): Smarty_Internal_TemplateBase-&gt;_execute('extends:layout....', NULL, NULL, NULL, 1)
+#16 /includes/classes/class.template.php(148): Smarty_Internal_TemplateBase-&gt;display('extends:layout....')
+#17 /includes/pages/login/AbstractLoginPage.class.php(169): template-&gt;display('extends:layout....')
+#18 /includes/pages/login/ShowIndexPage.class.php(79): AbstractLoginPage-&gt;display('page.index.defa...')
+#19 /index.php(57): ShowIndexPage-&gt;show()
+#20 {main}
+[10-Oct-2025 23:55:25] PHP Parse error:  syntax error, unexpected T_CONSTANT_ENCAPSED_STRING, expecting ')' in C:\xampp\htdocs\ogame2\includes\pages\login\ShowIndexPage.class.php on line 77
+[11-Oct-2025 00:02:18] PHP Parse error:  syntax error, unexpected T_CONSTANT_ENCAPSED_STRING, expecting ')' in C:\xampp\htdocs\ogame2\includes\pages\login\ShowIndexPage.class.php on line 77
+[11-Oct-2025 00:03:06] NOTICE: "Undefined index: infogame"
+File: C:\xampp\htdocs\ogame2\cache\en_nsc^110038cb3fa4b24378db58b8dace70cb069b4498_5.extends.page.index.default.tpl.cache.php | Line: 178
+URL: http://localhost/ogame2/index.php?code=3 | Version: 2.8.1
+Stack trace:
+#0 /cache/en_nsc^110038cb3fa4b24378db58b8dace70cb069b4498_5.extends.page.index.default.tpl.cache.php(178): errorHandler(8, 'Undefined index...', 'C:/xampp/htdocs...', 178, Array)
+#1 /includes/libs/Smarty/sysplugins/smarty_internal_runtime_inheritance.php(248): Block_121380622768e95fa9b014a8_36072907-&gt;callBlock(Object(Smarty_Internal_Template))
+#2 /includes/libs/Smarty/sysplugins/smarty_internal_runtime_inheritance.php(184): Smarty_Internal_Runtime_Inheritance-&gt;callBlock(Object(Block_121380622768e95fa9b014a8_36072907), Object(Smarty_Internal_Template))
+#3 /includes/libs/Smarty/sysplugins/smarty_internal_runtime_inheritance.php(186): Smarty_Internal_Runtime_Inheritance-&gt;process(Object(Smarty_Internal_Template), Object(Block_121380622768e95fa9b014a8_36072907), Object(Block_96538839368e95fab93d253_57924385))
+#4 /includes/libs/Smarty/sysplugins/smarty_internal_runtime_inheritance.php(156): Smarty_Internal_Runtime_Inheritance-&gt;process(Object(Smarty_Internal_Template), Object(Block_96538839368e95fab93d253_57924385))
+#5 /cache/en_nsc^110038cb3fa4b24378db58b8dace70cb069b4498_5.extends.page.index.default.tpl.cache.php(583): Smarty_Internal_Runtime_Inheritance-&gt;instanceBlock(Object(Smarty_Internal_Template), 'Block_965388393...', 'content')
+#6 /includes/libs/Smarty/sysplugins/smarty_template_resource_base.php(123): content_68e95fab100b25_14985670(Object(Smarty_Internal_Template))
+#7 /includes/libs/Smarty/sysplugins/smarty_internal_template.php(376): Smarty_Template_Resource_Base-&gt;getRenderedTemplateCode(Object(Smarty_Internal_Template), 'content_68e95fa...')
+#8 /cache/en_nsc^110038cb3fa4b24378db58b8dace70cb069b4498_5.extends.page.index.default.tpl.cache.php(64): Smarty_Internal_Template-&gt;_subTemplateRender('file:layout.nor...', NULL, 'en.nsc', 9999, 604800, Array, 2, false, 'dabceea90fa536c...', 'content_68e95fa...')
+#9 /includes/libs/Smarty/sysplugins/smarty_template_resource_base.php(123): content_68e95faba7cc40_44470821(Object(Smarty_Internal_Template))
+#10 /includes/libs/Smarty/sysplugins/smarty_template_compiled.php(114): Smarty_Template_Resource_Base-&gt;getRenderedTemplateCode(Object(Smarty_Internal_Template))
+#11 /includes/libs/Smarty/sysplugins/smarty_internal_runtime_updatecache.php(38): Smarty_Template_Compiled-&gt;render(Object(Smarty_Internal_Template))
+#12 /includes/libs/Smarty/sysplugins/smarty_template_cached.php(143): Smarty_Internal_Runtime_UpdateCache-&gt;updateCache(Object(Smarty_Template_Cached), Object(Smarty_Internal_Template), false)
+#13 /includes/libs/Smarty/sysplugins/smarty_internal_template.php(211): Smarty_Template_Cached-&gt;render(Object(Smarty_Internal_Template), false)
+#14 /includes/libs/Smarty/sysplugins/smarty_internal_templatebase.php(232): Smarty_Internal_Template-&gt;render(false, 1)
+#15 /includes/libs/Smarty/sysplugins/smarty_internal_templatebase.php(134): Smarty_Internal_TemplateBase-&gt;_execute('extends:layout....', NULL, NULL, NULL, 1)
+#16 /includes/classes/class.template.php(148): Smarty_Internal_TemplateBase-&gt;display('extends:layout....')
+#17 /includes/pages/login/AbstractLoginPage.class.php(169): template-&gt;display('extends:layout....')
+#18 /includes/pages/login/ShowIndexPage.class.php(79): AbstractLoginPage-&gt;display('page.index.defa...')
+#19 /index.php(57): ShowIndexPage-&gt;show()
+#20 {main}
+[11-Oct-2025 00:29:06] NOTICE: "Undefined index: infoList"
+File: C:\xampp\htdocs\ogame2\cache\en_nsc^110038cb3fa4b24378db58b8dace70cb069b4498_5.extends.page.index.default.tpl.cache.php | Line: 181
+URL: http://localhost/ogame2/index.php?code=3 | Version: 2.8.1
+Stack trace:
+#0 /cache/en_nsc^110038cb3fa4b24378db58b8dace70cb069b4498_5.extends.page.index.default.tpl.cache.php(181): errorHandler(8, 'Undefined index...', 'C:/xampp/htdocs...', 181, Array)
+#1 /includes/libs/Smarty/sysplugins/smarty_internal_runtime_inheritance.php(248): Block_121380622768e95fa9b014a8_36072907-&gt;callBlock(Object(Smarty_Internal_Template))
+#2 /includes/libs/Smarty/sysplugins/smarty_internal_runtime_inheritance.php(184): Smarty_Internal_Runtime_Inheritance-&gt;callBlock(Object(Block_121380622768e95fa9b014a8_36072907), Object(Smarty_Internal_Template))
+#3 /includes/libs/Smarty/sysplugins/smarty_internal_runtime_inheritance.php(186): Smarty_Internal_Runtime_Inheritance-&gt;process(Object(Smarty_Internal_Template), Object(Block_121380622768e95fa9b014a8_36072907), Object(Block_96538839368e95fab93d253_57924385))
+#4 /includes/libs/Smarty/sysplugins/smarty_internal_runtime_inheritance.php(156): Smarty_Internal_Runtime_Inheritance-&gt;process(Object(Smarty_Internal_Template), Object(Block_96538839368e95fab93d253_57924385))
+#5 /cache/en_nsc^110038cb3fa4b24378db58b8dace70cb069b4498_5.extends.page.index.default.tpl.cache.php(583): Smarty_Internal_Runtime_Inheritance-&gt;instanceBlock(Object(Smarty_Internal_Template), 'Block_965388393...', 'content')
+#6 /includes/libs/Smarty/sysplugins/smarty_template_resource_base.php(123): content_68e95fab100b25_14985670(Object(Smarty_Internal_Template))
+#7 /includes/libs/Smarty/sysplugins/smarty_internal_template.php(376): Smarty_Template_Resource_Base-&gt;getRenderedTemplateCode(Object(Smarty_Internal_Template), 'content_68e95fa...')
+#8 /cache/en_nsc^110038cb3fa4b24378db58b8dace70cb069b4498_5.extends.page.index.default.tpl.cache.php(64): Smarty_Internal_Template-&gt;_subTemplateRender('file:layout.nor...', NULL, 'en.nsc', 9999, 604800, Array, 2, false, 'dabceea90fa536c...', 'content_68e95fa...')
+#9 /includes/libs/Smarty/sysplugins/smarty_template_resource_base.php(123): content_68e95faba7cc40_44470821(Object(Smarty_Internal_Template))
+#10 /includes/libs/Smarty/sysplugins/smarty_template_compiled.php(114): Smarty_Template_Resource_Base-&gt;getRenderedTemplateCode(Object(Smarty_Internal_Template))
+#11 /includes/libs/Smarty/sysplugins/smarty_internal_runtime_updatecache.php(38): Smarty_Template_Compiled-&gt;render(Object(Smarty_Internal_Template))
+#12 /includes/libs/Smarty/sysplugins/smarty_template_cached.php(143): Smarty_Internal_Runtime_UpdateCache-&gt;updateCache(Object(Smarty_Template_Cached), Object(Smarty_Internal_Template), false)
+#13 /includes/libs/Smarty/sysplugins/smarty_internal_template.php(211): Smarty_Template_Cached-&gt;render(Object(Smarty_Internal_Template), false)
+#14 /includes/libs/Smarty/sysplugins/smarty_internal_templatebase.php(232): Smarty_Internal_Template-&gt;render(false, 1)
+#15 /includes/libs/Smarty/sysplugins/smarty_internal_templatebase.php(134): Smarty_Internal_TemplateBase-&gt;_execute('extends:layout....', NULL, NULL, NULL, 1)
+#16 /includes/classes/class.template.php(148): Smarty_Internal_TemplateBase-&gt;display('extends:layout....')
+#17 /includes/pages/login/AbstractLoginPage.class.php(169): template-&gt;display('extends:layout....')
+#18 /includes/pages/login/ShowIndexPage.class.php(80): AbstractLoginPage-&gt;display('page.index.defa...')
+#19 /index.php(57): ShowIndexPage-&gt;show()
+#20 {main}
+[12-Oct-2025 03:47:02] NOTICE: "Undefined index: infoList"
+File: C:\xampp\htdocs\ogame2\cache\en_nsc^110038cb3fa4b24378db58b8dace70cb069b4498_5.extends.page.index.default.tpl.cache.php | Line: 181
+URL: http://localhost/ogame2/index.php?code=3 | Version: 2.8.1
+Stack trace:
+#0 /cache/en_nsc^110038cb3fa4b24378db58b8dace70cb069b4498_5.extends.page.index.default.tpl.cache.php(181): errorHandler(8, 'Undefined index...', 'C:/xampp/htdocs...', 181, Array)
+#1 /includes/libs/Smarty/sysplugins/smarty_internal_runtime_inheritance.php(248): Block_121380622768e95fa9b014a8_36072907-&gt;callBlock(Object(Smarty_Internal_Template))
+#2 /includes/libs/Smarty/sysplugins/smarty_internal_runtime_inheritance.php(184): Smarty_Internal_Runtime_Inheritance-&gt;callBlock(Object(Block_121380622768e95fa9b014a8_36072907), Object(Smarty_Internal_Template))
+#3 /includes/libs/Smarty/sysplugins/smarty_internal_runtime_inheritance.php(186): Smarty_Internal_Runtime_Inheritance-&gt;process(Object(Smarty_Internal_Template), Object(Block_121380622768e95fa9b014a8_36072907), Object(Block_96538839368e95fab93d253_57924385))
+#4 /includes/libs/Smarty/sysplugins/smarty_internal_runtime_inheritance.php(156): Smarty_Internal_Runtime_Inheritance-&gt;process(Object(Smarty_Internal_Template), Object(Block_96538839368e95fab93d253_57924385))
+#5 /cache/en_nsc^110038cb3fa4b24378db58b8dace70cb069b4498_5.extends.page.index.default.tpl.cache.php(583): Smarty_Internal_Runtime_Inheritance-&gt;instanceBlock(Object(Smarty_Internal_Template), 'Block_965388393...', 'content')
+#6 /includes/libs/Smarty/sysplugins/smarty_template_resource_base.php(123): content_68e95fab100b25_14985670(Object(Smarty_Internal_Template))
+#7 /includes/libs/Smarty/sysplugins/smarty_internal_template.php(376): Smarty_Template_Resource_Base-&gt;getRenderedTemplateCode(Object(Smarty_Internal_Template), 'content_68e95fa...')
+#8 /cache/en_nsc^110038cb3fa4b24378db58b8dace70cb069b4498_5.extends.page.index.default.tpl.cache.php(64): Smarty_Internal_Template-&gt;_subTemplateRender('file:layout.nor...', NULL, 'en.nsc', 9999, 604800, Array, 2, false, 'dabceea90fa536c...', 'content_68e95fa...')
+#9 /includes/libs/Smarty/sysplugins/smarty_template_resource_base.php(123): content_68e95faba7cc40_44470821(Object(Smarty_Internal_Template))
+#10 /includes/libs/Smarty/sysplugins/smarty_template_compiled.php(114): Smarty_Template_Resource_Base-&gt;getRenderedTemplateCode(Object(Smarty_Internal_Template))
+#11 /includes/libs/Smarty/sysplugins/smarty_internal_runtime_updatecache.php(38): Smarty_Template_Compiled-&gt;render(Object(Smarty_Internal_Template))
+#12 /includes/libs/Smarty/sysplugins/smarty_template_cached.php(143): Smarty_Internal_Runtime_UpdateCache-&gt;updateCache(Object(Smarty_Template_Cached), Object(Smarty_Internal_Template), false)
+#13 /includes/libs/Smarty/sysplugins/smarty_internal_template.php(211): Smarty_Template_Cached-&gt;render(Object(Smarty_Internal_Template), false)
+#14 /includes/libs/Smarty/sysplugins/smarty_internal_templatebase.php(232): Smarty_Internal_Template-&gt;render(false, 1)
+#15 /includes/libs/Smarty/sysplugins/smarty_internal_templatebase.php(134): Smarty_Internal_TemplateBase-&gt;_execute('extends:layout....', NULL, NULL, NULL, 1)
+#16 /includes/classes/class.template.php(148): Smarty_Internal_TemplateBase-&gt;display('extends:layout....')
+#17 /includes/pages/login/AbstractLoginPage.class.php(169): template-&gt;display('extends:layout....')
+#18 /includes/pages/login/ShowIndexPage.class.php(80): AbstractLoginPage-&gt;display('page.index.defa...')
+#19 /index.php(57): ShowIndexPage-&gt;show()
+#20 {main}
+[12-Oct-2025 03:50:46] NOTICE: "Undefined index: ver"
+File: C:\xampp\htdocs\ogame2\cache\templates\en_nsc^be3f5d9a8a6c95c071ae12fac82f7630a994ef19.page.index.default.tpl.php | Line: 269
+URL: http://localhost/ogame2/index.php?code=3 | Version: 2.8.1
+Stack trace:
+#0 /cache/templates/en_nsc^be3f5d9a8a6c95c071ae12fac82f7630a994ef19.page.index.default.tpl.php(269): errorHandler(8, 'Undefined index...', 'C:/xampp/htdocs...', 269, Array)
+#1 /includes/libs/Smarty/sysplugins/smarty_template_resource_base.php(123): content_68eb09777c3be6_78550329(Object(Smarty_Internal_Template))
+#2 /includes/libs/Smarty/sysplugins/smarty_internal_runtime_updatecache.php(52): Smarty_Template_Resource_Base-&gt;getRenderedTemplateCode(Object(Smarty_Internal_Template))
+#3 /includes/libs/Smarty/sysplugins/smarty_template_cached.php(143): Smarty_Internal_Runtime_UpdateCache-&gt;updateCache(Object(Smarty_Template_Cached), Object(Smarty_Internal_Template), false)
+#4 /includes/libs/Smarty/sysplugins/smarty_internal_template.php(211): Smarty_Template_Cached-&gt;render(Object(Smarty_Internal_Template), false)
+#5 /includes/libs/Smarty/sysplugins/smarty_internal_templatebase.php(232): Smarty_Internal_Template-&gt;render(false, 1)
+#6 /includes/libs/Smarty/sysplugins/smarty_internal_templatebase.php(134): Smarty_Internal_TemplateBase-&gt;_execute('extends:layout....', NULL, NULL, NULL, 1)
+#7 /includes/classes/class.template.php(148): Smarty_Internal_TemplateBase-&gt;display('extends:layout....')
+#8 /includes/pages/login/AbstractLoginPage.class.php(169): template-&gt;display('extends:layout....')
+#9 /includes/pages/login/ShowIndexPage.class.php(81): AbstractLoginPage-&gt;display('page.index.defa...')
+#10 /index.php(57): ShowIndexPage-&gt;show()
+#11 {main}
+[12-Oct-2025 04:10:02] PHP Fatal error:  Call to undefined function curl_init() in C:\xampp\htdocs\ogame2\includes\classes\cronjob\TrackingCronjob.class.php on line 57
+[13-Oct-2025 02:46:16] PHP Fatal error:  Arrays are not allowed in class constants in C:\xampp\htdocs\ogame2\includes\classes\missions\functions\SetHostileSectorBot.php on line 23
+[13-Oct-2025 03:59:46] PHP Fatal error:  Undefined class constant 'BOT_FACTOR' in C:\xampp\htdocs\ogame2\includes\classes\missions\functions\SetHostileSectorBot.php on line 142
+[13-Oct-2025 04:01:07] PHP Fatal error:  Undefined class constant 'BOT_FACTOR' in C:\xampp\htdocs\ogame2\includes\classes\missions\functions\SetHostileSectorBot.php on line 142
+[13-Oct-2025 04:01:29] PHP Fatal error:  Undefined class constant 'BOT_FACTOR' in C:\xampp\htdocs\ogame2\includes\classes\missions\functions\SetHostileSectorBot.php on line 142
+[13-Oct-2025 04:03:07] PHP Fatal error:  Undefined class constant 'BOT_FACTOR' in C:\xampp\htdocs\ogame2\includes\classes\missions\functions\SetHostileSectorBot.php on line 142
+[13-Oct-2025 04:08:06] PHP Fatal error:  Undefined class constant 'BOT_FACTOR' in C:\xampp\htdocs\ogame2\includes\classes\missions\functions\SetHostileSectorBot.php on line 142
+[13-Oct-2025 04:10:02] PHP Fatal error:  Arrays are not allowed in class constants in C:\xampp\htdocs\ogame2\includes\classes\missions\functions\SetHostileSectorBot.php on line 23
+[20-Oct-2025 05:22:59] PHP Fatal error:  Arrays are not allowed in class constants in C:\xampp\htdocs\ogame2\includes\classes\missions\functions\SetHostileSectorBot.php on line 23
+[08-Nov-2025 20:18:44] PHP Fatal error:  ShowRacePage::UpdateRace() [<a href='function.require'>function.require</a>]: Failed opening required 'includes/subclasses/subclass.UpdateSqlСhoice.php' (include_path='C:/xampp/htdocs/ogame2/') in C:\xampp\htdocs\ogame2\includes\pages\game\ShowRacePage.class.php on line 46
+[08-Nov-2025 20:19:39] PHP Fatal error:  ShowRacePage::UpdateRace() [<a href='function.require'>function.require</a>]: Failed opening required 'includes/subclasses/subclass.UpdateSqlСhoice.php' (include_path='C:/xampp/htdocs/ogame2/') in C:\xampp\htdocs\ogame2\includes\pages\game\ShowRacePage.class.php on line 46
+[08-Nov-2025 20:28:37] PHP Fatal error:  Arrays are not allowed in class constants in C:\xampp\htdocs\ogame2\includes\classes\missions\functions\SetHostileSectorBot.php on line 23
+[08-Nov-2025 20:37:55] PHP Fatal error:  ShowFormgovernmentPage::UpdateFormgovernment() [<a href='function.require'>function.require</a>]: Failed opening required 'includes/subclasses/subclass.UpdateSqlСhoice.php' (include_path='C:/xampp/htdocs/ogame2/') in C:\xampp\htdocs\ogame2\includes\pages\game\ShowFormgovernmentPage.class.php on line 46
+[08-Nov-2025 20:38:07] PHP Fatal error:  ShowEthicsPage::UpdateEthics() [<a href='function.require'>function.require</a>]: Failed opening required 'includes/subclasses/subclass.UpdateSqlСhoice.php' (include_path='C:/xampp/htdocs/ogame2/') in C:\xampp\htdocs\ogame2\includes\pages\game\ShowEthicsPage.class.php on line 46
+[03-Jan-2026 19:24:25] PHP Fatal error:  ShowRacePage::UpdateRace() [<a href='function.require'>function.require</a>]: Failed opening required 'includes/subclasses/subclass.UpdateSqlСhoice.php' (include_path='C:/xampp/htdocs/ogame2/') in C:\xampp\htdocs\ogame2\includes\pages\game\ShowRacePage.class.php on line 46
+[03-Jan-2026 19:44:28] PHP Fatal error:  ShowRacePage::UpdateRace() [<a href='function.require'>function.require</a>]: Failed opening required '../includes/subclasses/subclass.UpdateSqlСhoice.php' (include_path='C:/xampp/htdocs/ogame2/') in C:\xampp\htdocs\ogame2\includes\pages\game\ShowRacePage.class.php on line 46
+[03-Jan-2026 19:44:40] PHP Fatal error:  ShowRacePage::UpdateRace() [<a href='function.require'>function.require</a>]: Failed opening required '.../includes/subclasses/subclass.UpdateSqlСhoice.php' (include_path='C:/xampp/htdocs/ogame2/') in C:\xampp\htdocs\ogame2\includes\pages\game\ShowRacePage.class.php on line 46
+[03-Jan-2026 19:45:25] PHP Fatal error:  ShowRacePage::UpdateRace() [<a href='function.require'>function.require</a>]: Failed opening required '.../includes/subclasses/subclass.UpdateSqlСhoice.php' (include_path='C:/xampp/htdocs/ogame2/') in C:\xampp\htdocs\ogame2\includes\pages\game\ShowRacePage.class.php on line 46
+[03-Jan-2026 19:46:45] PHP Fatal error:  ShowRacePage::UpdateRace() [<a href='function.require'>function.require</a>]: Failed opening required 'includes/subclasses/subclass.UpdateSqlСhoice.php' (include_path='C:/xampp/htdocs/ogame2/') in C:\xampp\htdocs\ogame2\includes\pages\game\ShowRacePage.class.php on line 46
+[03-Jan-2026 19:48:14] PHP Fatal error:  ShowRacePage::UpdateRace() [<a href='function.require'>function.require</a>]: Failed opening required '../includes/subclasses/subclass.UpdateSqlСhoice.php' (include_path='C:/xampp/htdocs/ogame2/') in C:\xampp\htdocs\ogame2\includes\pages\game\ShowRacePage.class.php on line 46
+[03-Jan-2026 19:48:19] PHP Fatal error:  ShowRacePage::UpdateRace() [<a href='function.require'>function.require</a>]: Failed opening required '../includes/subclasses/subclass.UpdateSqlСhoice.php' (include_path='C:/xampp/htdocs/ogame2/') in C:\xampp\htdocs\ogame2\includes\pages\game\ShowRacePage.class.php on line 46
+[03-Jan-2026 19:48:30] PHP Fatal error:  ShowRacePage::UpdateRace() [<a href='function.require'>function.require</a>]: Failed opening required 'includes/subclasses/subclass.UpdateSqlСhoice.php' (include_path='C:/xampp/htdocs/ogame2/') in C:\xampp\htdocs\ogame2\includes\pages\game\ShowRacePage.class.php on line 46
+[03-Jan-2026 19:48:43] PHP Fatal error:  ShowRacePage::UpdateRace() [<a href='function.require'>function.require</a>]: Failed opening required '../includes/subclasses/subclass.UpdateSqlСhoice.php' (include_path='C:/xampp/htdocs/ogame2/') in C:\xampp\htdocs\ogame2\includes\pages\game\ShowRacePage.class.php on line 46
+[03-Jan-2026 20:02:05] PHP Fatal error:  ShowRacePage::UpdateRace() [<a href='function.require'>function.require</a>]: Failed opening required 'includes/subclasses/subclass.UpdateSqlСhoice.php' (include_path='C:/xampp/htdocs/ogame2/') in C:\xampp\htdocs\ogame2\includes\pages\game\ShowRacePage.class.php on line 46
+[03-Jan-2026 20:05:39] PHP Fatal error:  ShowRacePage::UpdateRace() [<a href='function.require'>function.require</a>]: Failed opening required 'C:\xampp\htdocs\ogame2\includes\pages\game/../../subclasses/subclass.UpdateSqlСhoice.php' (include_path='C:/xampp/htdocs/ogame2/') in C:\xampp\htdocs\ogame2\includes\pages\game\ShowRacePage.class.php on line 46
+[03-Jan-2026 20:09:00] PHP Fatal error:  ShowRacePage::UpdateRace() [<a href='function.require'>function.require</a>]: Failed opening required 'includes/subclasses/subclass.UpdateSqlСhoice.php' (include_path='C:/xampp/htdocs/ogame2/') in C:\xampp\htdocs\ogame2\includes\pages\game\ShowRacePage.class.php on line 50
+[03-Jan-2026 20:11:08] PHP Fatal error:  ShowRacePage::UpdateRace() [<a href='function.require'>function.require</a>]: Failed opening required 'includes/subclasses/subclass.UpdateSqlСhoice.php' (include_path='C:/xampp/htdocs/ogame2/') in C:\xampp\htdocs\ogame2\includes\pages\game\ShowRacePage.class.php on line 60
+[03-Jan-2026 20:15:57] PHP Fatal error:  ShowRacePage::UpdateRace() [<a href='function.require'>function.require</a>]: Failed opening required 'includes/subclasses/subclass.UpdateSqlСhoice.php' (include_path='C:/xampp/htdocs/ogame2/') in C:\xampp\htdocs\ogame2\includes\pages\game\ShowRacePage.class.php on line 63
+[03-Jan-2026 20:17:59] PHP Fatal error:  ShowRacePage::UpdateRace() [<a href='function.require'>function.require</a>]: Failed opening required '../includes/subclasses/subclass.UpdateSqlСhoice.php' (include_path='C:/xampp/htdocs/ogame2/') in C:\xampp\htdocs\ogame2\includes\pages\game\ShowRacePage.class.php on line 46
+[26-Sep-2026 03:35:47] WARNING: "require(language/de/CUSTOM.php): failed to open stream: No such file or directory"
+File: C:\Users\Ortega\Downloads\OGAME\ogame\includes\classes\Language.class.php | Line: 149
+URL: http://localhost/ogame/install/index.php?mode=upgrade | Version: 2.8.1 (FILE)
+Stack trace:
+#0 /includes/classes/Language.class.php(149): errorHandler(2, 'require(languag...', 'C://Users//Ortega...', 149, Array)
+#1 /includes/classes/Language.class.php(149): require()
+#2 /install/index.php(27): Language-&gt;includeData(Array)
+#3 {main}
+[26-Sep-2026 17:06:28] USER ERROR: "unable to write file C:\Users\Ortega\Downloads\OGAME\ogame\cache\en_nsc^b220258c2fb4838160502daef6bb665458bd80b6_5.extends.page.register.default.tpl.cache.php"
+File: C:\Users\Ortega\Downloads\OGAME\ogame\includes\libs\Smarty\sysplugins\smarty_internal_runtime_writefile.php | Line: 90
+URL: http://replies-que-asset-peripheral.trycloudflare.com/novarush/index.php?page=register | Version: 2.8.1
+Stack trace:
+#0 /includes/libs/Smarty/sysplugins/smarty_template_compiled.php(209): Smarty_Internal_Runtime_WriteFile-&gt;writeFile('C://Users//Ortega...', '&lt;?php/n/* Smarty...', Object(template))
+#1 /includes/libs/Smarty/sysplugins/smarty_template_compiled.php(184): Smarty_Template_Compiled-&gt;write(Object(Smarty_Internal_Template), '&lt;?php/n/* Smarty...')
+#2 /includes/libs/Smarty/sysplugins/smarty_template_compiled.php(141): Smarty_Template_Compiled-&gt;compileTemplateSource(Object(Smarty_Internal_Template))
+#3 /includes/libs/Smarty/sysplugins/smarty_template_compiled.php(105): Smarty_Template_Compiled-&gt;process(Object(Smarty_Internal_Template))
+#4 /includes/libs/Smarty/sysplugins/smarty_internal_runtime_updatecache.php(38): Smarty_Template_Compiled-&gt;render(Object(Smarty_Internal_Template))
+#5 /includes/libs/Smarty/sysplugins/smarty_template_cached.php(143): Smarty_Internal_Runtime_UpdateCache-&gt;updateCache(Object(Smarty_Template_Cached), Object(Smarty_Internal_Template), false)
+#6 /includes/libs/Smarty/sysplugins/smarty_internal_template.php(211): Smarty_Template_Cached-&gt;render(Object(Smarty_Internal_Template), false)
+#7 /includes/libs/Smarty/sysplugins/smarty_internal_templatebase.php(232): Smarty_Internal_Template-&gt;render(false, 1)
+#8 /includes/libs/Smarty/sysplugins/smarty_internal_templatebase.php(134): Smarty_Internal_TemplateBase-&gt;_execute(Object(Smarty_Internal_Template), NULL, NULL, NULL, 1)
+#9 /includes/classes/class.template.php(148): Smarty_Internal_TemplateBase-&gt;display('extends:layout....')
+#10 /includes/pages/login/AbstractLoginPage.class.php(169): template-&gt;display('extends:layout....')
+#11 /includes/pages/login/ShowRegisterPage.class.php(98): AbstractLoginPage-&gt;display('page.register.d...')
+#12 /index.php(57): ShowRegisterPage-&gt;show()
+#13 {main}
+[26-Sep-2026 20:36:48 Europe/Berlin] PHP Fatal error:  Uncaught ErrorException: Cannot modify header information - headers already sent by (output started at C:\Users\Ortega\Downloads\OGAME\ogame\includes\constants.php:48) in C:\Users\Ortega\Downloads\OGAME\ogame\includes\classes\HTTP.class.php:35
+Stack trace:
+#0 [internal function]: errorHandler(2, 'Cannot modify h...', 'C:\\Users\\Ortega...', 35, Array)
+#1 C:\Users\Ortega\Downloads\OGAME\ogame\includes\classes\HTTP.class.php(35): header('P3P: CP="IDC DS...')
+#2 C:\Users\Ortega\Downloads\OGAME\ogame\includes\common.php(70): HTTP::sendHeader('P3P', 'CP="IDC DSP COR...')
+#3 Command line code(1): require('C:\\Users\\Ortega...')
+#4 {main}
+  thrown in C:\Users\Ortega\Downloads\OGAME\ogame\includes\classes\HTTP.class.php on line 35
+[26-Sep-2026 20:38:04 Europe/Berlin] PHP Fatal error:  Uncaught ErrorException: Cannot modify header information - headers already sent by (output started at Command line code:1) in C:\Users\Ortega\Downloads\OGAME\ogame\includes\classes\HTTP.class.php:35
+Stack trace:
+#0 [internal function]: errorHandler(2, 'Cannot modify h...', 'C:\\Users\\Ortega...', 35, Array)
+#1 C:\Users\Ortega\Downloads\OGAME\ogame\includes\classes\HTTP.class.php(35): header('P3P: CP="IDC DS...')
+#2 C:\Users\Ortega\Downloads\OGAME\ogame\includes\common.php(70): HTTP::sendHeader('P3P', 'CP="IDC DSP COR...')
+#3 Command line code(1): require('C:\\Users\\Ortega...')
+#4 {main}
+  thrown in C:\Users\Ortega\Downloads\OGAME\ogame\includes\classes\HTTP.class.php on line 35
+[27-Sep-2026 02:59:05] USER ERROR: "unable to write file C:\Users\Ortega\Downloads\OGAME\ogame\cache\templates\en_nsc^863d88ee9ad65f1d0a9c636645270cf81afc9517.page.index.default.tpl.php"
+File: C:\Users\Ortega\Downloads\OGAME\ogame\includes\libs\Smarty\sysplugins\smarty_internal_runtime_writefile.php | Line: 90
+URL: http://joyce-visitor-significance-niagara.trycloudflare.com/novarush/index.php?code=3 | Version: 2.8.1
+Stack trace:
+#0 /includes/libs/Smarty/sysplugins/smarty_internal_cacheresource_file.php(125): Smarty_Internal_Runtime_WriteFile-&gt;writeFile('C://Users//Ortega...', '&lt;?php/n/* Smarty...', Object(template))
+#1 /includes/libs/Smarty/sysplugins/smarty_internal_runtime_updatecache.php(163): Smarty_Internal_CacheResource_File-&gt;writeCachedContent(Object(Smarty_Internal_Template), '&lt;?php/n/* Smarty...')
+#2 /includes/libs/Smarty/sysplugins/smarty_internal_runtime_updatecache.php(148): Smarty_Internal_Runtime_UpdateCache-&gt;write(Object(Smarty_Internal_Template), '&lt;?php/n/* Smarty...')
+#3 /includes/libs/Smarty/sysplugins/smarty_internal_runtime_updatecache.php(126): Smarty_Internal_Runtime_UpdateCache-&gt;writeCachedContent(Object(Smarty_Internal_Template), '&lt;?php/n/* Smarty...')
+#4 /includes/libs/Smarty/sysplugins/smarty_internal_runtime_updatecache.php(42): Smarty_Internal_Runtime_UpdateCache-&gt;removeNoCacheHash(Object(Smarty_Template_Cached), Object(Smarty_Internal_Template), false)
+#5 /includes/libs/Smarty/sysplugins/smarty_template_cached.php(143): Smarty_Internal_Runtime_UpdateCache-&gt;updateCache(Object(Smarty_Template_Cached), Object(Smarty_Internal_Template), false)
+#6 /includes/libs/Smarty/sysplugins/smarty_internal_template.php(211): Smarty_Template_Cached-&gt;render(Object(Smarty_Internal_Template), false)
+#7 /includes/libs/Smarty/sysplugins/smarty_internal_templatebase.php(232): Smarty_Internal_Template-&gt;render(false, 1)
+#8 /includes/libs/Smarty/sysplugins/smarty_internal_templatebase.php(134): Smarty_Internal_TemplateBase-&gt;_execute(Object(Smarty_Internal_Template), NULL, NULL, NULL, 1)
+#9 /includes/classes/class.template.php(148): Smarty_Internal_TemplateBase-&gt;display('extends:layout....')
+#10 /includes/pages/login/AbstractLoginPage.class.php(169): template-&gt;display('extends:layout....')
+#11 /includes/pages/login/ShowIndexPage.class.php(82): AbstractLoginPage-&gt;display('page.index.defa...')
+#12 /index.php(57): ShowIndexPage-&gt;show()
+#13 {main}
+[27-Sep-2026 15:47:31 Europe/Berlin] PHP Fatal error:  Uncaught ErrorException: Use of undefined constant ROOT_PATH - assumed 'ROOT_PATH' (this will throw an Error in a future version of PHP) in C:\Users\Ortega\Downloads\OGAME\ogame\includes\GeneralFunctions.php:598
+Stack trace:
+#0 C:\Users\Ortega\Downloads\OGAME\ogame\includes\GeneralFunctions.php(598): errorHandler(2, 'Use of undefine...', 'C:\\Users\\Ortega...', 598, Array)
+#1 [internal function]: exceptionHandler(Object(ErrorException))
+#2 {main}
+  thrown in C:\Users\Ortega\Downloads\OGAME\ogame\includes\GeneralFunctions.php on line 598
+[27-Sep-2026 15:47:42 Europe/Berlin] PHP Fatal error:  Uncaught ErrorException: Undefined index: REQUEST_URI in C:\Users\Ortega\Downloads\OGAME\ogame\includes\GeneralFunctions.php:691
+Stack trace:
+#0 C:\Users\Ortega\Downloads\OGAME\ogame\includes\GeneralFunctions.php(691): errorHandler(8, 'Undefined index...', 'C:\\Users\\Ortega...', 691, Array)
+#1 [internal function]: exceptionHandler(Object(ErrorException))
+#2 {main}
+  thrown in C:\Users\Ortega\Downloads\OGAME\ogame\includes\GeneralFunctions.php on line 691
+[27-Sep-2026 15:47:52] NOTICE: "Trying to access array offset on value of type null"
+File: C:\Users\Ortega\Downloads\OGAME\ogame\includes\classes\class.statbuilder.php | Line: 29
+URL: http://127.0.0.1/ | Version: 2.8.1 (FILE)
+Stack trace:
+#0 /includes/classes/class.statbuilder.php(29): errorHandler(8, 'Trying to acces...', 'C://Users//Ortega...', 29, Array)
+#1 /includes/classes/class.statbuilder.php(56): statbuilder-&gt;initCostPoints()
+#2 C:/Users/Ortega/.gemini/antigravity/brain/aa115b1e-ae52-48d0-b387-f4adca3dfda5/scratch/run_stats.php(12): statbuilder-&gt;__construct()
+#3 {main}
+[27-Sep-2026 15:48:22] USER ERROR: "Class 'BuildFunctions' not found"
+File: C:\Users\Ortega\Downloads\OGAME\ogame\includes\classes\class.statbuilder.php | Line: 40
+URL: http://127.0.0.1/ | Version: 2.8.1 (FILE)
+Stack trace:
+#0 /includes/classes/class.statbuilder.php(59): statbuilder-&gt;initCostPoints()
+#1 C:/Users/Ortega/.gemini/antigravity/brain/aa115b1e-ae52-48d0-b387-f4adca3dfda5/scratch/run_stats.php(12): statbuilder-&gt;__construct()
+#2 {main}
+[27-Sep-2026 15:48:43] NOTICE: "Trying to access array offset on value of type null"
+File: C:\Users\Ortega\Downloads\OGAME\ogame\includes\classes\class.statbuilder.php | Line: 95
+URL: http://127.0.0.1/ | Version: 2.8.1 (FILE)
+Stack trace:
+#0 /includes/classes/class.statbuilder.php(95): errorHandler(8, 'Trying to acces...', 'C://Users//Ortega...', 95, Array)
+#1 /includes/classes/class.statbuilder.php(325): statbuilder-&gt;GetUsersInfosFromDB()
+#2 C:/Users/Ortega/.gemini/antigravity/brain/aa115b1e-ae52-48d0-b387-f4adca3dfda5/scratch/run_stats.php(13): statbuilder-&gt;MakeStats()
+#3 {main}
+[27-Sep-2026 15:49:51] NOTICE: "Trying to access array offset on value of type null"
+File: C:\Users\Ortega\Downloads\OGAME\ogame\includes\classes\class.statbuilder.php | Line: 92
+URL: http://127.0.0.1/ | Version: 2.8.1 (FILE)
+Stack trace:
+#0 /includes/classes/class.statbuilder.php(92): errorHandler(8, 'Trying to acces...', 'C://Users//Ortega...', 92, Array)
+#1 /includes/classes/class.statbuilder.php(323): statbuilder-&gt;GetUsersInfosFromDB()
+#2 /includes/classes/cronjob/StatisticCronjob.class.php(26): statbuilder-&gt;MakeStats()
+#3 /includes/classes/Cronjob.class.php(57): StatisticCronjob-&gt;run()
+#4 C:/Users/Ortega/.gemini/antigravity/brain/aa115b1e-ae52-48d0-b387-f4adca3dfda5/scratch/run_stats.php(11): Cronjob::execute(2)
+#5 {main}
+[27-Sep-2026 15:50:22] USER ERROR: "Unknown cronjob 2 or cronjob is deactive!"
+File: C:\Users\Ortega\Downloads\OGAME\ogame\includes\classes\Cronjob.class.php | Line: 40
+URL: http://127.0.0.1/ | Version: 2.8.1 (FILE)
+Stack trace:
+#0 C:/Users/Ortega/.gemini/antigravity/brain/aa115b1e-ae52-48d0-b387-f4adca3dfda5/scratch/run_stats.php(11): Cronjob::execute(2)
+#1 {main}
+[27-Sep-2026 15:51:16] NOTICE: "Undefined index: resources_points"
+File: C:\Users\Ortega\Downloads\OGAME\ogame\includes\classes\class.BuildFunctions.php | Line: 517
+URL: http://127.0.0.1/ | Version: 2.8.1 (FILE)
+Stack trace:
+#0 /includes/classes/class.BuildFunctions.php(517): errorHandler(8, 'Undefined index...', 'C://Users//Ortega...', 517, Array)
+#1 /includes/classes/class.statbuilder.php(49): BuildFunctions::resourcesPoints(NULL, '1')
+#2 /includes/classes/class.statbuilder.php(68): statbuilder-&gt;initCostPoints()
+#3 /includes/classes/cronjob/StatisticCronjob.class.php(25): statbuilder-&gt;__construct()
+#4 /includes/classes/Cronjob.class.php(57): StatisticCronjob-&gt;run()
+#5 C:/Users/Ortega/.gemini/antigravity/brain/aa115b1e-ae52-48d0-b387-f4adca3dfda5/scratch/run_stats.php(11): Cronjob::execute(2)
+#6 {main}
+[27-Sep-2026 15:51:45] NOTICE: "Trying to access array offset on value of type null"
+File: C:\Users\Ortega\Downloads\OGAME\ogame\includes\classes\class.statbuilder.php | Line: 238
+URL: http://127.0.0.1/ | Version: 2.8.1 (FILE)
+Stack trace:
+#0 /includes/classes/class.statbuilder.php(238): errorHandler(8, 'Trying to acces...', 'C://Users//Ortega...', 238, Array)
+#1 /includes/classes/class.statbuilder.php(344): statbuilder-&gt;GetBuildPoints(Array)
+#2 /includes/classes/cronjob/StatisticCronjob.class.php(26): statbuilder-&gt;MakeStats()
+#3 /includes/classes/Cronjob.class.php(57): StatisticCronjob-&gt;run()
+#4 C:/Users/Ortega/.gemini/antigravity/brain/aa115b1e-ae52-48d0-b387-f4adca3dfda5/scratch/run_stats.php(11): Cronjob::execute(2)
+#5 {main}
+[27-Sep-2026 15:52:43] USER ERROR: "Unknown cronjob 2 or cronjob is deactive!"
+File: C:\Users\Ortega\Downloads\OGAME\ogame\includes\classes\Cronjob.class.php | Line: 40
+URL: http://127.0.0.1/ | Version: 2.8.1 (FILE)
+Stack trace:
+#0 C:/Users/Ortega/.gemini/antigravity/brain/aa115b1e-ae52-48d0-b387-f4adca3dfda5/scratch/run_stats.php(11): Cronjob::execute(2)
+#1 {main}
+[27-Sep-2026 15:53:43] USER ERROR: "SQLSTATE[42S22]: Column not found: 1054 Unknown column 'logId' in 'order clause'
+
+Query-Code:SELECT * FROM uni1_cronjobs_log WHERE cronjobId = 2 ORDER BY logId DESC LIMIT 10;"
+File: C:\Users\Ortega\Downloads\OGAME\ogame\includes\classes\Database.class.php | Line: 127
+URL: http://127.0.0.1/ | Version: 2.8.1 (FILE)
+Stack trace:
+#0 /includes/classes/Database.class.php(194): Database-&gt;_query('SELECT * FROM u...', Array, 'select')
+#1 C:/Users/Ortega/.gemini/antigravity/brain/aa115b1e-ae52-48d0-b387-f4adca3dfda5/scratch/view_cronjob_logs.php(10): Database-&gt;select('SELECT * FROM %...')
+#2 {main}
+[27-Sep-2026 15:53:51] USER ERROR: "Incorrect Select Query"
+File: C:\Users\Ortega\Downloads\OGAME\ogame\includes\classes\Database.class.php | Line: 192
+URL: http://127.0.0.1/ | Version: 2.8.1 (FILE)
+Stack trace:
+#0 C:/Users/Ortega/.gemini/antigravity/brain/aa115b1e-ae52-48d0-b387-f4adca3dfda5/scratch/desc_log.php(10): Database-&gt;select('DESCRIBE %%CRON...')
+#1 {main}
+[27-Sep-2026 15:54:40] USER ERROR: "Incorrect Select Query"
+File: C:\Users\Ortega\Downloads\OGAME\ogame\includes\classes\Database.class.php | Line: 192
+URL: http://127.0.0.1/ | Version: 2.8.1 (FILE)
+Stack trace:
+#0 C:/Users/Ortega/.gemini/antigravity/brain/aa115b1e-ae52-48d0-b387-f4adca3dfda5/scratch/check_tables.php(10): Database-&gt;select('SHOW TABLES LIK...')
+#1 {main}
+[27-Sep-2026 15:54:46] USER ERROR: "Call to a member function fetch() on array"
+File: C:\Users\Ortega\.gemini\antigravity\brain\aa115b1e-ae52-48d0-b387-f4adca3dfda5\scratch\check_tables.php | Line: 10
+URL: http://127.0.0.1/ | Version: 2.8.1 (FILE)
+Stack trace:
+#0 {main}
