@@ -39,11 +39,13 @@ class ShowBuildingsPage extends AbstractGamePage
 		$Element				 = $CurrentQueue[0][0];
 		$BuildMode			     = $CurrentQueue[0][4];
 		$fast				     = $resource[$Element]; 
-		$NeededDm		         = 10 + ((400*($PLANET['b_building']-TIMESTAMP))/3600);
-		if($NeededDm < 10)
-			$NeededDm=10;
-		if ($USER['darkmatter'] >= $NeededDm){
-			$USER['darkmatter']				-= $NeededDm;
+		$tRest = max(0, $PLANET['b_building'] - TIMESTAMP);
+		$hRest = max(0.001, $tRest / 3600.0);
+		$NeededDm = (float) max(
+			PremiumEconomy::get('instant_min', 10),
+			ceil(PremiumEconomy::get('instant_k', 40) * pow($hRest, PremiumEconomy::get('instant_exp', 0.9)))
+		);
+		if (PremiumEconomy::debit($USER, 921, $NeededDm, 'fast_building', $Element, "hRest={$hRest}")){
 			if ($BuildMode == 'destroy'){
 				$PLANET['field_current'] -=1;
 				$PLANET[$resource[$Element]] -= 1;

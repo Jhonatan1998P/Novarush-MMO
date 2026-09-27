@@ -779,3 +779,49 @@ File: C:\Users\Ortega\.gemini\antigravity\brain\aa115b1e-ae52-48d0-b387-f4adca3d
 URL: http://127.0.0.1/ | Version: 2.8.1 (FILE)
 Stack trace:
 #0 {main}
+[27-Sep-2026 17:00:35 Europe/Berlin] PHP Fatal error:  Uncaught ErrorException: Cannot modify header information - headers already sent by (output started at C:\Users\Ortega\Downloads\OGAME\ogame\includes\constants.php:48) in C:\Users\Ortega\Downloads\OGAME\ogame\includes\classes\HTTP.class.php:35
+Stack trace:
+#0 [internal function]: errorHandler(2, 'Cannot modify h...', 'C:\\Users\\Ortega...', 35, Array)
+#1 C:\Users\Ortega\Downloads\OGAME\ogame\includes\classes\HTTP.class.php(35): header('P3P: CP="IDC DS...')
+#2 C:\Users\Ortega\Downloads\OGAME\ogame\includes\common.php(71): HTTP::sendHeader('P3P', 'CP="IDC DSP COR...')
+#3 Command line code(1): require('C:\\Users\\Ortega...')
+#4 {main}
+  thrown in C:\Users\Ortega\Downloads\OGAME\ogame\includes\classes\HTTP.class.php on line 35
+[27-Sep-2026 17:02:59 Europe/Berlin] PHP Fatal error:  Uncaught ErrorException: Use of undefined constant ROOT_PATH - assumed 'ROOT_PATH' (this will throw an Error in a future version of PHP) in C:\Users\Ortega\Downloads\OGAME\ogame\includes\GeneralFunctions.php:620
+Stack trace:
+#0 C:\Users\Ortega\Downloads\OGAME\ogame\includes\GeneralFunctions.php(620): errorHandler(2, 'Use of undefine...', 'C:\\Users\\Ortega...', 620, Array)
+#1 [internal function]: exceptionHandler(Object(ErrorException))
+#2 {main}
+  thrown in C:\Users\Ortega\Downloads\OGAME\ogame\includes\GeneralFunctions.php on line 620
+[27-Sep-2026 17:03:00 Europe/Berlin] PHP Fatal error:  Uncaught ErrorException: Use of undefined constant ROOT_PATH - assumed 'ROOT_PATH' (this will throw an Error in a future version of PHP) in C:\Users\Ortega\Downloads\OGAME\ogame\includes\GeneralFunctions.php:620
+Stack trace:
+#0 C:\Users\Ortega\Downloads\OGAME\ogame\includes\GeneralFunctions.php(620): errorHandler(2, 'Use of undefine...', 'C:\\Users\\Ortega...', 620, Array)
+#1 [internal function]: exceptionHandler(Object(ErrorException))
+#2 {main}
+  thrown in C:\Users\Ortega\Downloads\OGAME\ogame\includes\GeneralFunctions.php on line 620
+[27-Sep-2026 17:04:51 Europe/Berlin] PHP Fatal error:  Uncaught ErrorException: Undefined index: REQUEST_URI in C:\Users\Ortega\Downloads\OGAME\ogame\includes\GeneralFunctions.php:713
+Stack trace:
+#0 C:\Users\Ortega\Downloads\OGAME\ogame\includes\GeneralFunctions.php(713): errorHandler(8, 'Undefined index...', 'C:\\Users\\Ortega...', 713, Array)
+#1 [internal function]: exceptionHandler(Object(Exception))
+#2 {main}
+  thrown in C:\Users\Ortega\Downloads\OGAME\ogame\includes\GeneralFunctions.php on line 713
+[27-Sep-2026 17:05:16] USER ERROR: "Incorrect Update Query"
+File: C:\Users\Ortega\Downloads\OGAME\ogame\includes\classes\Database.class.php | Line: 176
+URL: http://127.0.0.1CLI | Version: 2.8.1
+Stack trace:
+#0 /tools/premium_calibrate.php(142): Database-&gt;update('INSERT INTO %%P...', Array)
+#1 {main}
+[27-Sep-2026 17:05:51 Europe/Berlin] PHP Warning:  Uncaught ErrorException: require_once(includes/classes/cronjob/Cronjob.class.php): failed to open stream: No such file or directory in C:\Users\Ortega\Downloads\OGAME\ogame\tools\test_cron.php:8
+Stack trace:
+#0 C:\Users\Ortega\Downloads\OGAME\ogame\tools\test_cron.php(8): errorHandler(2, 'require_once(in...', 'C:\\Users\\Ortega...', 8, Array)
+#1 C:\Users\Ortega\Downloads\OGAME\ogame\tools\test_cron.php(8): require_once()
+#2 {main}
+  thrown in C:\Users\Ortega\Downloads\OGAME\ogame\tools\test_cron.php on line 8
+[27-Sep-2026 17:05:51 Europe/Berlin] PHP Fatal error:  main(): Failed opening required 'includes/classes/cronjob/Cronjob.class.php' (include_path='C:/Users/Ortega/Downloads/OGAME/ogame/') in C:\Users\Ortega\Downloads\OGAME\ogame\tools\test_cron.php on line 8
+[27-Sep-2026 17:06:04] USER ERROR: "Incorrect Update Query"
+File: C:\Users\Ortega\Downloads\OGAME\ogame\includes\classes\Database.class.php | Line: 176
+URL: http://127.0.0.1CLI | Version: 2.8.1
+Stack trace:
+#0 /includes/classes/cronjob/PremiumEconomyCronjob.class.php(53): Database-&gt;update('INSERT INTO %%P...', Array)
+#1 /tools/test_cron.php(12): PremiumEconomyCronjob-&gt;run()
+#2 {main}

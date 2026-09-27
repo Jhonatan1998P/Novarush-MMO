@@ -111,7 +111,19 @@ class MissionCaseExpedition extends MissionFunctions implements Mission
                     $Message	= $LNG['sys_expe_found_dm_3_'.mt_rand(1,2)];
                 }
                 
-                $this->UpdateFleet('fleet_resource_darkmatter', $this->_fleet['fleet_resource_darkmatter'] + $Size);
+                $Size = (int) floor($Size);
+                if ($Size > 0) {
+                    $ownerId = (int) $this->_fleet['fleet_owner'];
+                    $targetUser = Database::get()->selectSingle("SELECT * FROM %%USERS%% WHERE id = :userId;", array(':userId' => $ownerId));
+                    if (!empty($targetUser)) {
+                        PremiumEconomy::credit($targetUser, 921, $Size, 'expedition');
+                        global $USER;
+                        if (isset($USER['id']) && $USER['id'] == $ownerId) {
+                            $USER = $targetUser;
+                        }
+                    }
+                }
+                $Message .= ' <span style="color:#db374b">('.$LNG['tech'][921].': '.pretty_number($Size).')</span>';
             }
             
         //3. Минералы.   
@@ -152,11 +164,15 @@ class MissionCaseExpedition extends MissionFunctions implements Mission
                 $Message        = $LNG['sys_expe_nothing_'.mt_rand(1,8)];
             }else{
                 $Size = mt_rand(1,5);
-
-                $sql	= "UPDATE %%USERS%% SET container = container + ".$Size." WHERE id = :userId;";
-                    Database::get()->update($sql, array(
-                        ':userId'       => $this->_fleet['fleet_owner'],
-                ));
+                $ownerId = (int) $this->_fleet['fleet_owner'];
+                $targetUser = Database::get()->selectSingle("SELECT * FROM %%USERS%% WHERE id = :userId;", array(':userId' => $ownerId));
+                if (!empty($targetUser)) {
+                    PremiumEconomy::credit($targetUser, 924, $Size, 'expedition');
+                    global $USER;
+                    if (isset($USER['id']) && $USER['id'] == $ownerId) {
+                        $USER = $targetUser;
+                    }
+                }
                 $Message        = ''.$LNG['sys_expe_found_container_'.mt_rand(1,5)].' <span style="color:#b69149">('.$LNG['tech'][924].': '.pretty_number($Size).')</span>';
             }
             
@@ -166,11 +182,17 @@ class MissionCaseExpedition extends MissionFunctions implements Mission
             if($fleetPoints < 500000 * $config->stat_settings){
                 $Message        = $LNG['sys_expe_nothing_'.mt_rand(1,8)];
             }else{
-                $sql	= "UPDATE %%USERS%% SET stardust = stardust + 1 WHERE id = :userId;";
-                    Database::get()->update($sql, array(
-                        ':userId'       => $this->_fleet['fleet_owner'],
-                ));
-                $Message	    = $LNG['sys_expe_found_so_'.mt_rand(1,7)];
+                $Size = 1;
+                $ownerId = (int) $this->_fleet['fleet_owner'];
+                $targetUser = Database::get()->selectSingle("SELECT * FROM %%USERS%% WHERE id = :userId;", array(':userId' => $ownerId));
+                if (!empty($targetUser)) {
+                    PremiumEconomy::credit($targetUser, 923, $Size, 'expedition');
+                    global $USER;
+                    if (isset($USER['id']) && $USER['id'] == $ownerId) {
+                        $USER = $targetUser;
+                    }
+                }
+                $Message	    = $LNG['sys_expe_found_so_'.mt_rand(1,7)].' <span style="color:#e066ff">('.$LNG['tech'][923].': '.pretty_number($Size).')</span>';
             }
           
         //7. Поиск флота.

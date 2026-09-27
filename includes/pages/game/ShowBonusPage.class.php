@@ -28,40 +28,45 @@ class ShowBonusPage extends AbstractGamePage
 	{		
 		global $USER, $PLANET, $LNG, $resource;
         
-		if($USER['bonus_time'] > TIMESTAMP || !$USER['urlaubs_modus'] == 0)		
+		if ($USER['bonus_time'] > TIMESTAMP || $USER['urlaubs_modus'] != 0) {
 			$this->redirectTo('game.php');
-        
-		$bonus = array(
-			921	=> rand(100,1000),
-			922	=> rand(15,100),
-			924	=> rand(1,3),
-		);
-        
-		foreach($bonus as $id => $key)
-		{
-			$USER[$resource[$id]]	+= $bonus[$id];
 		}
-        
-		$time			 = (TIMESTAMP + 86400);
-        
+
+		$time = TIMESTAMP + 86400;
+
 		$db = Database::get();
-		$sql = 'UPDATE %%USERS%% SET bonus_time = :time WHERE id = :userID;';
-			$db->update($sql, array(
-				':time'		   => $time,
-				':userID'	   => $USER['id']
-			));
-            
-		$bonusList	= array();
-        
-		foreach($bonus as $id => $key)
-		{
-			$bonusList[$id]	= array(
-				'bonus'		=> $key,
+		$sql = 'UPDATE %%USERS%% SET bonus_time = :time WHERE id = :userID AND bonus_time <= :now;';
+		$db->update($sql, array(
+			':time'   => $time,
+			':userID' => $USER['id'],
+			':now'    => TIMESTAMP,
+		));
+
+		if ($db->rowCount() < 1) {
+			$this->redirectTo('game.php');
+		}
+
+		$USER['bonus_time'] = $time;
+
+		$bonus = array(
+			921	=> mt_rand(500, 1500),
+			922	=> mt_rand(25, 75),
+			924	=> mt_rand(2, 6),
+		);
+
+		foreach ($bonus as $id => $amount) {
+			PremiumEconomy::credit($USER, $id, $amount, 'bonus_daily');
+		}
+
+		$bonusList = array();
+		foreach ($bonus as $id => $amount) {
+			$bonusList[$id] = array(
+				'bonus' => $amount,
 			);
 		}
-        
+
 		$this->tplObj->assign_vars(array(
-			'bonusList'				=> $bonusList,
+			'bonusList' => $bonusList,
 		));
 		$this->display('page.bonus.default.tpl');
 	}	

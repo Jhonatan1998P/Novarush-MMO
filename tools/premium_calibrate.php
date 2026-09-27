@@ -1,6 +1,6 @@
 <?php
 
-define('MODE', 'CRON');
+define('MODE', 'CLI');
 define('ROOT_PATH', str_replace('\\', '/', dirname(__DIR__)) . '/');
 set_include_path(ROOT_PATH);
 chdir(ROOT_PATH);
@@ -135,10 +135,9 @@ $weights = array(
 echo "Nuevos pesos calculados:\n";
 foreach ($weights as $k => $v) {
     echo sprintf(" - %-12s: %.3f\n", $k, $v);
-    $db->update(
-        'INSERT INTO %%PREMIUM_SETTINGS%% (setting_key, setting_value, updated_at) 
-         VALUES (:k, :v, :ts) 
-         ON DUPLICATE KEY UPDATE setting_value = :v, updated_at = :ts;',
+    $db->replace(
+        'REPLACE INTO %%PREMIUM_SETTINGS%% (setting_key, setting_value, updated_at) 
+         VALUES (:k, :v, :ts);',
         array(':k' => $k, ':v' => (string) $v, ':ts' => TIMESTAMP)
     );
 }

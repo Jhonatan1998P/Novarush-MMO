@@ -28,26 +28,73 @@ class ShowMineralsPage extends AbstractGamePage
 	{
 		global $PLANET, $USER, $reslist, $resource, $pricelist, $LNG, $BonusElement;
 		
-        $costResources		= BuildFunctions::getElementPrice($USER, $PLANET, $Element);
-			
-		if ( !BuildFunctions::isElementBuyable($USER, $PLANET, $Element, $costResources)) {
+		if (!in_array($Element, $reslist['minerals'])) {
 			return;
 		}
-        
-        $amount = HTTP::_GP('amount', 0); 
-        
-        if($amount > $USER[$resource[$Element]]){
-			$this->printMessage(''.$LNG['bd_notres'].'', true, array('game.php?page=minerals', 2));
+
+		$amount = (int) HTTP::_GP('amount', 0); 
+		if ($amount <= 0) {
+			$this->redirectTo('game.php?page=minerals');
 		}
-        
-        $USER[$resource[$Element]]	-= $amount;
-        
-        $href = 'game.php?page=minerals'; 
-        require_once('includes/subclasses/subclass.UpdateMaxAmount.php');
-        require_once('includes/subclasses/subclass.UpdateResAmount.php');
-        $bonus = 1;
-        require_once('includes/subclasses/subclass.UpdateSqlBonusElement.php');
-		require_once('includes/subclasses/subclass.UpdateSqlGeneral.php');
+
+		if (isset($pricelist[$Element]['max']) && $pricelist[$Element]['max'] > 0 && $amount > $pricelist[$Element]['max']) {
+			$this->printMessage($LNG['bd_limit'], true, array('game.php?page=minerals', 2));
+		}
+
+		$mineralCol = $resource[$Element];
+		if (!isset($USER[$mineralCol]) || $amount > $USER[$mineralCol]) {
+			$this->printMessage($LNG['bd_notres'], true, array('game.php?page=minerals', 2));
+		}
+
+		// 1. Cobra los 10 MO por mineral con PremiumEconomy::debit
+		$refineCost = 10 * $amount;
+		if (!PremiumEconomy::debit($USER, 921, $refineCost, 'mineral_refine_cost', $Element)) {
+			$this->printMessage($LNG['bd_notres'], true, array('game.php?page=minerals', 2));
+		}
+
+		// 2. Consume el mineral del inventario de forma atómica
+		$db = Database::get();
+		$db->update(
+			"UPDATE %%USERS%% SET $mineralCol = $mineralCol - :amt WHERE id = :u AND $mineralCol >= :amt;",
+			array(
+				':amt' => $amount,
+				':u'   => $USER['id']
+			)
+		);
+
+		if ($db->rowCount() < 1) {
+			PremiumEconomy::credit($USER, 921, $refineCost, 'mineral_refine_refund', $Element);
+			$this->printMessage($LNG['bd_notres'], true, array('game.php?page=minerals', 2));
+		}
+
+		$USER[$mineralCol] -= $amount;
+
+		// 3. Acredita el producto del refinado
+		if (isset($BonusElement[$Element])) {
+			foreach ($BonusElement[$Element] as $bonusId => $Count) {
+				if ($bonusId == 921) {
+					PremiumEconomy::credit($USER, 921, $Count * $amount, 'mineral_refined_dm', $Element);
+				} elseif (isset($resource[$bonusId])) {
+					$resCol = $resource[$bonusId];
+					$giveAmount = $Count * $amount;
+					if (isset($PLANET[$resCol])) {
+						$db->update("UPDATE %%PLANETS%% SET $resCol = $resCol + :amt WHERE id = :p;", array(
+							':amt' => $giveAmount,
+							':p'   => $PLANET['id'],
+						));
+						$PLANET[$resCol] += $giveAmount;
+					} elseif (isset($USER[$resCol])) {
+						$db->update("UPDATE %%USERS%% SET $resCol = $resCol + :amt WHERE id = :u;", array(
+							':amt' => $giveAmount,
+							':u'   => $USER['id'],
+						));
+						$USER[$resCol] += $giveAmount;
+					}
+				}
+			}
+		}
+
+		$this->redirectTo('game.php?page=minerals');
 	}
 	
 	public function show()

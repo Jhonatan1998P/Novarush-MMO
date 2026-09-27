@@ -34,57 +34,61 @@ class MissionCaseFoundDM extends MissionFunctions implements Mission
 	
 	function EndStayEvent()
 	{
-        global $pricelist, $reslist, $resource;
+		global $pricelist, $reslist, $resource;
         
 		$LNG	= $this->getLanguage(NULL, $this->_fleet['fleet_owner']);
-
 		$config	= Config::get($this->_fleet['fleet_universe']);
 
-        $expeditionPoints       = array();
-
-		foreach($reslist['fleet'] as $shipId)
-		{
-			$expeditionPoints[$shipId]	= ($pricelist[$shipId]['cost'][901] + $pricelist[$shipId]['cost'][902]);
-		}
-			
-		$fleetArray		= FleetFunctions::unserialize($this->_fleet['fleet_array']);
-		$fleetPoints 	= 0;
-		$fleetCapacity	= 0;
+		$fleetArray = FleetFunctions::unserialize($this->_fleet['fleet_array']);
+		$fleetValueMSE = 0.0;
 
 		foreach ($fleetArray as $shipId => $shipAmount)
 		{
-			$fleetCapacity 			   += $shipAmount * $pricelist[$shipId]['capacity'];
-			$fleetPoints   			   += $shipAmount * $expeditionPoints[$shipId];
+			$cost = isset($pricelist[$shipId]['cost']) ? $pricelist[$shipId]['cost'] : array();
+			$m = isset($cost[901]) ? (float)$cost[901] : 0.0;
+			$c = isset($cost[902]) ? (float)$cost[902] : 0.0;
+			$d = isset($cost[903]) ? (float)$cost[903] : 0.0;
+			$fleetValueMSE += $shipAmount * PremiumEconomy::mse($m, $c, $d);
 		}
-        
-        //Ограничитель по ресам и очкам. 
-        if($fleetPoints > 50000000 * $config->stat_settings){
-            $fleetPoints = 50000000 * $config->stat_settings;
-        }
-        //Фактор добычи от посланного флота.
-        $exp_factor = 0.15; //15%
-        $fleetPrize = $fleetPoints * $exp_factor;
-        //Шанс
+
+		$startTime = !empty($this->_fleet['start_time']) ? (float)$this->_fleet['start_time'] : (float)$this->_fleet['fleet_start_time'];
+		$endTime   = (float)$this->_fleet['fleet_end_time'];
+		$h = max(0.25, min(8.0, ($endTime - $startTime) / 3600.0));
+
+		$prs = max(1.0, PremiumEconomy::get('prs', 1.0));
+		$fleetFactor = 1.0 + min(1.0, log10(1.0 + ($fleetValueMSE / $prs)));
+
+		$ownerId = (int) $this->_fleet['fleet_owner'];
+		$n = PremiumEconomy::dailyCount($ownerId, 'founddm');
+		$decay = max(0.2, pow(PremiumEconomy::get('fdm_decay', 0.9), max(0, $n - 20)));
+
 		$chance	= mt_rand(0, 100);
-        //События
-		if($chance <= min(self::MAX_CHANCE, (self::CHANCE + $this->_fleet['fleet_amount'] * self::CHANCE_SHIP))) {
-            //Темная материя
-            $GetEvent	= mt_rand(0,100000);
-            if($GetEvent <= 70000){
-                $Size 	= mt_rand(25, 62) * ($fleetPrize/500000);
-                $this->UpdateFleet('fleet_resource_darkmatter', $Size);
-                $Message 	= $LNG['sys_expe_found_dm_'.mt_rand(1, 3).'_'.mt_rand(1, 2).''];
-            //Антиматерия
-            }else{
-                $Size = mt_rand(10,25);
-                $sql	= "UPDATE %%USERS%% SET antimatter = antimatter + ".$Size." WHERE id = :userId;";
-                    Database::get()->update($sql, array(
-                        ':userId'       => $this->_fleet['fleet_owner'],
-                ));
-                $Message    = ''.$LNG['sys_expe_found_am_'.mt_rand(1,3)].' <span style="color:#db374b">('.$LNG['tech'][922].': '.pretty_number($Size).')</span>';
-            }
+
+		if ($chance <= min(self::MAX_CHANCE, (self::CHANCE + $this->_fleet['fleet_amount'] * self::CHANCE_SHIP))) {
+			$db = Database::get();
+			$targetUser = $db->selectSingle("SELECT * FROM %%USERS%% WHERE id = :userId;", array(':userId' => $ownerId));
+
+			if (!empty($targetUser)) {
+				if (mt_rand(1, 100) <= 70) {
+					$dm = (int) floor(mt_rand(50, 90) * $h * $fleetFactor * $decay);
+					PremiumEconomy::credit($targetUser, 921, $dm, 'founddm', 0, "h=$h;n=$n");
+					$Message = $LNG['sys_expe_found_dm_' . mt_rand(1, 3) . '_' . mt_rand(1, 2)] . ' <span style="color:#db374b">(' . $LNG['tech'][921] . ': ' . pretty_number($dm) . ')</span>';
+				} else {
+					$am = (int) floor(mt_rand(5, 9) * $h * $fleetFactor * $decay);
+					PremiumEconomy::credit($targetUser, 922, $am, 'founddm', 0, "h=$h;n=$n");
+					$Message = $LNG['sys_expe_found_am_' . mt_rand(1, 3)] . ' <span style="color:#db374b">(' . $LNG['tech'][922] . ': ' . pretty_number($am) . ')</span>';
+				}
+				PremiumEconomy::dailyIncrement($ownerId, 'founddm');
+
+				global $USER;
+				if (isset($USER['id']) && $USER['id'] == $ownerId) {
+					$USER = $targetUser;
+				}
+			} else {
+				$Message = $LNG['sys_expe_nothing_' . mt_rand(1, 9)];
+			}
 		} else {
-			$Message 	= $LNG['sys_expe_nothing_'.mt_rand(1, 9)];
+			$Message = $LNG['sys_expe_nothing_' . mt_rand(1, 9)];
 		}
 		$this->setState(FLEET_RETURN);
 		$this->SaveFleet();

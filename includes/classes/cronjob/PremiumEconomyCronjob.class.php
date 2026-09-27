@@ -45,10 +45,9 @@ class PremiumEconomyCronjob implements CronjobTask
             $prs = PremiumEconomy::baseIncomeMSE();
         }
 
-        $db->update(
-            "INSERT INTO %%PREMIUM_SETTINGS%% (setting_key, setting_value, updated_at)
-             VALUES ('prs', :val, :ts)
-             ON DUPLICATE KEY UPDATE setting_value = :val, updated_at = :ts;",
+        $db->replace(
+            "REPLACE INTO %%PREMIUM_SETTINGS%% (setting_key, setting_value, updated_at)
+             VALUES ('prs', :val, :ts);",
             array(
                 ':val' => (string)round($prs, 2),
                 ':ts'  => TIMESTAMP

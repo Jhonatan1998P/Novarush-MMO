@@ -8,12 +8,12 @@
  * ║╚═╗║╚╝║║║╚╝║║║║───║║║║║║─║║─╔╝║──║║╔═╝║║╚╝║──║║
  * ╚══╝╚══╝╚╝──╚╝╚╝───╚╝╚╝╚╝─╚╝─╚═╝──╚╝╚══╝╚══╝──╚╝
  *
- * @author Tsvira Yaroslav <https://github.com/Yaro2709>
- * @info ***
- * @link https://github.com/Yaro2709/New-Star
+ * @author Tsvira Yaroslav <https://github.com/Yaro2709>
+ * @info ***
+ * @link https://github.com/Yaro2709/New-Star
  * @Basis 2Moons: XG-Project v2.8.0
  * @Basis New-Star: 2Moons v1.8.0
- */
+ */
 
 class ShowBuyBuildPage extends AbstractGamePage
 {
@@ -24,13 +24,16 @@ class ShowBuyBuildPage extends AbstractGamePage
 		parent::__construct();
 	}
     
-    private function CheckLabSettingsInQueue($Element)
+	private function CheckLabSettingsInQueue($Element)
 	{
-		global $PLANET, $CONF;
+		global $PLANET;
 		if ($PLANET['b_building'] == 0)
 			return true;
 			
-		$CurrentQueue		= unserialize($PLANET['b_building_id']);
+		$CurrentQueue = unserialize($PLANET['b_building_id']);
+		if (empty($CurrentQueue))
+			return true;
+
 		foreach($CurrentQueue as $ListIDArray) {
 			if($ListIDArray[0] == $Element)
 				return false;
@@ -43,47 +46,57 @@ class ShowBuyBuildPage extends AbstractGamePage
 	{
 		global $USER, $PLANET, $LNG, $pricelist, $resource, $reslist, $resglobal;
         
-        $Elements = $reslist['allow'][$PLANET['planet_type']];
-        $CurrentMaxFields  	= CalculateMaxPlanetFields($PLANET);
-        //Проверка на цену покупки
-		$Element			= HTTP::_GP('Element', 0);
+		$Elements = $reslist['allow'][$PLANET['planet_type']];
+		$CurrentMaxFields = CalculateMaxPlanetFields($PLANET);
+		
+		$Element = HTTP::_GP('Element', 0);
 		if($Element == 0){
-			$this->printMessage(''.$LNG['bd_limit'].'',true, array('game.php?page=buyBuild', 2));	
-        }
-        //Проверка на колличество покупки
-		$Count			= max(0, round(HTTP::_GP('count', 0.0)));
-        if($Count == 0){
-            $this->printMessage(''.$LNG['bd_limit'].'',true, array('game.php?page=buyBuild', 2));	
-        }
-        //Цена
-		$cost			= BuildFunctions::instantPurchasePrice($Element) * pow(($pricelist[$Element]['factor']), ($PLANET[$resource[$Element]] + $Count));
-        //Условие блока
-        if (!$this->CheckLabSettingsInQueue($Element) ||  ($PLANET['field_current'] + $Count) > $CurrentMaxFields)
+			$this->printMessage(''.$LNG['bd_limit'].'', true, array('game.php?page=buyBuild', 2));	
+		}
+		
+		$Count = max(0, (int) round(HTTP::_GP('count', 0.0)));
+		if($Count <= 0){
+			$this->printMessage(''.$LNG['bd_limit'].'', true, array('game.php?page=buyBuild', 2));	
+		}
+		
+		if (!$this->CheckLabSettingsInQueue($Element) || ($PLANET['field_current'] + $Count) > $CurrentMaxFields)
 		{
 			$this->redirectTo('game.php?page=buyBuild');
 			return;
 		}
-        //Ограничение по технологиям и $reslist
-		if(!empty($Element) && in_array($Element, $Elements) && BuildFunctions::isTechnologieAccessible($USER, $PLANET, $Element, array()) && in_array($Element, $Elements) || in_array($Element, $reslist['not_bought']))
+		
+		if(!empty($Element) && in_array($Element, $Elements) && BuildFunctions::isTechnologieAccessible($USER, $PLANET, $Element, array()) && (in_array($Element, $Elements) || in_array($Element, $reslist['not_bought'])))
 		{ 
-            //Нехватка ресурса.
-			if($USER[$resource[$resglobal['buy_instantly']]] < $cost )
-			{
+			// Calculate instant completion cost based on remaining/build time: max(10, ceil(40 * (hRest)^0.9)) MO
+			$k   = PremiumEconomy::get('instant_k', 40);
+			$exp = PremiumEconomy::get('instant_exp', 0.9);
+			$min = PremiumEconomy::get('instant_min', 10);
+			
+			$curLvl = (int) ($PLANET[$resource[$Element]] ?? 0);
+			$totalCost = 0;
+			for ($i = 0; $i < $Count; $i++) {
+				$timeSec = BuildFunctions::getBuildingTime($USER, $PLANET, $Element, $curLvl + $i);
+				$hRest = max(0.001, $timeSec / 3600.0);
+				$totalCost += (float) max($min, ceil($k * pow($hRest, $exp)));
+			}
+			
+			if (!PremiumEconomy::debit($USER, 921, $totalCost, 'buy_build_instant', $Element, "cnt={$Count};cost={$totalCost}")) {
 				$this->printMessage("".$LNG['bd_notres']."", true, array("game.php?page=buyBuild", 1));
 				return;
 			}
-			//Всего хватает.
-			$USER[$resource[$resglobal['buy_instantly']]] -= $cost;
+			
 			$PLANET['field_current'] += $Count;
-            
-            $sql	= 'UPDATE %%PLANETS%% SET
-            '.$resource[$Element].' = '.$resource[$Element].' + '.$Count.'
-            WHERE id = :Id;';
-                
-            Database::get()->update($sql, array(
-                ':Id'	=> $PLANET['id']
-            ));  
-            $PLANET[$resource[$Element]]		+= $Count;
+			$PLANET[$resource[$Element]] += $Count;
+			
+			$sql = 'UPDATE %%PLANETS%% SET
+				'.$resource[$Element].' = '.$resource[$Element].' + :cnt,
+				field_current = field_current + :cnt
+				WHERE id = :Id;';
+				
+			Database::get()->update($sql, array(
+				':cnt' => $Count,
+				':Id'  => $PLANET['id']
+			));
             
 			$this->printMessage(''.$LNG['bd_buy_yes'].'', true, array("game.php?page=buyBuild", 1));
 		}
@@ -93,29 +106,44 @@ class ShowBuyBuildPage extends AbstractGamePage
 	{
 		global $PLANET, $LNG, $pricelist, $resource, $reslist, $USER, $resglobal;
         
-        //Перебор
-        $Elements = $reslist['allow'][$PLANET['planet_type']];
+		$Elements = $reslist['allow'][$PLANET['planet_type']];
 		$allowedElements = array();
+		$Cost = array();
+		
+		$k   = PremiumEconomy::get('instant_k', 40);
+		$exp = PremiumEconomy::get('instant_exp', 0.9);
+		$min = PremiumEconomy::get('instant_min', 10);
+		
 		foreach($Elements as $Element)
 		{
 			if(!BuildFunctions::isTechnologieAccessible($USER, $PLANET, $Element, array()) || !in_array($Element, $Elements) || in_array($Element, $reslist['not_bought']))
 				continue;
+				
 			$allowedElements[] = $Element;
             
-			$Cost[$Element]	= array($PLANET[$resource[$Element]], $LNG['tech'][$Element], BuildFunctions::instantPurchasePrice($Element), ($pricelist[$Element]['factor'])) ;
+			$timeSec = BuildFunctions::getBuildingTime($USER, $PLANET, $Element);
+			$hRest = max(0.001, $timeSec / 3600.0);
+			$instantPrice = (float) max($min, ceil($k * pow($hRest, $exp)));
+			
+			$Cost[$Element] = array(
+				$PLANET[$resource[$Element]] ?? 0,
+				$LNG['tech'][$Element],
+				$instantPrice,
+				$pricelist[$Element]['factor'] ?? 1.0
+			);
 		}
-		//Бан, если пусто.
+		
 		if(empty($Cost)) {
 			$this->printMessage("".$LNG['bd_buy_no_tech']."");
 		}
+		
 		$this->tplObj->loadscript('buy.js');
 		$this->tplObj->assign_vars(array(
-            'buy_instantly'	=> $resglobal['buy_instantly'],
-			'Elements'	    => $allowedElements,
-			'CostInfos'	    => $Cost,
+			'buy_instantly' => 921,
+			'Elements'      => $allowedElements,
+			'CostInfos'     => $Cost,
 		));
 		
 		$this->display('page.buyBuild.default.tpl');
 	}
 }
-?>
