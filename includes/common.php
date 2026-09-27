@@ -62,6 +62,7 @@ require 'includes/classes/Language.class.php';
 require 'includes/classes/PlayerUtil.class.php';
 require 'includes/classes/Session.class.php';
 require 'includes/classes/Universe.class.php';
+require_once 'includes/classes/PremiumEconomy.class.php';
 
 require 'includes/classes/class.theme.php';
 require 'includes/classes/class.template.php';

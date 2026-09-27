@@ -236,13 +236,17 @@ class BuildFunctions
         }
 
         if(in_array($Element, $reslist['build'])) {		
-			$time	= $elementCost/($config->game_speed * (1 + $PLANET[$resource[$resglobal['build_speed']]]));
+			$speedFactor = 1 + max(0, (float)(isset($USER['factor']['Sbuild']) ? $USER['factor']['Sbuild'] : 0));
+			$time	= $elementCost/($config->game_speed * (1 + $PLANET[$resource[$resglobal['build_speed']]]) * $speedFactor);
 		}elseif (in_array($Element, $reslist['fleet'])) {			
-			$time	= $elementCost/($config->game_speed * (1 + $PLANET[$resource[$resglobal['fleet_speed']]]));			
+			$speedFactor = 1 + max(0, (float)(isset($USER['factor']['Sfleet']) ? $USER['factor']['Sfleet'] : 0));
+			$time	= $elementCost/($config->game_speed * (1 + $PLANET[$resource[$resglobal['fleet_speed']]]) * $speedFactor);			
 		}elseif (in_array($Element, $reslist['defense'])) {
-			$time	= $elementCost/($config->game_speed * (1 + $PLANET[$resource[$resglobal['defense_speed']]]));	
+			$speedFactor = 1 + max(0, (float)(isset($USER['factor']['Sfleet']) ? $USER['factor']['Sfleet'] : 0));
+			$time	= $elementCost/($config->game_speed * (1 + $PLANET[$resource[$resglobal['defense_speed']]]) * $speedFactor);	
         }elseif (in_array($Element, $reslist['missile'])) {
-			$time	= $elementCost/($config->game_speed * (1 + $PLANET[$resource[$resglobal['missile_speed']]]));	
+			$speedFactor = 1 + max(0, (float)(isset($USER['factor']['Sfleet']) ? $USER['factor']['Sfleet'] : 0));
+			$time	= $elementCost/($config->game_speed * (1 + $PLANET[$resource[$resglobal['missile_speed']]]) * $speedFactor);	
 		}elseif (in_array($Element, $reslist['tech'])) {
             if(is_numeric($PLANET[$resource[$resglobal['tech_speed']].'_inter']))
             {
@@ -256,7 +260,8 @@ class BuildFunctions
                 }
             }
 
-            $time	= $elementCost / (100 * (1 + $Level))/($config->game_speed / 2500);
+            $speedFactor = 1 + max(0, (float)(isset($USER['factor']['Stech']) ? $USER['factor']['Stech'] : 0));
+            $time	= ($elementCost / (100 * (1 + $Level))/($config->game_speed / 2500)) / $speedFactor;
         }
 
         if((in_array($Element, $reslist['fleet']) || in_array($Element, $reslist['defense']) || in_array($Element, $reslist['missile']))){

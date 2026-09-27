@@ -68,6 +68,9 @@ $dbTableNames	= array(
     'VARS_BONUS'	 	=> DB_PREFIX.'vars_bonus',
     'MARKET'		    => DB_PREFIX.'market',
     'CONT'				=> DB_PREFIX.'conteiners', 
+    'PREMIUM_SETTINGS'  => DB_PREFIX.'premium_settings',
+    'PREMIUM_LEDGER'    => DB_PREFIX.'premium_ledger',
+    'PREMIUM_DAILY'     => DB_PREFIX.'premium_daily',
     //$new_code
 );
 // MOD-TABLES

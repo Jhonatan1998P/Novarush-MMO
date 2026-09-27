@@ -22,7 +22,7 @@ $database['host']			= 'localhost';
 $database['port']			= '3306';
 $database['user']			= 'root';
 $database['userpw']			= '';
-$database['databasename']	= 'ogame2';
+$database['databasename']	= 'ogame2_test';
 $database['tableprefix']	= 'uni1_';
 $salt						= 'localhost$$$$$$$$$$$$'; // 22 digits from the alphabet "./0-9A-Za-z"
 

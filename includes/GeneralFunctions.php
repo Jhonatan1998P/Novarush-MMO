@@ -51,46 +51,68 @@ function getPlanetsHIDDEN($USER){
 }
 
 function getFactors($USER, $Type = 'basic', $TIME = NULL) {
-	global $resource, $pricelist, $reslist;
+	global $resource, $pricelist, $reslist, $PLANET;
 	if(empty($TIME))
 		$TIME	= TIMESTAMP;
 	
 	$bonusList	= BuildFunctions::getBonusList();
-	$factor		= ArrayUtil::combineArrayWithSingleElement($bonusList, 0);
-	
-	foreach($reslist['bonus'] as $elementID) {
-		$bonus = $pricelist[$elementID]['bonus'];
-		
-		if (isset($PLANET[$resource[$elementID]])) {
-			$elementLevel = $PLANET[$resource[$elementID]];
-		} elseif (isset($USER[$resource[$elementID]])) {
-			$elementLevel = $USER[$resource[$elementID]];
-		} else {
-			continue;
-		}
-		
-		if(in_array($elementID, array_merge($reslist['dmfunc'], $reslist['premium'], $reslist['artifact'], $reslist['development'], $reslist['party']))) {
-			if(DMExtra($elementLevel, $TIME, false, true)) {
-				continue;
-			}
-			
-			foreach($bonusList as $bonusKey)
-			{
-				$factor[$bonusKey]	+= $bonus[$bonusKey][0];
-			}
-        } elseif(in_array($elementID, array_merge($reslist['ars'], $reslist['details']))) {
-            foreach($bonusList as $bonusKey)
-			{
-				$factor[$bonusKey]	+= sqrt($elementLevel) * $bonus[$bonusKey][0];
-			}
-		} else {
-			foreach($bonusList as $bonusKey)
-			{
-				$factor[$bonusKey]	+= $elementLevel * $bonus[$bonusKey][0];
-			}
-		}
-        
+	$temp = array(); 
+	$perm = array();
+	foreach ($bonusList as $k) { 
+	    $temp[$k] = 0; 
+	    $perm[$k] = 0; 
 	}
+
+	foreach ($reslist['bonus'] as $elementID) {
+	    if (isset($PLANET[$resource[$elementID]])) {
+	        $elementLevel = $PLANET[$resource[$elementID]];
+	    } elseif (isset($USER[$resource[$elementID]])) {
+	        $elementLevel = $USER[$resource[$elementID]];
+	    } else {
+	        continue;
+	    }
+
+	    $bonus = $pricelist[$elementID]['bonus'];
+
+	    // 1. Beneficios Temporales (con expiración)
+	    if (in_array($elementID, array_merge($reslist['dmfunc'], $reslist['premium'], $reslist['artifact'], $reslist['development'], $reslist['party']))) {
+	        if (DMExtra($elementLevel, $TIME, false, true)) {
+	            continue;
+	        }
+	        foreach ($bonusList as $bonusKey) {
+	            $temp[$bonusKey] += $bonus[$bonusKey][0];
+	        }
+	    // 2. Beneficios Permanentes con atenuación de raíz cuadrada (Arsenal y Detalles)
+	    } elseif (in_array($elementID, array_merge($reslist['ars'], $reslist['details']))) {
+	        foreach ($bonusList as $bonusKey) {
+	            $perm[$bonusKey] += sqrt($elementLevel) * $bonus[$bonusKey][0];
+	        }
+	    // 3. Otros Permanentes por nivel (Oficiales, Tecnologías)
+	    } else {
+	        foreach ($bonusList as $bonusKey) {
+	            $perm[$bonusKey] += $elementLevel * $bonus[$bonusKey][0];
+	        }
+	    }
+	}
+
+	// Aplicación de Soft Caps a temporales
+	$capMap = array(
+	    'Resource'  => PremiumEconomy::get('cap_resource', 4.0),
+	    'Attack'    => PremiumEconomy::get('cap_combat', 3.0),
+	    'Defensive' => PremiumEconomy::get('cap_combat', 3.0),
+	    'Shield'    => PremiumEconomy::get('cap_combat', 3.0),
+	    'Sbuild'    => PremiumEconomy::get('cap_speed', 3.0),
+	    'Stech'     => PremiumEconomy::get('cap_speed', 3.0),
+	    'Sfleet'    => PremiumEconomy::get('cap_speed', 3.0),
+	    'FlyTime'   => PremiumEconomy::get('cap_speed', 3.0),
+	);
+
+	$factor = array();
+	foreach ($bonusList as $k) {
+	    $t = isset($capMap[$k]) ? PremiumEconomy::softCap($temp[$k], $capMap[$k]) : $temp[$k];
+	    $factor[$k] = $perm[$k] + $t;
+	}
+
     //Ограничение фактров до 30%
     foreach(array('CostRbuild', 'CostRfleet', 'CostRtech', 'CostRdefense', 'CostRmissile', 'Debris', 'DefRecovery') as $factor_name){
         if($factor[$factor_name] > 0.3){
