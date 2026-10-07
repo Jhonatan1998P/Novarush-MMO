@@ -423,11 +423,12 @@ class BotStrikePlanner
                     $fCdr = ((float)$cfg->Fleet_Cdr) / 100.0;
                     $dCdr = ((float)$cfg->Defs_Cdr) / 100.0;
 
+                    $targetFactors = BotCombatOracle::resolveDefenderFactors((int)$t['owner_id'], is_array($intel) ? $intel : array());
                     $simDirect = BotCombatOracle::evaluate(
                         $directFleet,
                         $targetDefenders,
                         array('id' => $this->ctx->botId, 'factor' => $this->ctx->user['factor']),
-                        array('id' => $t['owner_id'], 'factor' => array()),
+                        array('id' => $t['owner_id'], 'factor' => $targetFactors),
                         2
                     );
 
@@ -679,11 +680,12 @@ class BotStrikePlanner
         // Section 3: If no missiles needed (bunker already broken or none present), execute mop-up fleet assault
         $strikeFleet = $this->buildTacticalStrikeFleet($fobData, $targetDefenders, $lootNeeded, 'siege');
         if (!empty($strikeFleet)) {
+            $targetFactors = BotCombatOracle::resolveDefenderFactors((int)$t['owner_id'], is_array($intel) ? $intel : array());
             $sim = BotCombatOracle::evaluate(
                 $strikeFleet,
                 $targetDefenders,
                 array('id' => $this->ctx->botId, 'factor' => $this->ctx->user['factor']),
-                array('id' => $t['owner_id'], 'factor' => array()),
+                array('id' => $t['owner_id'], 'factor' => $targetFactors),
                 2
             );
 
@@ -763,27 +765,17 @@ class BotStrikePlanner
             return 0;
         }
 
+        $targetFactors = BotCombatOracle::resolveDefenderFactors((int)$t['owner_id'], is_array($intel) ? $intel : array());
         $sim = BotCombatOracle::evaluate(
             $strikeFleet,
             $targetDefenders,
             array('id' => $this->ctx->botId, 'factor' => $this->ctx->user['factor']),
-            array('id' => $t['owner_id'], 'factor' => array()),
+            array('id' => $t['owner_id'], 'factor' => $targetFactors),
             2
         );
 
-        $winProb = isset($sim['win_probability']) ? $sim['win_probability'] : 0.0;
+        $winProb = isset($sim['win_probability']) ? (float)$sim['win_probability'] : 0.0;
         $winThreshold = 0.80;
-
-        if ($winProb < $winThreshold) {
-            $currentHold = isset($this->ctx->botRow['siege_cycles']) ? (int)$this->ctx->botRow['siege_cycles'] : 0;
-            $newHold = $currentHold + 1;
-            if ($newHold >= 6) {
-                $this->releaseLock("Fuerza en FOB insuficiente tras concentración (" . round($winProb * 100, 1) . "%). Liberando para buscar objetivo viable", "{$t['galaxy']}:{$t['system']}:{$t['planet']}");
-                return 0;
-            }
-            $this->ctx->updateBotRow(array('siege_cycles' => $newHold));
-            return 0;
-        }
 
         // Section 3: SYNCHRONIZED PRE-IMPACT RECYCLER & STRIKE DEPLOYMENT
         $expectedDebris = 0.0;
@@ -810,6 +802,43 @@ class BotStrikePlanner
             $expectedDebris = ($targetFleetMSE * $fCdr) + ($targetDefMSE * $dCdr);
         }
 
+        // Realistic Net Profit & Recycler Check
+        $deployedFleetMSE = 0.0;
+        foreach ($strikeFleet as $sId => $cnt) {
+            $deployedFleetMSE += BotEconomyValuator::getElementPriceMSE($sId, $cnt);
+        }
+        $attLossPct = isset($sim['att_loss_pct']) ? (float)$sim['att_loss_pct'] : 0.20;
+        $attLossMSE = isset($sim['att_loss_mse']) ? (float)$sim['att_loss_mse'] : ($deployedFleetMSE * $attLossPct);
+
+        global $resource;
+        $recs219 = isset($fobData[$resource[219]]) ? (int)$fobData[$resource[219]] : 0;
+        $recs209 = isset($fobData[$resource[209]]) ? (int)$fobData[$resource[209]] : 0;
+        $availableRecCap = ($recs219 * 500000.0) + ($recs209 * 20000.0);
+        $realizableDebris = ($availableRecCap > 0) ? min($expectedDebris, $availableRecCap) : 0.0;
+
+        $cfg = Config::get();
+        $fCdr = ((float)$cfg->Fleet_Cdr) / 100.0;
+        $lootMSE = BotEconomyValuator::toMSE(
+            (float)($intel['metal'] ?? 0) * 0.50,
+            (float)($intel['crystal'] ?? 0) * 0.50,
+            (float)($intel['deuterium'] ?? 0) * 0.50
+        );
+
+        $netReplacementCost = ($attLossMSE * (1.0 - $fCdr));
+        $grossRevenue = $lootMSE + $realizableDebris;
+        $netProfit = $grossRevenue - $netReplacementCost;
+
+        if ($winProb < $winThreshold || $netProfit <= 0) {
+            $currentHold = isset($this->ctx->botRow['siege_cycles']) ? (int)$this->ctx->botRow['siege_cycles'] : 0;
+            $newHold = $currentHold + 1;
+            if ($newHold >= 6) {
+                $this->releaseLock("Fuerza en FOB insuficiente o batalla no rentable (" . round($winProb * 100, 1) . "% victoria, ganancia neta: " . number_format($netProfit) . " MSE). Liberando para buscar objetivo viable", "{$t['galaxy']}:{$t['system']}:{$t['planet']}");
+                return 0;
+            }
+            $this->ctx->updateBotRow(array('siege_cycles' => $newHold));
+            return 0;
+        }
+
         return $this->launchSynchronizedStrikeAndRecyclers(
             $fobData,
             $fobId,
@@ -818,7 +847,7 @@ class BotStrikePlanner
             $expectedDebris,
             $winProb,
             'fleet_crash',
-            array('eval' => $sim)
+            array('eval' => $sim, 'net_profit' => $netProfit)
         );
     }
 
@@ -850,11 +879,12 @@ class BotStrikePlanner
         }
 
         // Evaluate with Combat Oracle
+        $targetFactors = BotCombatOracle::resolveDefenderFactors((int)$t['owner_id'], is_array($intel) ? $intel : array());
         $sim = BotCombatOracle::evaluate(
             $strikeFleet,
             $targetDefenders,
             array('id' => $this->ctx->botId, 'factor' => $this->ctx->user['factor']),
-            array('id' => $t['owner_id'], 'factor' => array()),
+            array('id' => $t['owner_id'], 'factor' => $targetFactors),
             2
         );
 
@@ -865,7 +895,7 @@ class BotStrikePlanner
                 $strikeFleet,
                 $targetDefenders,
                 array('id' => $this->ctx->botId, 'factor' => $this->ctx->user['factor']),
-                array('id' => $t['owner_id'], 'factor' => array()),
+                array('id' => $t['owner_id'], 'factor' => $targetFactors),
                 2
             );
             $winProb = isset($sim['win_probability']) ? (float)$sim['win_probability'] : 0.0;
@@ -1215,11 +1245,13 @@ class BotStrikePlanner
                 $curDefenders = (isset($freshIntel['defense']) && is_array($freshIntel['defense']) ? $freshIntel['defense'] : array())
                               + (isset($freshIntel['fleet']) && is_array($freshIntel['fleet']) ? $freshIntel['fleet'] : array());
 
+                $freshTargetId = isset($freshIntel['target_user_id']) ? (int)$freshIntel['target_user_id'] : 0;
+                $targetFactors = BotCombatOracle::resolveDefenderFactors($freshTargetId, $freshIntel);
                 $sim = BotCombatOracle::evaluate(
                     $dispatchedShips,
                     $curDefenders,
                     array('id' => $this->ctx->botId, 'factor' => $this->ctx->user['factor']),
-                    array('id' => 0, 'factor' => array()),
+                    array('id' => $freshTargetId, 'factor' => $targetFactors),
                     2
                 );
 

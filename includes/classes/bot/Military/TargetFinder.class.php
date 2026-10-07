@@ -310,12 +310,14 @@ class BotTargetFinder
                         $targetDefenders = (isset($intel['defense']) && is_array($intel['defense']) ? $intel['defense'] : array())
                                          + (isset($intel['fleet']) && is_array($intel['fleet']) ? $intel['fleet'] : array());
 
+                        $targetFactors = BotCombatOracle::resolveDefenderFactors((int)$p['owner_id'], is_array($intel) ? $intel : array());
+
                         // Stage 1: Fast Surrogate Filter (Analytic)
                         $surrogate = BotSurrogateCombatModel::estimate(
                             $combatFleet,
                             $targetDefenders,
                             $this->ctx->user['factor'] ?? array(),
-                            array()
+                            $targetFactors
                         );
 
                         if ($surrogate['win_prob'] >= 0.50) {
@@ -324,7 +326,7 @@ class BotTargetFinder
                                 $combatFleet,
                                 $targetDefenders,
                                 array('id' => $this->ctx->botId, 'factor' => $this->ctx->user['factor'] ?? array()),
-                                array('id' => (int)$p['owner_id'], 'factor' => array()),
+                                array('id' => (int)$p['owner_id'], 'factor' => $targetFactors),
                                 2
                             );
 
@@ -338,9 +340,18 @@ class BotTargetFinder
                                 $attLossMSE = isset($sim['att_loss_mse']) ? (float)$sim['att_loss_mse'] : ($deployedMSE * $attLossPct);
                                 $defLossPct = isset($sim['def_loss_pct']) ? (float)$sim['def_loss_pct'] : 0.90;
 
+                                // Recycler capacity check on nearest colony
+                                global $resource;
+                                $recs219 = isset($nearestColony['data'][$resource[219]]) ? (int)$nearestColony['data'][$resource[219]] : 0;
+                                $recs209 = isset($nearestColony['data'][$resource[209]]) ? (int)$nearestColony['data'][$resource[209]] : 0;
+                                $availableRecCap = ($recs219 * 500000.0) + ($recs209 * 20000.0);
+
+                                $projectedDebris = ($fleetMSE * $defLossPct * $fleetCdrFactor) + ($defenseMSE * $defLossPct * $defsCdrFactor);
+                                $realizableDebris = ($availableRecCap > 0) ? min($projectedDebris, $availableRecCap) : 0.0;
+
                                 $fuelMSE = ($realDist * 15.0);
                                 $netReplacementCost = ($attLossMSE * (1.0 - $fleetCdrFactor)) + $fuelMSE;
-                                $grossRevenue = $lootMSE + ($fleetMSE * $defLossPct * $fleetCdrFactor) + ($defenseMSE * $defLossPct * $defsCdrFactor);
+                                $grossRevenue = $lootMSE + $realizableDebris;
                                 $fcNetProfit = $grossRevenue - $netReplacementCost;
                                 $fcRoi = $fcNetProfit / max(1.0, ($attLossMSE + $fuelMSE));
 
@@ -415,7 +426,11 @@ class BotTargetFinder
 
                 // --- CLASSIFICATION ASSIGNMENT ---
                 if ($fleetMSE > 0 && $isFleetCrashViable) {
-                    $category = 'fleet_crash';
+                    if ($defenseMSE > 50000000 && $defenseMSE > ($fleetMSE * 0.5) && $canDemolish50Pct) {
+                        $category = 'siege';
+                    } else {
+                        $category = 'fleet_crash';
+                    }
                 } elseif ($canDemolish50Pct && $defenseScouted) {
                     $category = 'siege';
                 } elseif ($isFarmingViable) {

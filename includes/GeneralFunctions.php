@@ -63,16 +63,17 @@ function getFactors($USER, $Type = 'basic', $TIME = NULL) {
 	    $perm[$k] = 0; 
 	}
 
-	foreach ($reslist['bonus'] as $elementID) {
-	    if (isset($PLANET[$resource[$elementID]])) {
-	        $elementLevel = $PLANET[$resource[$elementID]];
-	    } elseif (isset($USER[$resource[$elementID]])) {
-	        $elementLevel = $USER[$resource[$elementID]];
-	    } else {
-	        continue;
-	    }
+	if (!empty($reslist['bonus']) && is_array($reslist['bonus'])) {
+		foreach ($reslist['bonus'] as $elementID) {
+		    if (isset($PLANET[$resource[$elementID]])) {
+		        $elementLevel = $PLANET[$resource[$elementID]];
+		    } elseif (isset($USER[$resource[$elementID]])) {
+		        $elementLevel = $USER[$resource[$elementID]];
+		    } else {
+		        continue;
+		    }
 
-	    $bonus = $pricelist[$elementID]['bonus'];
+		    $bonus = $pricelist[$elementID]['bonus'];
 
 	    // 1. Beneficios Temporales (con expiración)
 	    if (in_array($elementID, array_merge($reslist['dmfunc'], $reslist['premium'], $reslist['artifact'], $reslist['development'], $reslist['party']))) {
@@ -93,6 +94,7 @@ function getFactors($USER, $Type = 'basic', $TIME = NULL) {
 	            $perm[$bonusKey] += $elementLevel * $bonus[$bonusKey][0];
 	        }
 	    }
+	}
 	}
 
 	// Aplicación de Soft Caps a temporales
