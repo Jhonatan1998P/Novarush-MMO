@@ -46,6 +46,22 @@ class MissionCaseMIP extends MissionFunctions implements Mission
 			':planetId'	=> $this->_fleet['fleet_end_id']
 		));
 
+		if(empty($targetData))
+		{
+			$this->KillFleet();
+			return;
+		}
+
+		require_once 'includes/classes/events/WarEventBossEngine.class.php';
+		if ($targetData['id_owner'] == WarEventBossEngine::NPC_USER_ID)
+		{
+			$message = "Los sensores orbitales confirman que los misiles interplanetarios dirigidos a la Fortaleza Ancestral fueron completamente desintegrados por sus escudos iónicos sin causar ningún daño a sus defensas.";
+			PlayerUtil::sendMessage($this->_fleet['fleet_owner'], 0, 'Torre de Control', 3, 'Ataque con Misiles Neutralizado',
+				$message, $this->_fleet['fleet_end_time'], NULL, 1, $this->_fleet['fleet_universe']);
+			$this->KillFleet();
+			return;
+		}
+
 		if($this->_fleet['fleet_end_type'] == 3)
 		{
 			$sql	= 'SELECT '.$resource[502].' FROM %%PLANETS%% WHERE id_luna = :moonId;';
@@ -79,14 +95,16 @@ class MissionCaseMIP extends MissionFunctions implements Mission
 		
 		unset($targetDefensive[502]);
 
-		$LNG	= $this->getLanguage(Config::get($this->_fleet['fleet_universe'])->lang, array('L18N', 'FLEET', 'TECH'));
+		$LNG = $this->getLanguage(Config::get($this->_fleet['fleet_universe'])->lang, array('L18N', 'FLEET', 'TECH'));
+		$interceptedCount = 0;
+		$result = array();
 				
 		if ($targetData[$resource[502]] >= $this->_fleet['fleet_amount'])
 		{
-			$message 	= $LNG['sys_irak_no_att'];
-			$where 		= $this->_fleet['fleet_end_type'] == 3 ? 'id_luna' : 'id';
+			$interceptedCount = $this->_fleet['fleet_amount'];
+			$where = $this->_fleet['fleet_end_type'] == 3 ? 'id_luna' : 'id';
 			
-			$sql		= 'UPDATE %%PLANETS%% SET '.$resource[502].' = '.$resource[502].' - :amount WHERE '.$where.' = :planetId;';
+			$sql = 'UPDATE %%PLANETS%% SET '.$resource[502].' = '.$resource[502].' - :amount WHERE '.$where.' = :planetId;';
 
 			$db->update($sql, array(
 				':amount'	=> $this->_fleet['fleet_amount'],
@@ -95,6 +113,7 @@ class MissionCaseMIP extends MissionFunctions implements Mission
 		}
 		else
 		{
+			$interceptedCount = (int) $targetData[$resource[502]];
 			if ($targetData[$resource[502]] > 0)
 			{
 				$where 	= $this->_fleet['fleet_end_type'] == 3 ? 'id_luna' : 'id';
@@ -115,15 +134,10 @@ class MissionCaseMIP extends MissionFunctions implements Mission
 					$this->_fleet['fleet_amount'], $targetDefensive, $primaryTarget, $targetData[$resource[502]]);
 
 				$result		= array_filter($result);
-				
-				$message	= sprintf($LNG['sys_irak_def'], $targetData[$resource[502]]).'<br><br>';
-				
 				ksort($result, SORT_NUMERIC);
 				
 				foreach ($result as $Element => $destroy)
 				{
-					$message .= sprintf('%s (- %d)<br>', $LNG['tech'][$Element], $destroy);
-
 					$sql	= 'UPDATE %%PLANETS%% SET '.$resource[$Element].' = '.$resource[$Element].' - :amount WHERE id = :planetId;';
 					$db->update($sql, array(
 						':planetId' => $targetData['id'],
@@ -131,9 +145,27 @@ class MissionCaseMIP extends MissionFunctions implements Mission
 					));
 				}
 			}
-			else
-			{
-				$message = $LNG['sys_irak_no_def'];
+		}
+
+		// Sincronizar reporte de daños e intercepciones en tiempo real en la memoria táctica del bot
+		$totalIntelDeduction = $result;
+		if ($interceptedCount > 0) {
+			$totalIntelDeduction[502] = $interceptedCount;
+		}
+
+		if (!empty($totalIntelDeduction) && file_exists('includes/classes/bot/Perception/IntelStore.class.php')) {
+			try {
+				require_once 'includes/classes/bot/Perception/IntelStore.class.php';
+				$bStore = new BotIntelStore((int)$this->_fleet['fleet_owner']);
+				$bStore->deductDefenses(
+					(int)$this->_fleet['fleet_end_galaxy'],
+					(int)$this->_fleet['fleet_end_system'],
+					(int)$this->_fleet['fleet_end_planet'],
+					(int)$this->_fleet['fleet_end_type'],
+					$totalIntelDeduction
+				);
+			} catch (\Throwable $e) {
+				// Suppress exception
 			}
 		}
 
@@ -142,15 +174,30 @@ class MissionCaseMIP extends MissionFunctions implements Mission
 			':planetId'	=> $this->_fleet['fleet_start_id'],
 		), 'name');
 
-		$ownerLink			= $planetName." ".GetStartAddressLink($this->_fleet);
-		$targetLink 		= $targetData['name']." ".GetTargetAddressLink($this->_fleet);
-		$message			= sprintf($LNG['sys_irak_mess'], $this->_fleet['fleet_amount'], $ownerLink, $targetLink).$message;
+		$origin = array(
+			'name'        => $planetName ?: 'Planeta Origen',
+			'galaxy'      => $this->_fleet['fleet_start_galaxy'],
+			'system'      => $this->_fleet['fleet_start_system'],
+			'planet'      => $this->_fleet['fleet_start_planet'],
+			'planet_type' => $this->_fleet['fleet_start_type']
+		);
+
+		$target = array(
+			'name'        => $targetData['name'] ?? 'Planeta Destino',
+			'galaxy'      => $this->_fleet['fleet_end_galaxy'],
+			'system'      => $this->_fleet['fleet_end_system'],
+			'planet'      => $this->_fleet['fleet_end_planet'],
+			'planet_type' => $this->_fleet['fleet_end_type']
+		);
+
+		$messageAtt = MessageTemplateHelper::buildMissileCard($origin, $target, $this->_fleet['fleet_amount'], $interceptedCount, $result, true, $LNG);
+		$messageDef = MessageTemplateHelper::buildMissileCard($origin, $target, $this->_fleet['fleet_amount'], $interceptedCount, $result, false, $LNG);
 
 		PlayerUtil::sendMessage($this->_fleet['fleet_owner'], 0, $LNG['sys_mess_tower'], 3,
-			$LNG['sys_irak_subject'], $message, $this->_fleet['fleet_start_time'], NULL, 1, $this->_fleet['fleet_universe']);
+			$LNG['sys_irak_subject'], $messageAtt, $this->_fleet['fleet_start_time'], NULL, 1, $this->_fleet['fleet_universe']);
 
 		PlayerUtil::sendMessage($this->_fleet['fleet_target_owner'], 0, $LNG['sys_mess_tower'], 3,
-			$LNG['sys_irak_subject'], $message, $this->_fleet['fleet_start_time'], NULL, 1, $this->_fleet['fleet_universe']);
+			$LNG['sys_irak_subject'], $messageDef, $this->_fleet['fleet_start_time'], NULL, 1, $this->_fleet['fleet_universe']);
 
 		$this->KillFleet();
 	}

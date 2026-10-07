@@ -1,11 +1,11 @@
 <?php
-/* Smarty version 3.1.36, created on 2026-09-27 02:48:09
+/* Smarty version 3.1.36, created on 2026-10-07 04:00:56
   from 'C:\Users\Ortega\Downloads\OGAME\ogame\styles\theme\nsc\templates\game\main.footer.tpl' */
 
 /* @var Smarty_Internal_Template $_smarty_tpl */
 if ($_smarty_tpl->_decodeProperties($_smarty_tpl, array (
   'version' => '3.1.36',
-  'unifunc' => 'content_6ab867c95c7a25_61078513',
+  'unifunc' => 'content_6ac5a7d8d43362_06522497',
   'has_nocache_code' => false,
   'file_dependency' => 
   array (
@@ -20,7 +20,7 @@ if ($_smarty_tpl->_decodeProperties($_smarty_tpl, array (
   array (
   ),
 ),false)) {
-function content_6ab867c95c7a25_61078513 (Smarty_Internal_Template $_smarty_tpl) {
+function content_6ac5a7d8d43362_06522497 (Smarty_Internal_Template $_smarty_tpl) {
 ?><div class="clear"></div>
 <div id="footer">
 	<?php if ($_smarty_tpl->tpl_vars['ga_active']->value) {?>

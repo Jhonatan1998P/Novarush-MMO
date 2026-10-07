@@ -15,12 +15,19 @@
                 {foreach $fairList as $ID => $Element}
                 <div id="ofic_{$ID}" class="build_box">
                     <div class="head">
-                        {$LNG.tech.{$ID}}
-                        {if $Element.timeLeft > 0}<span style="float:right; color:#CCC;">{$LNG.bd_recharge} <span id="time_{$ID}">-</span></span>{/if}
+                        <a href="#" onclick="return Dialog.info({$ID})" class="interrogation">?</a>
+                        <a href="#" onclick="return Dialog.info({$ID})">{$LNG.tech.{$ID}}</a>
+                        {if isset($Element.dailyLimit) && $Element.dailyLimit > 0}
+                            <span style="float:right; color:{if $Element.dailyUsed >= $Element.dailyLimit}#ff6666{else}#8cd7ff{/if}; font-size:11px;">
+                                ({$Element.dailyUsed}/{$Element.dailyLimit} hoy{if $Element.dailyUsed < $Element.dailyLimit && $Element.priceIncreasePercent > 0} • +{$Element.priceIncreasePercent}%{/if})
+                            </span>
+                        {elseif $Element.timeLeft > 0}
+                            <span style="float:right; color:#CCC;">{$LNG.bd_recharge} <span id="time_{$ID}">-</span></span>
+                        {/if}
                     </div>
                     <div class="content_box">
                         <div class="image_mini">
-                            <img src="{$dpath}gebaeude/{$ID}.gif" alt="{$LNG.tech.{$ID}}" />
+                            <a href="#" onclick="return Dialog.info({$ID})"><img src="{$dpath}gebaeude/{$ID}.gif" alt="{$LNG.tech.{$ID}}" /></a>
                         </div>
                         <div class="prices_mini">
                             <font color="#096">{foreach $Element.elementBonus as $BonusName => $Bonus}{if $Bonus[0] < 0}-{else}+{/if}{if $Bonus[1] == 0}{abs($Bonus[0] * 100)}%{else}{floatval($Bonus[0])}{/if} {$LNG.bonus.$BonusName}<br>{/foreach}</font>
@@ -58,7 +65,7 @@
                                     </div>                  
                                 </form>
                             {else}
-                                <span class="btn_build red">{$LNG.bd_notres}</span>
+                                <span class="btn_build red">{if isset($Element.dailyLimit) && $Element.dailyUsed >= $Element.dailyLimit}Límite diario alcanzado{else}{$LNG.bd_notres}{/if}</span>
                             {/if}
                             </div>
                         </form>

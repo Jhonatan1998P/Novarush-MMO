@@ -88,7 +88,7 @@
                             </div>
                             <div class="content_box">
                                 <div class="image">
-                                    <a href="#" onclick="return Dialog.info({$ID})"><img src="./{$dpath}gebaeude/{$ID}.gif" alt="{$LNG.tech.{$ID}}" /></a>
+                                    <a href="#" onclick="return Dialog.info({$ID})">{if $ID == 134}<img src="./{$dpath}gebaeude/134.webp" alt="{$LNG.tech.{$ID}}" />{else}<img src="./{$dpath}gebaeude/{$ID}.gif" alt="{$LNG.tech.{$ID}}" />{/if}</a>
                                 </div>
                                 {if !$Element.techacc}
                                 <div class="prices">
@@ -165,7 +165,7 @@
     <script type="text/javascript">
     DatatList		= {
         {foreach $ResearchList as $ID => $Element}
-        "{$ID}":{ "id":"{$ID}","elvl":"0 ","level":"{$Element.level}","maxLevel":"{$Element.maxLevel}","factor":"{$Element.factor}","costRessources":{ {foreach $Element.costResources as $RessID => $RessAmount}"{$RessID}":{$RessAmount}{if !$RessAmount@last},{/if}{/foreach} },"costOverflow":{ {foreach $Element.costOverflow as $RessID => $RessAmount}"{$RessID}":{$RessAmount}{if !$RessAmount@last},{/if}{/foreach} },"elementTime":{$Element.elementTime},"buyable":true }{if !$Element@last},{/if}
+        "{$ID}":{ "id":"{$ID}","elvl":"0 ","level":"{$Element.level}","levelToBuild":"{$Element.levelToBuild}","maxLevel":"{$Element.maxLevel}","factor":"{$Element.factor}","factors":{ {foreach $Element.factors as $ResID => $FactorVal}"{$ResID}":{$FactorVal}{if !$FactorVal@last},{/if}{/foreach} },"costRessources":{ {foreach $Element.costResources as $RessID => $RessAmount}"{$RessID}":{$RessAmount}{if !$RessAmount@last},{/if}{/foreach} },"costOverflow":{ {foreach $Element.costOverflow as $RessID => $RessAmount}"{$RessID}":{$RessAmount}{if !$RessAmount@last},{/if}{/foreach} },"elementTime":{$Element.elementTime},"buyable":true }{if !$Element@last},{/if}
         {/foreach}
     };
    	bd_operating	= '(busy)';

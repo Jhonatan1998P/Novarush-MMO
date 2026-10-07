@@ -31,12 +31,19 @@ HTTP::sendHeader('Expires', '0');
 
 echo("\x47\x49\x46\x38\x39\x61\x01\x00\x01\x00\x80\x00\x00\x00\x00\x00\x00\x00\x00\x21\xF9\x04\x01\x00\x00\x00\x00\x2C\x00\x00\x00\x00\x01\x00\x01\x00\x00\x02\x02\x44\x01\x00\x3B");
 
-if(!$session->isValidSession())
+@ignore_user_abort(true);
+@set_time_limit(300);
+
+if(PHP_SAPI !== 'cli' && !$session->isValidSession())
 {
 	exit;
 }
 
 $cronjobID	= HTTP::_GP('cronjobID', 0);
+if(PHP_SAPI === 'cli' && empty($cronjobID) && isset($argv[1]))
+{
+	$cronjobID = (int)$argv[1];
+}
 
 if(empty($cronjobID))
 {

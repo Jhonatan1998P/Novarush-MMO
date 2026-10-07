@@ -41,6 +41,28 @@ class PremiumEconomy
         return self::mse($r['m'], $r['c'], $r['d']) + ($r['n'] * self::baseIncomeMSE());
     }
 
+    public static function playerHourlyProduction($userId)
+    {
+        $db = Database::get();
+        $cfg = Config::get();
+        $r = $db->selectSingle(
+            'SELECT COALESCE(SUM(metal_perhour),0) m, COALESCE(SUM(crystal_perhour),0) c,
+                    COALESCE(SUM(deuterium_perhour),0) d, COUNT(*) n
+             FROM %%PLANETS%% WHERE id_owner = :u AND planet_type = 1;',
+            array(':u' => $userId)
+        );
+        $count = (int) $r['n'];
+        $baseM = (float) $cfg->metal_basic_income * (float) $cfg->resource_multiplier;
+        $baseC = (float) $cfg->crystal_basic_income * (float) $cfg->resource_multiplier;
+        $baseD = (float) $cfg->deuterium_basic_income * (float) $cfg->resource_multiplier;
+
+        return array(
+            'metal'     => (float) $r['m'] + ($count * $baseM),
+            'crystal'   => (float) $r['c'] + ($count * $baseC),
+            'deuterium' => (float) $r['d'] + ($count * $baseD)
+        );
+    }
+
     public static function indexedHourlyMSE($userId)
     {
         return max(

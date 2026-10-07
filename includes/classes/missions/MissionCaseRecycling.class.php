@@ -39,7 +39,7 @@ class MissionCaseRecycling extends MissionFunctions implements Mission
 		}
 
 		$sql	= 'SELECT '.implode(',', $resQuery).', ('.implode(' + ', $resQuery).') as total
-		FROM %%PLANETS%% WHERE id = :planetId';
+		FROM %%PLANETS%% WHERE id = :planetId FOR UPDATE;';
 
 		$targetData	= Database::get()->selectSingle($sql, array(
 			':planetId'	=> $this->_fleet['fleet_end_id']
@@ -107,11 +107,19 @@ class MissionCaseRecycling extends MissionFunctions implements Mission
 			Database::get()->update($sql, $param);
 		}
 		
-		$LNG		= $this->getLanguage(NULL, $this->_fleet['fleet_owner']);
+		$LNG = $this->getLanguage(NULL, $this->_fleet['fleet_owner']);
 		
-		$Message 	= sprintf($LNG['sys_recy_gotten'], 
-			pretty_number($collectedGoods[901]), $LNG['tech'][901],
-			pretty_number($collectedGoods[902]), $LNG['tech'][902]
+		$targetCoords = array(
+			'galaxy' => $this->_fleet['fleet_end_galaxy'],
+			'system' => $this->_fleet['fleet_end_system'],
+			'planet' => $this->_fleet['fleet_end_planet']
+		);
+
+		$Message = MessageTemplateHelper::buildRecyclingCard(
+			$targetCoords,
+			$collectedGoods[901] ?? 0,
+			$collectedGoods[902] ?? 0,
+			$LNG
 		);
 
 		PlayerUtil::sendMessage($this->_fleet['fleet_owner'], 0, $LNG['sys_mess_tower'], 5,
@@ -128,18 +136,40 @@ class MissionCaseRecycling extends MissionFunctions implements Mission
 	
 	function ReturnEvent()
 	{
-		$LNG		= $this->getLanguage(NULL, $this->_fleet['fleet_owner']);
+		$LNG = $this->getLanguage(NULL, $this->_fleet['fleet_owner']);
 
-		$sql		= 'SELECT name FROM %%PLANETS%% WHERE id = :planetId;';
-		$planetName	= Database::get()->selectSingle($sql, array(
-			':planetId'	=> $this->_fleet['fleet_start_id'],
+		$sql = 'SELECT name FROM %%PLANETS%% WHERE id = :planetId;';
+		$planetName = Database::get()->selectSingle($sql, array(
+			':planetId' => $this->_fleet['fleet_start_id'],
 		), 'name');
-	
-		$Message	= sprintf($LNG['sys_tran_mess_owner'],
-			$planetName, GetStartAddressLink($this->_fleet, ''),
-			pretty_number($this->_fleet['fleet_resource_metal']), $LNG['tech'][901],
-			pretty_number($this->_fleet['fleet_resource_crystal']), $LNG['tech'][902],
-			pretty_number($this->_fleet['fleet_resource_deuterium']), $LNG['tech'][903]
+
+		$origin = array(
+			'name'        => 'Campo de Escombros',
+			'galaxy'      => $this->_fleet['fleet_end_galaxy'],
+			'system'      => $this->_fleet['fleet_end_system'],
+			'planet'      => $this->_fleet['fleet_end_planet'],
+			'planet_type' => 2
+		);
+		$target = array(
+			'name'        => $planetName ?: 'Planeta',
+			'galaxy'      => $this->_fleet['fleet_start_galaxy'],
+			'system'      => $this->_fleet['fleet_start_system'],
+			'planet'      => $this->_fleet['fleet_start_planet'],
+			'planet_type' => $this->_fleet['fleet_start_type']
+		);
+		$resources = array(
+			901 => $this->_fleet['fleet_resource_metal'],
+			902 => $this->_fleet['fleet_resource_crystal'],
+			903 => $this->_fleet['fleet_resource_deuterium']
+		);
+
+		$Message = MessageTemplateHelper::buildLogisticsCard(
+			'return',
+			$LNG['sys_mess_fleetback'],
+			$origin,
+			$target,
+			$resources,
+			$LNG
 		);
 
 		PlayerUtil::sendMessage($this->_fleet['fleet_owner'], 0, $LNG['sys_mess_tower'], 4, $LNG['sys_mess_fleetback'],

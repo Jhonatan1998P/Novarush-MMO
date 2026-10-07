@@ -85,6 +85,8 @@ class ShowSettingsPage extends AbstractGamePage
 				'SELF_URL'          => PROTOCOL.HTTP_HOST.HTTP_ROOT,
                 'foto'				=> $USER['foto'],
                 'background'		=> $USER['background'],
+				'vacationLocked'	=> $USER['urlaubs_until'] > TIMESTAMP,
+				'vacationUntil'		=> _date($LNG['php_tdformat'], $USER['urlaubs_until'], $USER['timezone']),
 			));
 			
 			$this->display('page.settings.default.tpl');
@@ -94,6 +96,9 @@ class ShowSettingsPage extends AbstractGamePage
 	private function CheckVMode()
 	{
 		global $USER, $PLANET;
+
+		if($USER['urlaubs_until'] > TIMESTAMP)
+			return false;
 
 		if(!empty($USER['b_tech']) || !empty($PLANET['b_building']) || !empty($PLANET['b_hangar']))
 			return false;
@@ -348,7 +353,14 @@ class ShowSettingsPage extends AbstractGamePage
 		
 		if ($vacation == 1)
 		{
-			if(!$this->CheckVMode())
+			if($USER['urlaubs_until'] > TIMESTAMP)
+			{
+				$this->printMessage(sprintf($LNG['op_cant_activate_vacation_mode_cooldown'], _date($LNG['php_tdformat'], $USER['urlaubs_until'], $USER['timezone'])), array(array(
+					'label'	=> $LNG['sys_back'],
+					'url'	=> 'game.php?page=settings'
+				)));
+			}
+			elseif(!$this->CheckVMode())
 			{
 				$this->printMessage($LNG['op_cant_activate_vacation_mode'], array(array(
 					'label'	=> $LNG['sys_back'],

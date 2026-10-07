@@ -223,16 +223,16 @@ class MissionCaseMilitaryExpedition extends MissionFunctions implements Mission
 		switch ($result['won'])
 		{
 			case "a":
-				$attackClass = 'style="color:green;"';
-				$defendClass = 'style="color:red;"';
+				$attackClass = 'style="color:#2ecc71;"';
+				$defendClass = 'style="color:#e74c3c;"';
 				break;
 			case "w":
-				$attackClass = 'style="color:orange;"';
-				$defendClass = 'style="color:orange;"';
+				$attackClass = 'style="color:#f39c12;"';
+				$defendClass = 'style="color:#f39c12;"';
 				break;
 			case "r":
-				$attackClass = 'style="color:red;"';
-				$defendClass = 'style="color:green;"';
+				$attackClass = 'style="color:#e74c3c;"';
+				$defendClass = 'style="color:#2ecc71;"';
 				break;
 		}
 
@@ -266,32 +266,24 @@ class MissionCaseMilitaryExpedition extends MissionFunctions implements Mission
 		}
 
 		// set battle message
-		$MessageAtt = sprintf(
-			str_replace(array("\n", "\t", "\r"), "", $LNG['batl_log_mesage']),
+		$targetInfo = array(
+			'name'        => $Name,
+			'galaxy'      => $this->_fleet['fleet_end_galaxy'],
+			'system'      => $this->_fleet['fleet_end_system'],
+			'planet'      => $this->_fleet['fleet_end_planet'],
+			'planet_type' => $this->_fleet['fleet_end_type']
+		);
+
+		$MessageAtt = MessageTemplateHelper::buildCombatCard(
 			$reportID,
-			$attackClass,
-			$LNG['sys_mess_attack_report'],
-			$LNG['host_mission_mesag'],
-			$Name,
-			$LNG['sys_lost'],
-			$attackClass,
-			$LNG['sys_attack_attacker_pos'],
-			pretty_number($result['unitLost']['attacker']),
-			$defendClass,
-			$LNG['sys_attack_defender_pos'],
-			pretty_number($result['unitLost']['defender']),
-			$LNG['sys_gain'],
-			$LNG['tech'][901],
-			pretty_number($ShipmentDebris[901]),
-			$LNG['tech'][902],
-			pretty_number($ShipmentDebris[902]),
-			$LNG['tech'][903],
-			0,
-			$LNG['sys_debris'],
-			$LNG['tech'][901],
-			pretty_number($debris[901]),
-			$LNG['tech'][902],
-			pretty_number($debris[902])
+			$result['won'],
+			$targetInfo,
+			$result['unitLost'],
+			$ShipmentDebris,
+			$debris,
+			array('created' => false, 'chance' => 0, 'name' => ''),
+			true,
+			$LNG
 		);
 
 		// send battle message and first expedition message
@@ -312,7 +304,36 @@ class MissionCaseMilitaryExpedition extends MissionFunctions implements Mission
 	function ReturnEvent()
 	{
 		$LNG     = $this->getLanguage(NULL, $this->_fleet['fleet_owner']);
-		$Message = sprintf($LNG['sys_expe_back_home'], $LNG['tech'][901], pretty_number($this->_fleet['fleet_resource_metal']), $LNG['tech'][902], pretty_number($this->_fleet['fleet_resource_crystal']),  $LNG['tech'][903], pretty_number($this->_fleet['fleet_resource_deuterium']), $LNG['tech'][921], pretty_number($this->_fleet['fleet_resource_darkmatter']));
+		
+		$origin = array(
+			'name'        => 'Sector Nebulosa',
+			'galaxy'      => $this->_fleet['fleet_end_galaxy'],
+			'system'      => $this->_fleet['fleet_end_system'],
+			'planet'      => $this->_fleet['fleet_end_planet'],
+			'planet_type' => $this->_fleet['fleet_end_type']
+		);
+		$target = array(
+			'name'        => 'Base',
+			'galaxy'      => $this->_fleet['fleet_start_galaxy'],
+			'system'      => $this->_fleet['fleet_start_system'],
+			'planet'      => $this->_fleet['fleet_start_planet'],
+			'planet_type' => $this->_fleet['fleet_start_type']
+		);
+		$resources = array(
+			901 => $this->_fleet['fleet_resource_metal'],
+			902 => $this->_fleet['fleet_resource_crystal'],
+			903 => $this->_fleet['fleet_resource_deuterium'],
+			921 => $this->_fleet['fleet_resource_darkmatter']
+		);
+
+		$Message = MessageTemplateHelper::buildLogisticsCard(
+			'return',
+			$LNG['sys_mess_fleetback'],
+			$origin,
+			$target,
+			$resources,
+			$LNG
+		);
         
         PlayerUtil::sendMessage($this->_fleet['fleet_owner'], 0, $LNG['sys_mess_tower'], 15, $LNG['sys_mess_fleetback'],
 			$Message, $this->_fleet['fleet_end_time'], NULL, 1, $this->_fleet['fleet_universe']);

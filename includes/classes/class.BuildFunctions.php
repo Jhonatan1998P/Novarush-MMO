@@ -150,8 +150,9 @@ class BuildFunctions
 
             $price[$resType]	= $ressourceAmount;
 
-            if(isset($pricelist[$Element]['factor']) && $pricelist[$Element]['factor'] != 0 && $pricelist[$Element]['factor'] != 1) {
-                $price[$resType]	*= pow($pricelist[$Element]['factor'], $elementLevel);
+            $resFactor = isset($pricelist[$Element]['factor'.$resType]) ? $pricelist[$Element]['factor'.$resType] : ($pricelist[$Element]['factor'] ?? 1);
+            if($resFactor != 0 && $resFactor != 1) {
+                $price[$resType]	*= pow($resFactor, $elementLevel);
             }
 
             if($forLevel && (in_array($Element, $reslist['fleet']) || in_array($Element, $reslist['defense']) || in_array($Element, $reslist['missile']))) {
@@ -247,16 +248,23 @@ class BuildFunctions
         }elseif (in_array($Element, $reslist['missile'])) {
 			$speedFactor = 1 + max(0, (float)(isset($USER['factor']['Sfleet']) ? $USER['factor']['Sfleet'] : 0));
 			$time	= $elementCost/($config->game_speed * (1 + $PLANET[$resource[$resglobal['missile_speed']]]) * $speedFactor);	
-		}elseif (in_array($Element, $reslist['tech'])) {
-            if(is_numeric($PLANET[$resource[$resglobal['tech_speed']].'_inter']))
+        }elseif (in_array($Element, $reslist['tech'])) {
+            $interKey = $resource[$resglobal['tech_speed']].'_inter';
+            if (!isset($PLANET[$interKey])) {
+                $PLANET[$interKey] = ResourceUpdate::getNetworkLevel($USER, $PLANET);
+            }
+
+            if(is_numeric($PLANET[$interKey]))
             {
                 $Level	= $PLANET[$resource[$resglobal['tech_speed']]];
             } else {
                 $Level = 0;
-                foreach($PLANET[$resource[$resglobal['tech_speed']].'_inter'] as $Levels)
-                {
-                    if(!isset($requeriments[$Element][$resglobal['tech_speed']]) || $Levels >= $requeriments[$Element][$resglobal['tech_speed']])
-                        $Level += $Levels;
+                if (is_array($PLANET[$interKey])) {
+                    foreach($PLANET[$interKey] as $Levels)
+                    {
+                        if(!isset($requeriments[$Element][$resglobal['tech_speed']]) || $Levels >= $requeriments[$Element][$resglobal['tech_speed']])
+                            $Level += $Levels;
+                    }
                 }
             }
 
@@ -363,13 +371,13 @@ class BuildFunctions
 		if(!isset($Domes)){		
             $Domes	= array();
             
-            foreach($Domes as $elementID){
-                $Domes[$elementID]	= $PLANET[$resource[$elementID]];
+            foreach($reslist['domes'] as $elementID){
+                $Domes[$elementID]	= isset($PLANET[$resource[$elementID]]) ? $PLANET[$resource[$elementID]] : 0;
             }
 		}
         
 		$BuildArray = !empty($PLANET['b_hangar_id']) ? unserialize($PLANET['b_hangar_id']) : array();
-		$MaxDomes = 25 + $USER['factor']['ShieldDome'];
+		$MaxDomes = 25 + (isset($USER['factor']['ShieldDome']) ? $USER['factor']['ShieldDome'] : 0);
         
 		foreach($BuildArray as $ElementArray) {
 			if(isset($Domes[$ElementArray[0]]))
@@ -377,7 +385,8 @@ class BuildFunctions
 		}
         
         foreach($reslist['domes'] as $elementID) {
-            $DomesElement[$elementID]  = max(0, $MaxDomes - $Domes[$elementID]);
+            $curCount = isset($Domes[$elementID]) ? $Domes[$elementID] : 0;
+            $DomesElement[$elementID]  = max(0, $MaxDomes - $curCount);
 		}
         
         $DomesTotal = array();
@@ -490,28 +499,69 @@ class BuildFunctions
         return $bonusIDList;
     }
     
+    public static function getInstantMSE($Element)
+    {
+        global $pricelist;
+        if (empty($pricelist)) {
+            $cache = Cache::get();
+            $cache->add('vars', 'VarsBuildCache');
+            $vars = $cache->getData('vars');
+            if (isset($vars['pricelist'])) {
+                $GLOBALS['pricelist'] = $vars['pricelist'];
+                $pricelist = $vars['pricelist'];
+            }
+        }
+        $costMetal   = (float) ($pricelist[$Element]['cost'][901] ?? 0);
+        $costCrystal = (float) ($pricelist[$Element]['cost'][902] ?? 0);
+        $costDeut    = (float) ($pricelist[$Element]['cost'][903] ?? 0);
+        
+        return $costMetal + (2.0 * $costCrystal) + (4.0 * $costDeut);
+    }
+    
+    public static function getInstantPriceFleetDefense($Element)
+    {
+        $mse = self::getInstantMSE($Element);
+        return (int) max(1, ceil($mse / 200.0));
+    }
+    
+    public static function getInstantPriceLevel($Element, $Level)
+    {
+        global $pricelist;
+        if (empty($pricelist)) {
+            $cache = Cache::get();
+            $cache->add('vars', 'VarsBuildCache');
+            $vars = $cache->getData('vars');
+            if (isset($vars['pricelist'])) {
+                $GLOBALS['pricelist'] = $vars['pricelist'];
+                $pricelist = $vars['pricelist'];
+            }
+        }
+        $baseMSE = self::getInstantMSE($Element);
+        $baseMO  = $baseMSE / 250.0;
+        $factor  = (float) ($pricelist[$Element]['factor'] ?? 1.0);
+        
+        $lvl = max(1, (int)$Level);
+        return (int) max(15, ceil($baseMO * pow($factor, $lvl - 1)));
+    }
+    
+    public static function getInstantPriceTotalLevels($Element, $CurrentLevel, $Count)
+    {
+        $count = max(1, (int)$Count);
+        $curLvl = max(0, (int)$CurrentLevel);
+        $total = 0;
+        for ($i = 1; $i <= $count; $i++) {
+            $total += self::getInstantPriceLevel($Element, $curLvl + $i);
+        }
+        return $total;
+    }
+    
     public static function instantPurchasePrice($Element)
 	{
-		global $PLANET, $USER, $resource, $pricelist, $reslist;
-        
-        $cost               = 0;
-        
-        foreach($reslist['resstype'][1] as $resP)
-        {
-            $cost += ceil($pricelist[$Element]['cost'][$resP] * 0.0005);
+		global $reslist;
+        if (in_array($Element, $reslist['fleet']) || in_array($Element, $reslist['defense'])) {
+            return self::getInstantPriceFleetDefense($Element);
         }
-        
-        foreach($reslist['resstype'][2] as $resS)
-        {
-            $cost += ceil($pricelist[$Element]['cost'][$resS] * 1);
-        }
-        
-        foreach($reslist['resstype'][3] as $resU)
-        {
-            $cost += ceil($pricelist[$Element]['cost'][$resU] * 1);
-        }
-		
-		return($cost);
+        return self::getInstantPriceLevel($Element, 1);
 	}
     
     public static function resourcesPoints($USER, $Element)

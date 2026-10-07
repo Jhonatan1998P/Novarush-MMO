@@ -36,9 +36,17 @@
 </form>
 <script type="text/javascript">
 function Rename(){
-	var Name = prompt("{$LNG.fl_acs_change_name}", "{$acsData.acsName}");
-	$.getJSON('?page=fleetTable&action=acs&fleetID={$acsData.mainFleetID}&acsName='+Name, function(data) {
-		if(data != "") {
+	var currentName = "{$acsData.acsName|escape:'javascript'}";
+	var Name = prompt("{$LNG.fl_acs_change_name}", currentName);
+	if (Name === null) {
+		return;
+	}
+	Name = $.trim(Name);
+	if (Name === "" || Name === currentName || Name.toLowerCase() === "null") {
+		return;
+	}
+	$.getJSON('?page=fleetTable&action=acs&fleetID={$acsData.mainFleetID}&acsName='+encodeURIComponent(Name), function(data) {
+		if(data && data !== "") {
 			alert(data);
 			return;
 		}

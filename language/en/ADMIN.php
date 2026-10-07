@@ -120,6 +120,7 @@ $LNG['lm_information']                               = 'Information';
 $LNG['lm_configuni']                                 = 'Settings';
 $LNG['lm_module']                                    = 'Modules';
 $LNG['lm_cronjob']                                   = 'Task Scheduler';
+$LNG['lm_events']                                    = 'War Events';
 $LNG['lm_dump']                                      = 'Back up the database';
 $LNG['lm_universe']                                  = 'Universes';
 $LNG['lm_rights']                                    = 'Rights';

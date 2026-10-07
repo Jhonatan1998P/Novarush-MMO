@@ -284,4 +284,27 @@ class Database
 	{
 		return $this->dbHandle->quote($str);
 	}
+
+	public function beginTransaction()
+	{
+		return $this->dbHandle->beginTransaction();
+	}
+
+	public function commit()
+	{
+		return $this->dbHandle->commit();
+	}
+
+	public function rollBack()
+	{
+		if ($this->dbHandle && $this->dbHandle->inTransaction()) {
+			return $this->dbHandle->rollBack();
+		}
+		return false;
+	}
+
+	public function inTransaction()
+	{
+		return ($this->dbHandle && $this->dbHandle->inTransaction());
+	}
 }

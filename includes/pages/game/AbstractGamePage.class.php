@@ -317,17 +317,10 @@ abstract class AbstractGamePage
             $USER[$resource[$Element]]	+= $amount;
             include('includes/subclasses/subclass.UpdateSqlGeneral.php');
             //Параметры сообщения
-            $From           = $LNG['ach_system'];
-            $pmSubject      = $LNG['lm_achievements'];
-            $sendMessage    = '
-                <a href="#" onclick="return Dialog.info('.$Element.')">
-                    <img alt="" style="float:left; width:60px; margin-right:6px;" src="'.$THEME->getTheme().'gebaeude/'.$Element.'.gif">
-                </a>
-                '.$LNG['ach_reached'].' <span class="achiev_mes_head">'.$LNG['tech'][$Element].' '.$USER[$resource[$Element]].'</span>
-                <br><a href="#" onclick="return Dialog.info('.$Element.')">'.$LNG['ach_bonus'].'</a>
-                <br><a href="/game.php?page=achievements">'.$LNG['ach_go_achievements'].'</a>
-            ';
-            //Сообщение о награде
+            $From        = $LNG['ach_system'];
+            $pmSubject   = $LNG['lm_achievements'];
+            $sendMessage = MessageTemplateHelper::buildAchievementCard($Element, $USER[$resource[$Element]], $LNG);
+            // Recompensa de logro
             PlayerUtil::sendMessage($USER['id'], $USER['id'], $From, 4, $pmSubject, $sendMessage, TIMESTAMP, NULL, 1, Universe::current());
         }
         
@@ -357,6 +350,11 @@ abstract class AbstractGamePage
 			'hasBoard'			=> filter_var($config->forum_url, FILTER_VALIDATE_URL),
 			'hasAdminAccess'	=> !empty(Session::load()->adminAccess),
 			'hasGate'			=> $PLANET[$resource[43]] > 0,
+			'current_userId'	=> (int)$USER['id'],
+			'current_username'	=> $USER['username'],
+			'isSpectator'		=> !empty($_SESSION['spectator_admin_id']),
+			'isGodwar'			=> ((int)$USER['id'] === 4 || !empty($_SESSION['spectator_admin_id'])),
+			'spectatorTarget'	=> !empty($_SESSION['spectator_admin_id']) ? $USER['username'] : '',
 		));
 	}
 
@@ -485,6 +483,9 @@ abstract class AbstractGamePage
 			$this->getPageData();
 		}
 
+		require_once 'includes/classes/events/WarEventBossEngine.class.php';
+		$warEventBanner = WarEventBossEngine::getBannerData(Universe::current());
+
 		$this->assign(array(
             //Аватарки
             'foto'			=> $USER['foto'],
@@ -495,6 +496,7 @@ abstract class AbstractGamePage
 			'scripts'		=> $this->tplObj->jsscript,
 			'execscript'	=> implode("\n", $this->tplObj->script),
 			'basepath'		=> PROTOCOL.HTTP_HOST.HTTP_BASE,
+			'war_event_banner' => $warEventBanner,
 		));
 
 		$this->assign(array(

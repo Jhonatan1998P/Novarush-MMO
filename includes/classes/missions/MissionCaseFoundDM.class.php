@@ -68,15 +68,23 @@ class MissionCaseFoundDM extends MissionFunctions implements Mission
 			$db = Database::get();
 			$targetUser = $db->selectSingle("SELECT * FROM %%USERS%% WHERE id = :userId;", array(':userId' => $ownerId));
 
+			$eventType     = 'nothing';
+			$narrativeText = '';
+			$rewardData    = array();
+
 			if (!empty($targetUser)) {
 				if (mt_rand(1, 100) <= 70) {
 					$dm = (int) floor(mt_rand(50, 90) * $h * $fleetFactor * $decay);
 					PremiumEconomy::credit($targetUser, 921, $dm, 'founddm', 0, "h=$h;n=$n");
-					$Message = $LNG['sys_expe_found_dm_' . mt_rand(1, 3) . '_' . mt_rand(1, 2)] . ' <span style="color:#db374b">(' . $LNG['tech'][921] . ': ' . pretty_number($dm) . ')</span>';
+					$eventType     = 'darkmatter';
+					$narrativeText = $LNG['sys_expe_found_dm_' . mt_rand(1, 3) . '_' . mt_rand(1, 2)];
+					$rewardData['darkmatter'] = $dm;
 				} else {
 					$am = (int) floor(mt_rand(5, 9) * $h * $fleetFactor * $decay);
 					PremiumEconomy::credit($targetUser, 922, $am, 'founddm', 0, "h=$h;n=$n");
-					$Message = $LNG['sys_expe_found_am_' . mt_rand(1, 3)] . ' <span style="color:#db374b">(' . $LNG['tech'][922] . ': ' . pretty_number($am) . ')</span>';
+					$eventType     = 'darkmatter';
+					$narrativeText = $LNG['sys_expe_found_am_' . mt_rand(1, 3)] ?? 'Se han obtenido partículas de antimateria.';
+					$rewardData['darkmatter'] = $am;
 				}
 				PremiumEconomy::dailyIncrement($ownerId, 'founddm');
 
@@ -85,13 +93,22 @@ class MissionCaseFoundDM extends MissionFunctions implements Mission
 					$USER = $targetUser;
 				}
 			} else {
-				$Message = $LNG['sys_expe_nothing_' . mt_rand(1, 9)];
+				$eventType     = 'nothing';
+				$narrativeText = $LNG['sys_expe_nothing_' . mt_rand(1, 9)];
 			}
 		} else {
-			$Message = $LNG['sys_expe_nothing_' . mt_rand(1, 9)];
+			$eventType     = 'nothing';
+			$narrativeText = $LNG['sys_expe_nothing_' . mt_rand(1, 9)];
 		}
 		$this->setState(FLEET_RETURN);
 		$this->SaveFleet();
+
+		$fleetCoords = array(
+			'galaxy' => $this->_fleet['fleet_end_galaxy'],
+			'system' => $this->_fleet['fleet_end_system']
+		);
+
+		$Message = MessageTemplateHelper::buildExpeditionCard($eventType, $narrativeText, $rewardData, $fleetCoords, $LNG);
 
 		PlayerUtil::sendMessage($this->_fleet['fleet_owner'], 0, $LNG['sys_mess_tower'], 15,
 			$LNG['sys_expe_report'], $Message, $this->_fleet['fleet_end_stay'], NULL, 1, $this->_fleet['fleet_universe']);
@@ -99,21 +116,41 @@ class MissionCaseFoundDM extends MissionFunctions implements Mission
 	
 	function ReturnEvent()
 	{
-		$LNG	= $this->getLanguage(NULL, $this->_fleet['fleet_owner']);
-		if($this->_fleet['fleet_resource_darkmatter'] > 0)
-		{
-			$Message	= sprintf($LNG['sys_expe_back_home_with_dm'],
-				$LNG['tech'][921],
-				pretty_number($this->_fleet['fleet_resource_darkmatter']),
-				$LNG['tech'][921]
-			);
+		$LNG = $this->getLanguage(NULL, $this->_fleet['fleet_owner']);
+		
+		$sql = 'SELECT name FROM %%PLANETS%% WHERE id = :planetId;';
+		$planetName = Database::get()->selectSingle($sql, array(
+			':planetId' => $this->_fleet['fleet_start_id'],
+		), 'name');
 
+		$origin = array(
+			'name'   => 'Investigación MO',
+			'galaxy' => $this->_fleet['fleet_end_galaxy'],
+			'system' => $this->_fleet['fleet_end_system'],
+			'planet' => $this->_fleet['fleet_end_planet']
+		);
+		$target = array(
+			'name'   => $planetName ?: 'Planeta',
+			'galaxy' => $this->_fleet['fleet_start_galaxy'],
+			'system' => $this->_fleet['fleet_start_system'],
+			'planet' => $this->_fleet['fleet_start_planet']
+		);
+		$resources = array(
+			921 => $this->_fleet['fleet_resource_darkmatter']
+		);
+
+		if ($this->_fleet['fleet_resource_darkmatter'] > 0) {
 			$this->UpdateFleet('fleet_array', '220,0;');
 		}
-		else
-		{
-			$Message	= $LNG['sys_expe_back_home_without_dm'];
-		}
+
+		$Message = MessageTemplateHelper::buildLogisticsCard(
+			'return',
+			$LNG['sys_mess_fleetback'],
+			$origin,
+			$target,
+			$resources,
+			$LNG
+		);
 
 		PlayerUtil::sendMessage($this->_fleet['fleet_owner'], 0, $LNG['sys_mess_tower'], 15, $LNG['sys_mess_fleetback'],
 			$Message, $this->_fleet['fleet_end_time'], NULL, 1, $this->_fleet['fleet_universe']);

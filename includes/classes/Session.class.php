@@ -208,6 +208,7 @@ class Session
 	    // sessions require an valid user.
 	    if(empty($this->data['userId'])) {
 	        $this->delete();
+	        return;
 	    }
 
         $userIpAddress = self::getClientIp();
@@ -252,12 +253,20 @@ class Session
 
 	public function delete()
 	{
+		$userId	= !empty($this->data['userId']) ? (int)$this->data['userId'] : 0;
 		$sql	= 'DELETE FROM %%SESSION%% WHERE sessionID = :sessionId;';
 		$db		= Database::get();
 
 		$db->delete($sql, array(
 			':sessionId'	=> session_id(),
 		));
+
+		if($userId > 0)
+		{
+			$db->update('UPDATE %%USERS%% SET onlinetime = 0 WHERE id = :userId;', array(
+				':userId' => $userId
+			));
+		}
 
 		@session_destroy();
 	}

@@ -156,10 +156,10 @@ class ShowOverviewPage extends AbstractGamePage
 
         $db = Database::get();
 
-        $sql	= 'SELECT COUNT(*) as count FROM %%USERS%% WHERE universe = :universe AND onlinetime > :onlineTime';
+        $sql	= 'SELECT COUNT(*) as count FROM %%USERS%% WHERE universe = :universe AND onlinetime > :onlineTime;';
 		$onlineData	= Database::get()->selectSingle($sql, array(
-			':universe'	=> Universe::current(),
-			':onlineTime'	=> TIMESTAMP - 30 * 60
+			':universe'	    => Universe::current(),
+			':onlineTime'	=> TIMESTAMP - 60
 		));
 		
 		$UsersOnline = $onlineData['count'];
@@ -238,7 +238,7 @@ class ShowOverviewPage extends AbstractGamePage
 		$sql = "SELECT id,username FROM %%USERS%% WHERE universe = :universe AND onlinetime >= :onlinetime AND authlevel > :authlevel;";
         $onlineAdmins = $db->select($sql, array(
             ':universe'     => Universe::current(),
-            ':onlinetime'   => TIMESTAMP-10*60,
+            ':onlinetime'   => TIMESTAMP - 60,
             ':authlevel'    => AUTH_USR
         ));
 
@@ -281,7 +281,7 @@ class ShowOverviewPage extends AbstractGamePage
 			':statType'	=> 1
 		));
 
-		if($statData['total_rank'] == 0) {
+		if(empty($statData) || empty($statData['total_rank'])) {
 			$rankInfo	= "-";
 		} else {
 			$rankInfo	= sprintf($LNG['ov_userrank_info'], pretty_number($statData['total_points']), $LNG['ov_place'],

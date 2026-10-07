@@ -100,7 +100,7 @@
                     <div id="box_planet_rename" class="content_box" style="height:auto;">
                         <div style="padding:10px; color:#CCC; line-height:20px;">
                             <label for="name">{$LNG.pla_new_name} </label>
-                            <input class="left" type="text" name="name" id="name" size="12" maxlength="7" autocomplete="off">
+                            <input class="left" type="text" name="name" id="name" size="20" maxlength="25" autocomplete="off">
                             <label onclick="GenerateName()" style="color:#999; margin-left:3px;">{$LNG.pla_gen}</label>
                             <input type="button" style="width:175px; margin-top:6px;" onclick="checkrename()" value="{$LNG.pla_send}">
                         </div>

@@ -22,11 +22,40 @@ class Cronjob
 		
 	}
 	
+	static function cleanStaleLocks()
+	{
+		$db = Database::get();
+		$lockedJobs = $db->select('SELECT cronjobID, `lock`, nextTime FROM %%CRONJOBS%% WHERE `lock` IS NOT NULL;');
+		foreach ($lockedJobs as $job) {
+			$lock = $job['lock'];
+			$isStale = false;
+			if (strpos($lock, '_') !== false) {
+				$parts = explode('_', $lock);
+				$lockTs = (int)$parts[0];
+				if ($lockTs > 0 && (TIMESTAMP - $lockTs) > 300) {
+					$isStale = true;
+				}
+			} else {
+				if ($job['nextTime'] <= TIMESTAMP || (TIMESTAMP - (int)$job['nextTime']) > 300) {
+					$isStale = true;
+				}
+			}
+
+			if ($isStale) {
+				$db->update('UPDATE %%CRONJOBS%% SET `lock` = NULL WHERE cronjobID = :id;', array(
+					':id' => $job['cronjobID']
+				));
+			}
+		}
+	}
+
 	static function execute($cronjobID)
 	{
-		$lockToken	= md5(TIMESTAMP);
+		$lockToken	= TIMESTAMP . '_' . substr(md5(uniqid()), 0, 16);
 
 		$db	= Database::get();
+
+		self::cleanStaleLocks();
 
 		$sql = 'SELECT class FROM %%CRONJOBS%% WHERE isActive = :isActive AND cronjobID = :cronjobId AND `lock` IS NULL;';
 
@@ -54,32 +83,47 @@ class Cronjob
 
 		/** @var $cronjobObj CronjobTask */
 		$cronjobObj			= new $cronjobClassName;
-		$cronjobObj->run();
+		$executionSuccess   = false;
 
-		self::reCalculateCronjobs($cronjobID);
-		$sql = 'UPDATE %%CRONJOBS%% SET `lock` = NULL WHERE cronjobID = :cronjobId;';
+		try {
+			$cronjobObj->run();
+			$executionSuccess = true;
+		} catch (Exception $e) {
+			error_log('Cronjob ' . $cronjobID . ' (' . $cronjobClassName . ') failed: ' . $e->getMessage());
+		} catch (Throwable $t) {
+			error_log('Cronjob ' . $cronjobID . ' (' . $cronjobClassName . ') error: ' . $t->getMessage());
+		} finally {
+			self::reCalculateCronjobs($cronjobID);
+			$sql = 'UPDATE %%CRONJOBS%% SET `lock` = NULL WHERE cronjobID = :cronjobId;';
 
-		$db->update($sql, array(
-			':cronjobId'	=> $cronjobID
-		));
+			$db->update($sql, array(
+				':cronjobId'	=> $cronjobID
+			));
+		}
 
-		$sql = 'INSERT INTO %%CRONJOBS_LOG%% SET `cronjobId` = :cronjobId,
-		`executionTime` = :executionTime, `lockToken` = :lockToken';
+		if ($executionSuccess) {
+			$sql = 'INSERT INTO %%CRONJOBS_LOG%% SET `cronjobId` = :cronjobId,
+			`executionTime` = :executionTime, `lockToken` = :lockToken';
 
-		$db->insert($sql, array(
-			':cronjobId'		=> $cronjobID,
-			':executionTime'	=> Database::formatDate(TIMESTAMP),
-			':lockToken'		=> $lockToken
-		));
+			$db->insert($sql, array(
+				':cronjobId'		=> $cronjobID,
+				':executionTime'	=> Database::formatDate(TIMESTAMP),
+				':lockToken'		=> $lockToken
+			));
+		}
 	}
 	
 	static function getNeedTodoExecutedJobs()
 	{
+		$db	= Database::get();
+
+		self::cleanStaleLocks();
+
 		$sql			= 'SELECT cronjobID
 		FROM %%CRONJOBS%%
 		WHERE isActive = :isActive AND nextTime < :time AND `lock` IS NULL;';
 
-		$cronjobResult	= Database::get()->select($sql, array(
+		$cronjobResult	= $db->select($sql, array(
 			':isActive'	=> 1,
 			':time'		=> TIMESTAMP
  		));

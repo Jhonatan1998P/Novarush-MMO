@@ -79,7 +79,7 @@ class SetHostileSectorBot extends HostileSector
 		$this->botAcademy      = array();
 
 		$this->maxBattlePoints = 2500;
-		$this->botDebris       = 1;
+		$this->botDebris       = 2; // Duplicado (1% -> 2%)
 
 		$this->upgradeChance   = 10;
 		$this->upgradesList    = array(2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010);
@@ -115,7 +115,7 @@ class SetHostileSectorBot extends HostileSector
 		$this->botAcademy      = array();
 
 		$this->maxBattlePoints = 15000;
-		$this->botDebris       = 2;
+		$this->botDebris       = 4; // Duplicado (2% -> 4%)
 
 		$this->upgradeChance   = 10;
 		$this->upgradesList    = array(2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010);
@@ -151,7 +151,7 @@ class SetHostileSectorBot extends HostileSector
 		$this->botAcademy      = array();
 
 		$this->maxBattlePoints = 25000;
-		$this->botDebris       = 3;
+		$this->botDebris       = 6; // Duplicado (3% -> 6%)
 
 		$this->upgradeChance   = 10;
 		$this->upgradesList    = array(2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010);

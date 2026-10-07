@@ -595,13 +595,14 @@ class ResourceUpdate
 						if(!isset($costResources[902])) { $costResources[902] = 0; }
 						if(!isset($costResources[903])) { $costResources[903] = 0; }
                         $old_code*/
-                        //$new_code
-						$Message     = sprintf($LNG['sys_notenough_money'], $this->PLANET['name'], $this->PLANET['id'], $this->PLANET['galaxy'], $this->PLANET['system'], $this->PLANET['planet'], $LNG['tech'][$Element]);
-                        //$new_code
+						$Message = MessageTemplateHelper::buildQueueCancelCard('building', $Element, $this->PLANET, $LNG);
 					}
 
-					PlayerUtil::sendMessage($this->USER['id'], 0,$LNG['sys_buildlist'], 99,
-						$LNG['sys_buildlist_fail'], $Message, $this->TIME);
+					$recipientId = !empty($this->USER['id']) ? (int)$this->USER['id'] : (!empty($this->PLANET['id_owner']) ? (int)$this->PLANET['id_owner'] : 0);
+					if ($recipientId > 0) {
+						PlayerUtil::sendMessage($recipientId, 0, $LNG['sys_buildlist'], 99,
+							$LNG['sys_buildlist_fail'], $Message, $this->TIME);
+					}
 				}
 
 				array_shift($CurrentQueue);
@@ -740,10 +741,8 @@ class ResourceUpdate
 					if(!isset($costResources[902])) { $costResources[902] = 0; }
 					if(!isset($costResources[903])) { $costResources[903] = 0; }
                     $old_code*/
-                    //$new_code
-					$Message     = sprintf($LNG['sys_notenough_money'], $PLANET['name'], $PLANET['id'], $PLANET['galaxy'], $PLANET['system'], $PLANET['planet'], $LNG['tech'][$Element]);
-					PlayerUtil::sendMessage($this->USER['id'], 0,$LNG['sys_techlist'], 99, $LNG['sys_buildlist_fail'], $Message, $this->TIME);
-                    //$new_code
+					$Message = MessageTemplateHelper::buildQueueCancelCard('research', $Element, $PLANET, $LNG);
+					PlayerUtil::sendMessage($this->USER['id'], 0, $LNG['sys_techlist'], 99, $LNG['sys_buildlist_fail'], $Message, $this->TIME);
 				}
 
 				array_shift($CurrentQueue);

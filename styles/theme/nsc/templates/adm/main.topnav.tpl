@@ -27,6 +27,16 @@
                         <a class="nav-link" href="admin.php?page=cronjob">{$LNG.lm_cronjob}</a>
                     </li>
                     {/if}
+                    {if allowedTo('ShowEventsPage.class')}
+                    <li class="nav-item">
+                        <a class="nav-link" href="admin.php?page=events">⚔️ {$LNG.lm_events|default:'Eventos de Guerra'}</a>
+                    </li>
+                    {/if}
+                    {if allowedTo('ShowBotsPage.class')}
+                    <li class="nav-item">
+                        <a class="nav-link" href="admin.php?page=bots">🤖 Bots IA</a>
+                    </li>
+                    {/if}
                     {if allowedTo('ShowDumpPage.class')}
                     <li class="nav-item">
                         <a class="nav-link" href="admin.php?page=dump">{$LNG.lm_dump}</a>

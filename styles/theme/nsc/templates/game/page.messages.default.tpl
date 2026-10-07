@@ -1,6 +1,6 @@
 {block name="title" prepend}{$LNG.lm_messages}{/block}
 {block name="content"}
-<link rel="stylesheet" type="text/css" href="{$dpath}css/messages.css">
+<link rel="stylesheet" type="text/css" href="{$dpath}css/messages.css?v={$smarty.now}">
 <div id="page">
 	<div id="content">
 <div id="ally_content" class="conteiner">

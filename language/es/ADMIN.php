@@ -120,6 +120,7 @@ $LNG ['lm_information'] = 'Información';
 $LNG ['lm_configuni'] = 'Configuración';
 $LNG ['lm_module'] = 'Módulos';
 $LNG ['lm_cronjob'] = 'Programador de tareas';
+$LNG ['lm_events'] = 'Eventos de Guerra';
 $LNG ['lm_dump'] = 'Hacer una copia de seguridad de la base de datos';
 $LNG ['lm_universe'] = 'Universos';
 $LNG ['lm_rights'] = 'Derechos';

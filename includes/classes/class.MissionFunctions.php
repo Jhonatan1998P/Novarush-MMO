@@ -94,12 +94,18 @@ class MissionFunctions
 
 		foreach ($fleetData as $shipId => $shipAmount)
 		{
+			// Las flotas de contraataque del boss/NPC de evento (owner 999) no se reincorporan a la fortaleza
+			if ($this->_fleet['fleet_owner'] == 999 && $shipId == 216) {
+				continue;
+			}
 			$updateQuery[]	= "p.`".$resource[$shipId]."` = p.`".$resource[$shipId]."` + :".$resource[$shipId];
 			$param[':'.$resource[$shipId]]	= $shipAmount;
 		}
 
+		$fleetSetSql = !empty($updateQuery) ? implode(', ', $updateQuery).',' : '';
+
 		$sql	= 'UPDATE %%PLANETS%% as p, %%USERS%% as u SET
-		'.implode(', ', $updateQuery).',
+		'.$fleetSetSql.'
 		p.`metal` = p.`metal` + :metal,
 		p.`crystal` = p.`crystal` + :crystal,
 		p.`deuterium` = p.`deuterium` + :deuterium,
@@ -107,6 +113,12 @@ class MissionFunctions
 		WHERE p.`id` = :planetId AND u.id = p.id_owner;';
 
 		Database::get()->update($sql, $param);
+
+		if ($this->_fleet['fleet_owner'] == 999) {
+			Database::get()->update('UPDATE %%PLANETS%% SET `lune_noir` = 0 WHERE id = :planetId;', array(
+				':planetId' => ($onStart == true ? $this->_fleet['fleet_start_id'] : $this->_fleet['fleet_end_id'])
+			));
+		}
 
 		$this->KillFleet();
 	}
@@ -157,7 +169,7 @@ class MissionFunctions
 		}
 		
 		$LNG		= new Language($language);
-		$LNG->includeData(array('L18N', 'FLEET', 'TECH', 'CUSTOM'));
+		$LNG->includeData(array('L18N', 'FLEET', 'TECH', 'CUSTOM', 'INGAME'));
 		return $LNG;
 	}
 }

@@ -173,7 +173,23 @@ $LNG ['sec_conv'] = 'por segundo';
 // Bono de información
 $LNG ['inb_percent'] = 'Porcentaje';
 $LNG ['inb_units'] = 'Unidades';
-$LNG ['inb_name'] = 'Nombre';
+$LNG ['inb_name'] = 'Bonificación';
+$LNG ['inb_title'] = 'Panel de Bonificaciones del Imperio';
+$LNG ['inb_all'] = 'Todas';
+$LNG ['inb_cat_combat'] = 'Combate Militar';
+$LNG ['inb_cat_economy'] = 'Economía y Minería';
+$LNG ['inb_cat_speed'] = 'Velocidades y Tiempos';
+$LNG ['inb_cat_expansion'] = 'Expansión y Flotas';
+$LNG ['inb_cat_efficiency'] = 'Eficiencia y Costos';
+$LNG ['inb_hide_zero'] = 'Ocultar bonos en 0%';
+$LNG ['inb_effective_value'] = 'Valor Efectivo';
+$LNG ['inb_breakdown'] = 'Desglose';
+$LNG ['inb_sources_count'] = 'fuente(s) activa(s)';
+$LNG ['inb_no_active'] = 'Sin bonificaciones activas en esta categoría.';
+$LNG ['inb_softcap_note'] = 'Tope Suave (Soft Cap) activo';
+$LNG ['inb_permanent'] = 'Permanente';
+$LNG ['inb_temporary'] = 'Temporal';
+$LNG ['inb_expires_in'] = 'Expira en';
 // Crear luna
 $LNG ['crm_value'] = 'Para crear la luna se requiere:';
 $LNG ['crm_war'] = '¡La luna tiene un diámetro aleatorio!';
@@ -187,20 +203,54 @@ $LNG ['cont_msg_limit'] = 'No puede abrir tantos contenedores a la vez.';
 $LNG ['cont_not_cont_user'] = '¡No hay suficientes contenedores!';
 $LNG ['cont_open'] = 'Ha abierto:';
 //Información
-$LNG ['in_attack_pt'] = 'Ataque estándar';
-$LNG ['in_attack_laser'] = 'Ataque láser';
-$LNG ['in_attack_ionic'] = 'Ataque iónico';
-$LNG ['in_attack_buster'] = 'Ataque de plasma';
-$LNG ['in_attack_graviton'] = 'Ataque por gravedad';
-$LNG ['in_shield_none'] = 'No hay escudos';
-$LNG ['in_shield_light'] = 'Escudos de luz';
-$LNG ['in_shield_medium'] = 'Escudos medianos';
-$LNG ['in_shield_heavy'] = 'Escudos pesados';
-$LNG ['in_armor_light'] = 'Armadura ligera';
-$LNG ['in_armor_medium'] = 'Armadura media';
-$LNG ['in_armor_heavy'] = 'Armadura pesada';
+$LNG ['in_attack_total'] = 'Potencia de Ataque Total';
+$LNG ['in_attack_pt'] = 'Armamento Balístico Estándar';
+$LNG ['in_attack_pt_desc'] = 'Fuego cinético convencional equilibrado';
+$LNG ['in_attack_laser'] = 'Armamento Láser';
+$LNG ['in_attack_laser_desc'] = 'Alta eficacia perforando blindajes ligeros (Cazas y transportes)';
+$LNG ['in_attack_ionic'] = 'Armamento Iónico';
+$LNG ['in_attack_ionic_desc'] = 'Especializado en desestabilizar escudos y blindajes medios';
+$LNG ['in_attack_buster'] = 'Armamento de Plasma';
+$LNG ['in_attack_buster_desc'] = 'Gran penetración térmica diseñada para fundir blindajes pesados';
+$LNG ['in_attack_graviton'] = 'Armamento Gravitatorio';
+$LNG ['in_attack_graviton_desc'] = 'Ondas de distorsión hiperdensas letales contra naves capitales';
+$LNG ['in_structural_integrity'] = 'Estructura';
+$LNG ['in_structural_integrity_desc'] = 'Coste total de Metal y Cristal invertido';
+$LNG ['in_hull_points'] = 'Casco';
+$LNG ['in_hull_points_desc'] = 'Puntos de impacto directos (10% de Estructura)';
+$LNG ['in_armor_class'] = 'Clase de Blindaje';
+$LNG ['in_armor_light'] = 'Blindaje Ligero';
+$LNG ['in_armor_medium'] = 'Blindaje Medio';
+$LNG ['in_armor_heavy'] = 'Blindaje Pesado';
+$LNG ['in_shield_power'] = 'Potencia de Escudo';
+$LNG ['in_shield_power_desc'] = 'Absorbe daño directo por ronda de combate';
+$LNG ['in_shield_class'] = 'Clase de Escudo';
+$LNG ['in_shield_none'] = 'Sin Escudo';
+$LNG ['in_shield_light'] = 'Escudo Deflector';
+$LNG ['in_shield_medium'] = 'Escudo de Fase';
+$LNG ['in_shield_heavy'] = 'Escudo Cinético';
+$LNG ['in_base_speed'] = 'Velocidad';
+$LNG ['in_base_speed_desc'] = 'Velocidad base espacial';
+$LNG ['in_engine_type'] = 'Propulsión';
+$LNG ['in_fuel_consumption'] = 'Consumo';
+$LNG ['in_fuel_consumption_desc'] = 'Deuterio consumido por viaje';
+$LNG ['in_cargo_capacity'] = 'Capacidad';
+$LNG ['in_cargo_capacity_desc'] = 'Capacidad de carga en bodegas';
+$LNG ['in_rf_title'] = 'Fuego Rápido';
+$LNG ['in_rf_again'] = 'Fuego Rápido Contra';
+$LNG ['in_rf_again_desc'] = 'Disparos múltiples consecutivos en la misma ronda';
+$LNG ['in_rf_from'] = 'Fuego Rápido Desde';
+$LNG ['in_rf_from_desc'] = 'Unidades enemigas con ventaja de disparos continuos';
+$LNG ['in_rf_shoots'] = 'disp.';
+$LNG ['in_rf_prob'] = 'prob.';
+$LNG ['in_cost_title'] = 'Costes de Fabricación';
+$LNG ['in_requirements_title'] = 'Requisitos Tecnológicos Previos';
+$LNG ['in_req_met'] = 'Requisito Cumplido';
+$LNG ['in_req_unmet'] = 'Requisito Pendiente';
+$LNG ['in_defense_recovery_title'] = 'Reconstrucción Automática';
+$LNG ['in_defense_recovery_desc'] = '70% de probabilidades de reparación automática gratuita tras la batalla';
 $LNG ['in_number'] = 'Cantidad';
-$LNG ['in_recovery'] = 'La defensa se está restaurando después del combate.';
+$LNG ['in_recovery'] = 'La defensa se reconstruye automáticamente un 70% tras el combate.';
 //Sistema
 $LNG ['sys_expe_found_ars_1'] = 'Encontramos el campo de batalla y pudimos crear una mejora';
 $LNG ['sys_expe_found_ars_2'] = 'El nuevo comandante ha permitido el contacto con la nueva raza, aunque viola el estatuto. Resultó ser bastante amigable y pudimos establecer relaciones comerciales. Habiendo completado con éxito el intercambio, la expedición recibió una actualización ';
@@ -322,23 +372,109 @@ Probabilidad base de encontrar materia oscura 30% <br>
 Puntos de flota mínimos 25.000 <br>
 El número máximo de puntos de flota no está limitado <br>
 Porcentaje de recogida de escombros de la flota: 3% <br> ";
-$LNG ['batl_log_mesage'] = '<div class = "raportMessage">
-<tabla>
-<tr>
-<td colspan = "2"> <a href="CombatReport.php?raport=%s" onclick="starttraining20()" target="_blank"> <span% s>% s% s (% s) </ intervalo> </a> </td>
-</tr>
-<tr>
-<td>% s </td> <td> <span% s>% s:% s </span> & nbsp; <span% s>% s:% s </span> </td>
-</tr>
-<tr>
-<td>% s </td> <td> <span>% s: & nbsp; <span style = "color: # a47d7a;">% s </span> & nbsp; </span> <span>% s: & nbsp; <span style = "color: # 5ca6aa;">% s </span> & nbsp; </span> <span>% s: & nbsp; <span style = "color: # 339966;">% s </ intervalo> </span> </td>
-</tr>
-<tr>
-<td>% s </td> <td> <span>% s: & nbsp; <span style = "color: # a47d7a;">% s </font> & nbsp; </span> <span>% s: & nbsp; <span style = "color: # 5ca6aa;">% s </span> </span> </td>
-</tr>
-</table>
-</div> ';
-$LNG ['host_mission_mesag'] = 'Sector de la nebulosa';
-$LNG ['fl_enemy_msg'] ['main'] = 'La expedición tropezó con una unidad enemiga% s en el sector de la Nebulosa.';
-$LNG ['fl_enemy_msg'] ['tm'] = 'Se encontró un contenedor con% s Materia Oscura.';
-$LNG ['fl_enemy_msg'] ['up'] = 'Era posible crear una Mejora para% s en la cantidad de% s piezas';
+$LNG['batl_log_mesage'] = '<div class="raportMessage" style="background: rgba(9, 29, 46, 0.7); border: 1px solid #1a3c5a; border-radius: 6px; padding: 10px 14px; margin: 4px 0; font-family: inherit; font-size: 12px; line-height: 1.6;">
+	<table style="width: 100%%; border-collapse: collapse; color: #ccc;">
+		<tr>
+			<td colspan="2" style="border-bottom: 1px solid rgba(255,255,255,0.12); padding-bottom: 8px;">
+				<a href="game.php?page=raport&raport=%s" target="_blank" style="text-decoration: none; display: flex; justify-content: space-between; align-items: center;">
+					<span %s style="font-weight: bold; font-size: 13px;">%s: %s (%s)</span>
+					<span style="background: #0070ba; color: #ffffff; padding: 3px 10px; border-radius: 4px; font-weight: bold; font-size: 11px; border: 1px solid #0090ea; text-decoration: none;">[ ⚔ Ver Informe Detallado ]</span>
+				</a>
+			</td>
+		</tr>
+		<tr>
+			<td style="width: 130px; color: #8fa3b0; padding: 5px 0; font-weight: bold;">%s:</td>
+			<td style="padding: 5px 0;">
+				<span %s style="font-weight: bold;">%s: %s</span> &nbsp;|&nbsp; <span %s style="font-weight: bold;">%s: %s</span>
+			</td>
+		</tr>
+		<tr>
+			<td style="color: #8fa3b0; padding: 4px 0; font-weight: bold;">%s:</td>
+			<td style="padding: 4px 0;">
+				<span>%s: <b style="color: #d4a373;">%s</b></span>&nbsp;&nbsp;
+				<span>%s: <b style="color: #5ca6aa;">%s</b></span>&nbsp;&nbsp;
+				<span>%s: <b style="color: #48bb78;">%s</b></span>
+			</td>
+		</tr>
+		<tr>
+			<td style="color: #8fa3b0; padding: 4px 0; font-weight: bold;">%s:</td>
+			<td style="padding: 4px 0;">
+				<span>%s: <b style="color: #d4a373;">%s</b></span>&nbsp;&nbsp;
+				<span>%s: <b style="color: #5ca6aa;">%s</b></span>
+			</td>
+		</tr>
+	</table>
+</div>';
+$LNG['host_mission_mesag'] = 'Sector Nebulosa';
+$LNG['fl_enemy_msg']['main'] = 'Nuestra flota de expedición ha interceptado una escuadra hostil de <b style="color:#e74c3c;">%s</b> en el Sector Nebulosa y ha entablado combate.';
+$LNG['fl_enemy_msg']['tm'] = 'Se aseguró un contenedor especial con <b style="color:#2ecc71;">%s de Materia Oscura</b>.';
+$LNG['fl_enemy_msg']['up'] = 'Se recuperó del pecio una mejora para <b style="color:#f39c12;">%s</b> (Cantidad: %s).';
+
+// Descripciones detalladas para tooltips de bonificaciones
+$LNG['bonus_desc'] = array(
+    'AttackA'             => 'Aumenta el poder de fuego de tus naves cuando realizan misiones ofensivas.',
+    'DefensiveA'          => 'Aumenta la resistencia del casco y blindaje de tus naves en misiones de ataque.',
+    'ShieldA'             => 'Aumenta la absorción de los escudos deflectores de tus naves en misiones de ataque.',
+    'AttackD'             => 'Aumenta la potencia de fuego de tu flota y defensas cuando defienden tu planeta o luna.',
+    'DefensiveD'          => 'Aumenta el blindaje e integridad de tu flota y defensas en misiones defensivas.',
+    'ShieldD'             => 'Aumenta la potencia de escudos de tu flota y defensas estacionadas en tu planeta o luna.',
+    'Attack'              => 'Multiplica el poder de ataque global de todas las naves en cualquier tipo de combate.',
+    'AttackSlaser'        => 'Incrementa el daño causado por naves y defensas armadas con tecnología láser.',
+    'AttackSion'          => 'Incrementa el daño y desestabilización causado por armamento iónico.',
+    'AttackSplasma'       => 'Incrementa la potencia destructiva de torretas y naves con cañones de plasma.',
+    'AttackSgravity'      => 'Aumenta el impacto masivo de cañones de gravitón y naves insignia estelares.',
+    'Defensive'           => 'Multiplica la resistencia del blindaje y puntos de estructura de todas las naves y defensas.',
+    'DefensiveSlight'     => 'Mejora la durabilidad del blindaje de naves ligeras (cazadores y sondas).',
+    'DefensiveSmedium'    => 'Mejora la durabilidad del blindaje de cruceros y naves de guerra medianas.',
+    'DefensiveSheavy'     => 'Mejora la integridad estructural de acorazados, destructores y estrellas de batalla.',
+    'Shield'              => 'Multiplica la capacidad de absorción y regeneración de escudos de energía de toda la flota.',
+    'ShieldSlight'        => 'Aumenta los escudos protectores de naves de porte ligero.',
+    'ShieldSmedium'       => 'Aumenta los escudos protectores de naves de combate intermedias.',
+    'ShieldSheavy'        => 'Aumenta los escudos deflectores pesados de naves capitales y cúpulas planetarias.',
+    'Sbuild'              => 'Reduce el tiempo requerido para construir y ampliar edificios planetarios y lunares.',
+    'BuildSlots'          => 'Permite construir múltiples edificios a la vez en el mismo planeta sin esperar a que termine el anterior.',
+    'Stech'               => 'Reduce el tiempo requerido para completar investigaciones tecnológicas en el laboratorio.',
+    'ResearchSlots'       => 'Permite poner en marcha múltiples investigaciones tecnológicas simultáneas.',
+    'ResearchSlotPlanet'  => 'Conecta laboratorios adicionales de tus colonias para acelerar investigaciones masivas.',
+    'Sfleet'              => 'Acelera la velocidad de fabricación de naves espaciales en el hangar del astillero.',
+    'Sdefense'            => 'Acelera la velocidad de montaje de torretas y sistemas defensivos planetarios.',
+    'Smissile'            => 'Acelera la fabricación y recarga de misiles interplanetarios y de intercepción en el silo.',
+    'Resource'            => 'Multiplica la extracción base de Metal, Cristal y Deuterio en todas tus colonias.',
+    'Pmetal'              => 'Aumenta la producción específica de las Minas de Metal.',
+    'Pcrystal'            => 'Aumenta la producción específica de las Minas de Cristal.',
+    'Pdeuterium'          => 'Aumenta la extracción específica de los Sintetizadores de Deuterio.',
+    'Senergy'             => 'Aumenta la generación de energía en plantas solares, reactores de fusión y satélites.',
+    'ResourceStorage'     => 'Expande la capacidad máxima de almacenamiento de los depósitos de recursos.',
+    'ShipStorage'         => 'Aumenta la capacidad de carga de recursos en las bodegas de tus naves de transporte y flota.',
+    'FlyTime'             => 'Incrementa la velocidad de vuelo de todas las flotas desplazándose por el universo.',
+    'FlyTimeCom'          => 'Aumenta la velocidad de desplazamiento de naves propulsadas por Motor de Combustión.',
+    'FlyTimeImp'          => 'Aumenta la velocidad de desplazamiento de naves propulsadas por Motor de Impulso.',
+    'FlyTimeHyp'          => 'Aumenta la velocidad de desplazamiento de naves propulsadas por Motor Hiperespacial.',
+    'FleetSlots'          => 'Aumenta el número máximo de flotas que puedes enviar de viaje de forma simultánea.',
+    'Planets'             => 'Aumenta la cantidad máxima de colonias que tu imperio puede colonizar.',
+    'SpyPower'            => 'Aumenta el nivel efectivo de espionaje para recopilar datos de flotas y defensas rivales.',
+    'Expedition'          => 'Permite enviar más flotas simultáneamente a explorar la posición 16 en misiones de expedición.',
+    'GateCoolTime'        => 'Reduce el tiempo de recarga obligatorio entre saltos de flota en la Puerta Cuántica lunar.',
+    'MoreFound'           => 'Incrementa la probabilidad de obtener eventos favorables y botines valiosos en expediciones.',
+    'CostRbuild'          => 'Reduce el costo total de recursos para construir y ampliar edificios.',
+    'CostRfleet'          => 'Reduce el costo total de recursos para fabricar naves de combate y transporte.',
+    'CostRtech'           => 'Reduce el costo total de recursos para investigar nuevas tecnologías.',
+    'CostRdefense'        => 'Reduce el costo total de recursos para construir estructuras defensivas.',
+    'CostRmissile'        => 'Reduce el costo total de recursos para fabricar misiles en el silo.',
+    'DoubleAttack'        => 'Probabilidad de que una nave aseste un impacto crítico con el doble de potencia en combate.',
+    'DoubleShield'        => 'Probabilidad de que los escudos de una nave absorban el doble de daño antes de quebrarse.',
+    'DoubleDefensive'     => 'Probabilidad de que el blindaje resista el doble de daño ante fuego enemigo.',
+    'DoubleAttackBonus'   => 'Aumenta el daño destructivo adicional cuando se activa un impacto crítico.',
+    'DoubleShieldBonus'   => 'Aumenta la absorción energética extra cuando se sobrecargan los escudos.',
+    'DoubleDefensiveBonus'=> 'Aumenta la resistencia adicional cuando se activa la armadura reforzada.',
+    'Debris'              => 'Aumenta el porcentaje de recursos que van al campo de escombros tras la destrucción de naves.',
+    'DefRecovery'         => 'Porcentaje de defensas destruidas que se reparan automáticamente al finalizar la batalla.',
+    'Focusing'            => 'Incrementa la probabilidad de activar fuego rápido contra naves enemigas.',
+    'AntiFocusing'        => 'Reduce la probabilidad de que las naves enemigas encadenen fuego rápido contra tu flota.',
+    'AccurateShots'       => 'Incrementa el límite máximo de bajas enemigas que tus naves pueden provocar por ronda.',
+    'ChainReaction'       => 'Probabilidad de que la destrucción de una nave enemiga desencadene una explosión en cadena.',
+    'ExpBoost'            => 'Aumenta el radio de naves afectadas por una explosión en cadena.',
+    'FuelConsum'          => 'Reduce el consumo de deuterio necesario para mover tus flotas por el espacio.',
+    'ShieldDome'          => 'Permite construir cúpulas de escudo adicionales en el planeta.',
+    'OrbitalBases'        => 'Permite construir estaciones orbitales adicionales para defensa y soporte.',
+);

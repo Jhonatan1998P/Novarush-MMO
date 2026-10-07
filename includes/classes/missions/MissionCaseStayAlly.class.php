@@ -42,7 +42,30 @@ class MissionCaseStayAlly extends MissionFunctions implements Mission
 			':planetId'	=> $this->_fleet['fleet_start_id'],
 		), 'name');
 
-		$Message	= sprintf($LNG['sys_tran_mess_back'], $planetName, GetStartAddressLink($this->_fleet, ''));
+		$origin = array(
+			'name'        => 'Órbita Aliada',
+			'galaxy'      => $this->_fleet['fleet_end_galaxy'],
+			'system'      => $this->_fleet['fleet_end_system'],
+			'planet'      => $this->_fleet['fleet_end_planet'],
+			'planet_type' => $this->_fleet['fleet_end_type']
+		);
+		$target = array(
+			'name'        => $planetName ?: 'Planeta',
+			'galaxy'      => $this->_fleet['fleet_start_galaxy'],
+			'system'      => $this->_fleet['fleet_start_system'],
+			'planet'      => $this->_fleet['fleet_start_planet'],
+			'planet_type' => $this->_fleet['fleet_start_type']
+		);
+		$resources = array();
+
+		$Message = MessageTemplateHelper::buildLogisticsCard(
+			'return',
+			$LNG['sys_mess_fleetback'],
+			$origin,
+			$target,
+			$resources,
+			$LNG
+		);
 
 		PlayerUtil::sendMessage($this->_fleet['fleet_owner'], 0, $LNG['sys_mess_tower'], 4, $LNG['sys_mess_fleetback'],
 			$Message, $this->_fleet['fleet_end_time'], NULL, 1, $this->_fleet['fleet_universe']);

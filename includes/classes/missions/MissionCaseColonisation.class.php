@@ -68,9 +68,15 @@ class MissionCaseColonisation extends MissionFunctions implements Mission
 
 				$maxPlanetCount		= PlayerUtil::maxPlanetCount($senderUser);
 
+				$coords = array(
+					'galaxy' => $this->_fleet['fleet_end_galaxy'],
+					'system' => $this->_fleet['fleet_end_system'],
+					'planet' => $this->_fleet['fleet_end_planet']
+				);
+
 				if($currentPlanetCount >= $maxPlanetCount)
 				{
-					$Message = sprintf($LNG['sys_colo_maxcolo'], GetTargetAddressLink($this->_fleet, ''), $maxPlanetCount);
+					$Message = MessageTemplateHelper::buildColonizationCard('max_colonies', $coords, $LNG['fcp_colony'], $LNG);
 				}
 				else
 				{
@@ -80,13 +86,13 @@ class MissionCaseColonisation extends MissionFunctions implements Mission
 
 					if($NewOwnerPlanet === false)
 					{
-						$Message = sprintf($LNG['sys_colo_badpos'], GetTargetAddressLink($this->_fleet, ''));
+						$Message = MessageTemplateHelper::buildColonizationCard('occupied', $coords, $LNG['fcp_colony'], $LNG);
 						$this->setState(FLEET_RETURN);
 					}
 					else
 					{
 						$this->_fleet['fleet_end_id']	= $NewOwnerPlanet;
-						$Message = sprintf($LNG['sys_colo_allisok'], GetTargetAddressLink($this->_fleet, ''));
+						$Message = MessageTemplateHelper::buildColonizationCard('success', $coords, $LNG['fcp_colony'], $LNG);
 						$this->StoreGoodsToPlanet();
 						if ($this->_fleet['fleet_amount'] == 1) {
 							$this->KillFleet();

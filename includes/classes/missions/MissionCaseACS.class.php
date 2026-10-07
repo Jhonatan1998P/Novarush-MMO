@@ -43,16 +43,33 @@ class MissionCaseACS extends MissionFunctions implements Mission
 			':planetId'	=> $this->_fleet['fleet_start_id'],
 		), 'name');
 
-		$Message 	= sprintf(
-			$LNG['sys_fleet_won'],
-			$planetName,
-			GetTargetAddressLink($this->_fleet, ''),
-			pretty_number($this->_fleet['fleet_resource_metal']),
-			$LNG['tech'][901],
-			pretty_number($this->_fleet['fleet_resource_crystal']),
-			$LNG['tech'][902],
-			pretty_number($this->_fleet['fleet_resource_deuterium']),
-			$LNG['tech'][903]
+		$origin = array(
+			'name'        => 'Ataque SAC',
+			'galaxy'      => $this->_fleet['fleet_end_galaxy'],
+			'system'      => $this->_fleet['fleet_end_system'],
+			'planet'      => $this->_fleet['fleet_end_planet'],
+			'planet_type' => $this->_fleet['fleet_end_type']
+		);
+		$target = array(
+			'name'        => $planetName ?: 'Planeta',
+			'galaxy'      => $this->_fleet['fleet_start_galaxy'],
+			'system'      => $this->_fleet['fleet_start_system'],
+			'planet'      => $this->_fleet['fleet_start_planet'],
+			'planet_type' => $this->_fleet['fleet_start_type']
+		);
+		$resources = array(
+			901 => $this->_fleet['fleet_resource_metal'],
+			902 => $this->_fleet['fleet_resource_crystal'],
+			903 => $this->_fleet['fleet_resource_deuterium']
+		);
+
+		$Message = MessageTemplateHelper::buildLogisticsCard(
+			'return',
+			$LNG['sys_mess_fleetback'],
+			$origin,
+			$target,
+			$resources,
+			$LNG
 		);
 
 		PlayerUtil::sendMessage($this->_fleet['fleet_owner'], 0, $LNG['sys_mess_tower'], 4, $LNG['sys_mess_fleetback'],

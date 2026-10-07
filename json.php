@@ -113,5 +113,13 @@ if($USER['setting_msg'] != 0)
 
 $AJAX['msg']		= $USER['messages'];
 
+$sql = "SELECT COUNT(*) as count FROM %%USERS%% WHERE universe = :universe AND onlinetime > :onlineTime;";
+$onlineData = Database::get()->selectSingle($sql, array(
+	':universe'   => Universe::current(),
+	':onlineTime' => TIMESTAMP - 60
+));
+
+$AJAX['usersOnline'] = (int)$onlineData['count'];
+
 echo json_encode($AJAX);
 ?>

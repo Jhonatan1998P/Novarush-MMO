@@ -45,9 +45,9 @@ class GalaxyRows
 		global $USER;
 
         $sql	= 'SELECT SQL_BIG_RESULT DISTINCT
-		p.galaxy, p.system, p.planet, p.id, p.id_owner, p.name, p.image, p.last_update, p.diameter, p.temp_min, p.destruyed, p.der_metal, p.der_crystal, p.id_luna, 
+		p.galaxy, p.system, p.planet, p.id, p.id_owner, p.name, p.image, p.last_update, p.last_fleet_out, p.diameter, p.temp_min, p.destruyed, p.der_metal, p.der_crystal, p.id_luna, 
 		u.id as userid, u.ally_id, u.username, u.onlinetime, u.urlaubs_modus, u.banaday, 
-		m.id as m_id, m.diameter as m_diameter, m.name as m_name, m.temp_min as m_temp_min, m.last_update as m_last_update,
+		m.id as m_id, m.diameter as m_diameter, m.name as m_name, m.temp_min as m_temp_min, m.last_update as m_last_update, m.last_fleet_out as m_last_fleet_out,
 		s.total_points, s.total_rank, 
 		a.id as allyid, a.ally_tag, a.ally_web, a.ally_members, a.ally_name, 
 		allys.total_rank as ally_rank,
@@ -108,7 +108,8 @@ class GalaxyRows
 	{
 		global $LNG;
 		
-		$lastActivity	= floor((TIMESTAMP - max($this->galaxyRow['last_update'], $this->galaxyRow['m_last_update'])) / 60);
+		$activityTime	= max((int)($this->galaxyRow['last_fleet_out'] ?? 0), (int)($this->galaxyRow['m_last_fleet_out'] ?? 0));
+		$lastActivity	= ($activityTime > 0) ? floor((TIMESTAMP - $activityTime) / 60) : 999999;
 		
 		if ($lastActivity < 15) {
 			$this->galaxyData[$this->galaxyRow['planet']]['lastActivity']	= $LNG['gl_activity'];

@@ -58,6 +58,9 @@ class ShowFleetTablePage extends AbstractGamePage
 		return array(
 			'name' 			=> $acsName,
 			'id' 			=> $acsID,
+			'galaxy'		=> (int) ($fleetData['fleet_end_galaxy'] ?? 0),
+			'system'		=> (int) ($fleetData['fleet_end_system'] ?? 0),
+			'planet'		=> (int) ($fleetData['fleet_end_planet'] ?? 0),
 		);
 	}
 	
@@ -71,6 +74,12 @@ class ShowFleetTablePage extends AbstractGamePage
             ':acsID'    => $fleetData['fleet_group']
         ));
 
+		if (!empty($acsResult)) {
+			$acsResult['galaxy'] = (int) ($fleetData['fleet_end_galaxy'] ?? 0);
+			$acsResult['system'] = (int) ($fleetData['fleet_end_system'] ?? 0);
+			$acsResult['planet'] = (int) ($fleetData['fleet_end_planet'] ?? 0);
+		}
+
 		return $acsResult;
 	}
 	
@@ -80,7 +89,7 @@ class ShowFleetTablePage extends AbstractGamePage
 		
 		$db = Database::get();
 
-        $sql = "SELECT fleet_start_time, fleet_end_id, fleet_group, fleet_mess FROM %%FLEETS%% WHERE fleet_id = :fleetID;";
+        $sql = "SELECT fleet_start_time, fleet_end_id, fleet_end_galaxy, fleet_end_system, fleet_end_planet, fleet_group, fleet_mess FROM %%FLEETS%% WHERE fleet_id = :fleetID;";
         $fleetData = $db->selectSingle($sql, array(
             ':fleetID'  => $fleetID
         ));
@@ -101,7 +110,7 @@ class ShowFleetTablePage extends AbstractGamePage
 			
 		$acsName	= HTTP::_GP('acsName', '', UTF8_SUPPORT);
 		if(!empty($acsName)) {
-			if(!PlayerUtil::isNameValid($acsName))
+			if(strtolower(trim($acsName)) === 'null' || !PlayerUtil::isNameValid($acsName))
 			{
 				$this->sendJSON($LNG['fl_acs_newname_alphanum']);
 			}
@@ -154,7 +163,12 @@ class ShowFleetTablePage extends AbstractGamePage
 				// get target player language while sending ACS invite instead of attack owner.
 				$GetTargetLang			= getLanguage(null, $newUserID);
 				$inviteTitle			= $GetTargetLang['fl_acs_invitation_title'];
-				$inviteMessage 			= $GetTargetLang['fl_player'] . $USER['username'] . $GetTargetLang['fl_acs_invitation_message'];
+				$targetCoords			= array(
+					'galaxy' => (int) ($fleetData['fleet_end_galaxy'] ?? ($acsData['galaxy'] ?? 0)),
+					'system' => (int) ($fleetData['fleet_end_system'] ?? ($acsData['system'] ?? 0)),
+					'planet' => (int) ($fleetData['fleet_end_planet'] ?? ($acsData['planet'] ?? 0))
+				);
+				$inviteMessage 			= MessageTemplateHelper::buildAcsInviteCard($USER['username'], $acsData['name'], $targetCoords, $GetTargetLang);
 				PlayerUtil::sendMessage($newUserID, $USER['id'], $USER['username'], 1, $inviteTitle, $inviteMessage, TIMESTAMP);
 			}
 		}

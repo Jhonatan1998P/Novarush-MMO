@@ -15,12 +15,13 @@
                 {foreach $darkmatterList as $ID => $Element}
                 <div id="ofic_{$ID}" class="build_box">
                     <div class="head">
-                        {$LNG.tech.{$ID}}
+                        <a href="#" onclick="return Dialog.info({$ID})" class="interrogation">?</a>
+                        <a href="#" onclick="return Dialog.info({$ID})">{$LNG.tech.{$ID}}</a>
                         {if $Element.timeLeft > 0}<span style="float:right; color:#CCC;">{$LNG.bd_active} <span id="time_{$ID}">-</span></span>{/if}
                     </div>
                     <div class="content_box">
                         <div class="image_mini">
-                            <img src="{$dpath}gebaeude/{$ID}.gif" alt="{$LNG.tech.{$ID}}">
+                            <a href="#" onclick="return Dialog.info({$ID})"><img src="{$dpath}gebaeude/{$ID}.gif" alt="{$LNG.tech.{$ID}}"></a>
                         </div>
                         <div class="prices_mini">
                             <font color="#096">{foreach $Element.elementBonus as $BonusName => $Bonus}{if $Bonus[0] < 0}-{else}+{/if}{if $Bonus[1] == 0}{abs($Bonus[0] * 100)}%{else}{floatval($Bonus[0])}{/if} {$LNG.bonus.$BonusName}<br>{/foreach}</font>
@@ -29,7 +30,7 @@
                         <form action="game.php?page=blueprints" method="post" class="build_form">
                             <div class="time_build">
                                 {foreach $Element.costResources as $RessID => $RessAmount}{$LNG.tech.{$RessID}}: 
-                                <b><span id="price{$ID}" style="color:{if $Element.costOverflow[$RessID] == 0}lime{else}red{/if}">{$RessAmount|number}</span></b>
+                                <b><span id="price{$ID}" style="color:{if $Element.costOverflow[$RessID] == 0}lime{else}red{/if}">{($RessAmount * 2)|number}</span></b>
                                 {/foreach}
                             </div>
                             <div class="clear"></div>
@@ -39,10 +40,10 @@
                                     <div class="clear"></div>
                                     <input name="id" value="{$ID}" type="hidden">      
                                     <div class="btn_build_border btn_build_border_left dm_btn_build_border_left">
-                                        <label class="max_btn_ship">{$LNG.bd_time_day}</label>
+                                        <label class="max_btn_ship">12h (Mín. 1d)</label>
                                         <div class="div_text count_ships_dots">
                                             {foreach $Element.costResources as $RessID => $RessAmount}
-                                            <input id="amount{$ID}" class="text" onchange="Price{$RessID}('{$ID}', {$RessAmount});" name="amount" max="{$Element.maxLevel}" min="1" value="1" type="number">
+                                            <input id="amount{$ID}" class="text" onchange="Price{$RessID}('{$ID}', {$RessAmount});" name="amount" max="{$Element.maxLevel}" min="2" value="2" type="number">
                                             {/foreach}
                                         </div>
                                     </div>

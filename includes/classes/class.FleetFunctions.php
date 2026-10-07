@@ -23,7 +23,16 @@ class FleetFunctions
 	{
 		global $pricelist;
 
-		return (($Player['impulse_motor_tech'] >= 5 && $Ship == 202) || ($Player['hyperspace_motor_tech'] >= 8 && $Ship == 211)) ? $pricelist[$Ship]['consumption2'] + ($pricelist[$Ship]['consumption2'] * pow(0.99, (($Player['factor']['FuelConsum'] * 100)))) : $pricelist[$Ship]['consumption'] + ($pricelist[$Ship]['consumption'] * pow(0.99, (($Player['factor']['FuelConsum'] * 100))));
+		$baseConsumption = (($Player['impulse_motor_tech'] >= 5 && $Ship == 202) || ($Player['hyperspace_motor_tech'] >= 8 && $Ship == 211)) 
+			? $pricelist[$Ship]['consumption2'] 
+			: $pricelist[$Ship]['consumption'];
+
+		if ($baseConsumption <= 0) {
+			return 0;
+		}
+
+		$reduction = isset($Player['factor']['FuelConsum']) ? (float)$Player['factor']['FuelConsum'] : 0.0;
+		return max(1, round($baseConsumption * max(0.05, 1.0 - $reduction)));
 	}
 
 	private static function OnlyShipByID($Ships, $ShipID)
@@ -100,7 +109,7 @@ class FleetFunctions
 
 	public static function GetMissionDuration($SpeedFactor, $MaxFleetSpeed, $Distance, $GameSpeed, $USER)
 	{
-		$SpeedFactor	= (3500 / ($SpeedFactor * 0.1));
+		$SpeedFactor	= (350 / ($SpeedFactor * 0.1));
 		$SpeedFactor	*= pow($Distance * 10 / $MaxFleetSpeed, 0.5);
 		$SpeedFactor	+= 10;
 		$SpeedFactor	/= $GameSpeed;
@@ -127,13 +136,18 @@ class FleetFunctions
 		return 1 + $USER['factor']['FleetSlots'];
 	}
 
-	public static function GetFleetRoom($Fleet)
+	public static function GetFleetRoom($Fleet, $Player = NULL)
 	{
 		global $pricelist, $USER;
+		if (is_null($Player)) {
+			$Player = $USER;
+		}
+		$shipStorageFactor = isset($Player['factor']['ShipStorage']) ? (float)$Player['factor']['ShipStorage'] : 0.0;
 		$FleetRoom 				= 0;
 		foreach ($Fleet as $ShipID => $amount)
 		{
-			$FleetRoom		   += $pricelist[$ShipID]['capacity'] * $amount * (1 + $USER['factor']['ShipStorage']);
+			$capacity = isset($pricelist[$ShipID]['capacity']) ? (float)$pricelist[$ShipID]['capacity'] : 0.0;
+			$FleetRoom += $capacity * $amount * (1 + $shipStorageFactor);
 		}
 		return $FleetRoom;
 	}
@@ -518,6 +532,9 @@ class FleetFunctions
 			$params[':'.$resource[903]]	= $consumption;
 		}
 
+		$planetQuery[] = "last_fleet_out = :timestamp_out";
+		$params[':timestamp_out'] = TIMESTAMP;
+
 		$sql	= 'UPDATE %%PLANETS%% SET '.implode(', ', $planetQuery).' WHERE id = :planetId;';
 
 		$db->update($sql, $params);
@@ -643,5 +660,7 @@ class FleetFunctions
 			':timestamp'				=> TIMESTAMP,
 			':universe'	   				=> Universe::current(),
 		));
+
+		return $fleetId;
 	}
 }

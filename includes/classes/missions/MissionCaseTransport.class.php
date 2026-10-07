@@ -24,15 +24,17 @@ class MissionCaseTransport extends MissionFunctions implements Mission
 
 	function TargetEvent()
 	{
-		$sql = 'SELECT name FROM %%PLANETS%% WHERE `id` = :planetId;';
+		$sql = 'SELECT id, name FROM %%PLANETS%% WHERE `id` = :planetId;';
 
-		$startPlanetName	= Database::get()->selectSingle($sql, array(
+		$startPlanetRow	= Database::get()->selectSingle($sql, array(
 			':planetId'	=> $this->_fleet['fleet_start_id']
-		), 'name');
+		));
+		$startPlanetName = !empty($startPlanetRow['name']) ? $startPlanetRow['name'] : 'Origen';
 
-		$targetPlanetName	= Database::get()->selectSingle($sql, array(
+		$targetPlanetRow	= Database::get()->selectSingle($sql, array(
 			':planetId'	=> $this->_fleet['fleet_end_id']
-		), 'name');
+		));
+		$targetPlanetName = !empty($targetPlanetRow['name']) ? $targetPlanetRow['name'] : 'Destino';
 
 		$LNG			= $this->getLanguage(NULL, $this->_fleet['fleet_owner']);
 
@@ -41,17 +43,34 @@ class MissionCaseTransport extends MissionFunctions implements Mission
 		 * If target exists, deploy resources.
 		 * If it is a destroyed moon, avoid to call StoreGoodsToPlanet()
 		 */
-		if ($targetPlanetName) {
-			$Message		= sprintf(
-				$LNG['sys_tran_mess_owner'],
-				$targetPlanetName,
-				GetTargetAddressLink($this->_fleet, ''),
-				pretty_number($this->_fleet['fleet_resource_metal']),
-				$LNG['tech'][901],
-				pretty_number($this->_fleet['fleet_resource_crystal']),
-				$LNG['tech'][902],
-				pretty_number($this->_fleet['fleet_resource_deuterium']),
-				$LNG['tech'][903]
+		if (!empty($targetPlanetRow)) {
+			$origin = array(
+				'name'        => $startPlanetName ?: 'Origen',
+				'galaxy'      => $this->_fleet['fleet_start_galaxy'],
+				'system'      => $this->_fleet['fleet_start_system'],
+				'planet'      => $this->_fleet['fleet_start_planet'],
+				'planet_type' => $this->_fleet['fleet_start_type']
+			);
+			$target = array(
+				'name'        => $targetPlanetName ?: 'Destino',
+				'galaxy'      => $this->_fleet['fleet_end_galaxy'],
+				'system'      => $this->_fleet['fleet_end_system'],
+				'planet'      => $this->_fleet['fleet_end_planet'],
+				'planet_type' => $this->_fleet['fleet_end_type']
+			);
+			$resources = array(
+				901 => $this->_fleet['fleet_resource_metal'],
+				902 => $this->_fleet['fleet_resource_crystal'],
+				903 => $this->_fleet['fleet_resource_deuterium']
+			);
+
+			$Message = MessageTemplateHelper::buildLogisticsCard(
+				'transport_owner',
+				$LNG['sys_mess_transport'],
+				$origin,
+				$target,
+				$resources,
+				$LNG
 			);
 
 			PlayerUtil::sendMessage(
@@ -68,38 +87,23 @@ class MissionCaseTransport extends MissionFunctions implements Mission
 			);
 
 			if ($this->_fleet['fleet_target_owner'] != $this->_fleet['fleet_owner']) {
-				$LNG			= $this->getLanguage(NULL, $this->_fleet['fleet_target_owner']);
-				$Message        = sprintf(
-					$LNG['sys_tran_mess_user'],
-					$startPlanetName,
-					GetStartAddressLink($this->_fleet, ''),
-					$targetPlanetName,
-					GetTargetAddressLink($this->_fleet, ''),
-					pretty_number($this->_fleet['fleet_resource_metal']),
-					$LNG['tech'][901],
-					pretty_number($this->_fleet['fleet_resource_crystal']),
-					$LNG['tech'][902],
-					pretty_number($this->_fleet['fleet_resource_deuterium']),
-					$LNG['tech'][903]
+				$LNGTarget = $this->getLanguage(NULL, $this->_fleet['fleet_target_owner']);
+				$MessageTarget = MessageTemplateHelper::buildLogisticsCard(
+					'transport_target',
+					$LNGTarget['sys_mess_transport'],
+					$origin,
+					$target,
+					$resources,
+					$LNGTarget
 				);
-
-				$new = array();
-
-				$new['startPlanet'] 		= $this->_fleet['fleet_start_id'];
-				$new['startPlanetName']	 	= $startPlanetName;
-				$new['metal'] 				= $this->_fleet['fleet_resource_metal'];
-				$new['crystal'] 			= $this->_fleet['fleet_resource_crystal'];
-				$new['deuterium'] 			= $this->_fleet['fleet_resource_deuterium'];
-				$new['targetPlanet'] 		= $this->_fleet['fleet_end_id'];
-				$new['targetPlanetName'] 	= $targetPlanetName;
 
 				PlayerUtil::sendMessage(
 					$this->_fleet['fleet_target_owner'],
 					0,
-					$LNG['sys_mess_tower'],
+					$LNGTarget['sys_mess_tower'],
 					5,
-					$LNG['sys_mess_transport'],
-					$Message,
+					$LNGTarget['sys_mess_transport'],
+					$MessageTarget,
 					$this->_fleet['fleet_start_time'],
 					NULL,
 					1,
@@ -114,7 +118,7 @@ class MissionCaseTransport extends MissionFunctions implements Mission
 		 * Check if returning planet exists.
 		 * If is a player destroyed moon, redirect the fleet to the main planet.
 		 */
-		if (!$startPlanetName) {
+		if (empty($startPlanetRow)) {
 			$originUser = Database::get()->selectSingle("SELECT id_planet, galaxy, system, planet FROM %%USERS%% WHERE id = :id", array(
 				':id'	=> $this->_fleet['fleet_owner']
 			));
@@ -143,7 +147,30 @@ class MissionCaseTransport extends MissionFunctions implements Mission
 			':planetId'	=> $this->_fleet['fleet_start_id'],
 		), 'name');
 
-		$Message	= sprintf($LNG['sys_tran_mess_back'], $planetName, GetStartAddressLink($this->_fleet, ''));
+		$origin = array(
+			'name'        => 'Destino',
+			'galaxy'      => $this->_fleet['fleet_end_galaxy'],
+			'system'      => $this->_fleet['fleet_end_system'],
+			'planet'      => $this->_fleet['fleet_end_planet'],
+			'planet_type' => $this->_fleet['fleet_end_type']
+		);
+		$target = array(
+			'name'        => $planetName ?: 'Planeta',
+			'galaxy'      => $this->_fleet['fleet_start_galaxy'],
+			'system'      => $this->_fleet['fleet_start_system'],
+			'planet'      => $this->_fleet['fleet_start_planet'],
+			'planet_type' => $this->_fleet['fleet_start_type']
+		);
+		$resources = array();
+
+		$Message = MessageTemplateHelper::buildLogisticsCard(
+			'return',
+			$LNG['sys_mess_fleetback'],
+			$origin,
+			$target,
+			$resources,
+			$LNG
+		);
 
 		PlayerUtil::sendMessage(
 			$this->_fleet['fleet_owner'],

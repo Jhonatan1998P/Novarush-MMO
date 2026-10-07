@@ -46,7 +46,34 @@ class MissionCaseStay extends MissionFunctions implements Mission
 		
 		$LNG				= $this->getLanguage($senderUser['lang']);
 		$TargetUserID       = $this->_fleet['fleet_target_owner'];
-		$TargetMessage      = sprintf($LNG['sys_stat_mess'], GetTargetAddressLink($this->_fleet, ''), pretty_number($this->_fleet['fleet_resource_metal']), $LNG['tech'][901], pretty_number($this->_fleet['fleet_resource_crystal']), $LNG['tech'][902], pretty_number($this->_fleet['fleet_resource_deuterium']), $LNG['tech'][903]);
+		$origin = array(
+			'name'        => 'Origen',
+			'galaxy'      => $this->_fleet['fleet_start_galaxy'],
+			'system'      => $this->_fleet['fleet_start_system'],
+			'planet'      => $this->_fleet['fleet_start_planet'],
+			'planet_type' => $this->_fleet['fleet_start_type']
+		);
+		$target = array(
+			'name'        => 'Destino',
+			'galaxy'      => $this->_fleet['fleet_end_galaxy'],
+			'system'      => $this->_fleet['fleet_end_system'],
+			'planet'      => $this->_fleet['fleet_end_planet'],
+			'planet_type' => $this->_fleet['fleet_end_type']
+		);
+		$resources = array(
+			901 => $this->_fleet['fleet_resource_metal'],
+			902 => $this->_fleet['fleet_resource_crystal'],
+			903 => $this->_fleet['fleet_resource_deuterium']
+		);
+
+		$TargetMessage = MessageTemplateHelper::buildLogisticsCard(
+			'stay',
+			$LNG['sys_stat_mess_stay'],
+			$origin,
+			$target,
+			$resources,
+			$LNG
+		);
 
 		PlayerUtil::sendMessage($TargetUserID, 0, $LNG['sys_mess_tower'], 5,
 			$LNG['sys_stat_mess_stay'], $TargetMessage, $this->_fleet['fleet_start_time'], NULL, 1, $this->_fleet['fleet_universe']);
@@ -61,13 +88,35 @@ class MissionCaseStay extends MissionFunctions implements Mission
 	
 	function ReturnEvent()
 	{
-		$LNG				= $this->getLanguage(NULL, $this->_fleet['fleet_owner']);
+		$LNG = $this->getLanguage(NULL, $this->_fleet['fleet_owner']);
 
-		$Message     		= sprintf($LNG['sys_stat_mess'],
-			GetStartAddressLink($this->_fleet, ''),
-			pretty_number($this->_fleet['fleet_resource_metal']), $LNG['tech'][901],
-			pretty_number($this->_fleet['fleet_resource_crystal']), $LNG['tech'][902],
-			pretty_number($this->_fleet['fleet_resource_deuterium']), $LNG['tech'][903]
+		$origin = array(
+			'name'        => 'Destino',
+			'galaxy'      => $this->_fleet['fleet_end_galaxy'],
+			'system'      => $this->_fleet['fleet_end_system'],
+			'planet'      => $this->_fleet['fleet_end_planet'],
+			'planet_type' => $this->_fleet['fleet_end_type']
+		);
+		$target = array(
+			'name'        => 'Base',
+			'galaxy'      => $this->_fleet['fleet_start_galaxy'],
+			'system'      => $this->_fleet['fleet_start_system'],
+			'planet'      => $this->_fleet['fleet_start_planet'],
+			'planet_type' => $this->_fleet['fleet_start_type']
+		);
+		$resources = array(
+			901 => $this->_fleet['fleet_resource_metal'],
+			902 => $this->_fleet['fleet_resource_crystal'],
+			903 => $this->_fleet['fleet_resource_deuterium']
+		);
+
+		$Message = MessageTemplateHelper::buildLogisticsCard(
+			'return',
+			$LNG['sys_mess_fleetback'],
+			$origin,
+			$target,
+			$resources,
+			$LNG
 		);
 
 		PlayerUtil::sendMessage($this->_fleet['fleet_owner'], 0, $LNG['sys_mess_tower'], 4, $LNG['sys_mess_fleetback'],

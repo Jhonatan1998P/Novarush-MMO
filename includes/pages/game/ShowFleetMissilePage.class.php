@@ -80,7 +80,10 @@ class ShowFleetMissilePage extends AbstractGamePage
 			$targetUser		= GetUserByID($target['id_owner'], array('onlinetime', 'banaday', 'urlaubs_modus', 'authattack'));
 		}
 		
-		if (Config::get()->adm_attack == 1 && $targetUser['authattack'] > $USER['authlevel'])
+		require_once 'includes/classes/events/WarEventBossEngine.class.php';
+		if ($target['id_owner'] == WarEventBossEngine::NPC_USER_ID)
+			$error = "Los potentes campos de dispersión iónica de la Fortaleza Ancestral desintegran cualquier proyectil interplanetario entrante. La fortaleza es inmune a ataques con misiles.";
+		elseif (($target['id_owner'] == 1 && $USER['id'] != 1) || (Config::get()->adm_attack == 1 && $targetUser['authattack'] > $USER['authlevel']))
 			$error = $LNG['fl_admin_attack'];	
 		elseif($targetUser['urlaubs_modus'])
 			$error = $LNG['fl_in_vacation_player'];

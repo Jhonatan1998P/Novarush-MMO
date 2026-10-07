@@ -221,6 +221,7 @@
    
        "{/literal}{$ID}{literal}":{
        "level":"{/literal}{$Element.level}{literal}",
+       "levelToBuild":"{/literal}{$Element.levelToBuild}{literal}",
        "maxLevel":"{/literal}{$Element.maxLevel}{literal}",
        "factor":"{/literal}{$Element.factor}{literal}",
        "costResources":{{/literal}{foreach $Element.costResources as $RessID => $RessAmount}{literal}"{/literal}{$RessID}{literal}":{/literal}{$RessAmount}{literal},{/literal}{/foreach}{literal}},

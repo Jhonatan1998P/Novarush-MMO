@@ -48,9 +48,8 @@ function counting(id)
 	var Data 			= DatatList[id];
 	var	sitem			= '#build_'+(String(id));
 	var Ellimet			= $(sitem);
-	var it 				= 1;
-	var	count 			= Math.max((1 +  Number(Data.level)), Number(Ellimet.find('#b_input_'+(String(id))).val()));
-	var	countMin 		= Data.level;
+	var	countMin 		= (typeof Data.levelToBuild !== "undefined") ? Number(Data.levelToBuild) : Number(Data.level);
+	var	count 			= Math.max((1 + countMin), Number(Ellimet.find('#b_input_'+(String(id))).val()));
 	
 	/*
 	if(count > MaxCount)
@@ -77,28 +76,31 @@ function counting(id)
 	if(typeof Data.costResources[901] !== "undefined")
 	{
 		res = Number(Data.costResources[901]);
+		var f901 = (Data.factors && typeof Data.factors[901] !== "undefined") ? Number(Data.factors[901]) : Number(Data.factor);
 		costResources[901] += Math.floor(res);
 		for (var i = 2; i <= (count - countMin); i++) 
 		{        	
-			costResources[901] += Math.floor(res * Math.pow(Data.factor, i-1));
+			costResources[901] += Math.floor(res * Math.pow(f901, i-1));
     	}		
 	}
 	if(typeof Data.costResources[902] !== "undefined")
 	{
 		res = Number(Data.costResources[902]);
+		var f902 = (Data.factors && typeof Data.factors[902] !== "undefined") ? Number(Data.factors[902]) : Number(Data.factor);
 		costResources[902] += Math.floor(res);
 		for (var i = 2; i <= (count - countMin); i++) 
 		{        	
-			costResources[902] += Math.floor(res * Math.pow(Data.factor, i-1));
+			costResources[902] += Math.floor(res * Math.pow(f902, i-1));
     	}
 	}
 	if(typeof Data.costResources[903] !== "undefined")
 	{
 		res = Number(Data.costResources[903]);
+		var f903 = (Data.factors && typeof Data.factors[903] !== "undefined") ? Number(Data.factors[903]) : Number(Data.factor);
 		costResources[903] += Math.floor(res);
 		for (var i = 2; i <= (count - countMin); i++) 
 		{        	
-			costResources[903] += Math.floor(res * Math.pow(Data.factor, i-1));
+			costResources[903] += Math.floor(res * Math.pow(f903, i-1));
     	}
 	}
 	if(typeof Data.costResources[911] !== "undefined")
@@ -107,7 +109,7 @@ function counting(id)
 		costResources[911] += Math.floor(res);
 		for (var i = 2; i <= (count - countMin); i++) 
 		{        	
-			costResources[911] = Math.floor(res * Math.pow(Data.factor, i-1));
+			costResources[911] += Math.floor(res * Math.pow(Data.factor, i-1));
     	}
 	}
 	if(typeof Data.costResources[921] !== "undefined")
@@ -209,13 +211,36 @@ function counting(id)
 			Ellimet.find(".res921").find(".text").removeAttr('data-tooltip-content'); 
 		}
 	}	
-	s =  Math.ceil(Data.elementTime);  
+	s = Math.ceil(Data.elementTime);
+	var baseCostPow = 0;
+	var hasSplitFactors = false;
+	var resList = [901, 902, 903];
+	for (var r = 0; r < resList.length; r++) {
+		var rId = resList[r];
+		if (typeof Data.costResources[rId] !== "undefined" && Data.costResources[rId] > 0) {
+			baseCostPow += Math.pow(Number(Data.costResources[rId]), 0.3);
+			if (Data.factors && typeof Data.factors[rId] !== "undefined" && Number(Data.factors[rId]) !== Number(Data.factor)) {
+				hasSplitFactors = true;
+			}
+		}
+	}
+
 	for (var i = 2; i <= (count - countMin); i++) 
-	{    
-		s +=  Math.ceil(Data.elementTime * Math.pow(Data.factor, i-1));    	
-    }
-		
-	//s =  Math.ceil(Data.elementTime * count);
+	{
+		if (hasSplitFactors && baseCostPow > 0) {
+			var stepCostPow = 0;
+			for (var r = 0; r < resList.length; r++) {
+				var rId = resList[r];
+				if (typeof Data.costResources[rId] !== "undefined" && Data.costResources[rId] > 0) {
+					var f = (Data.factors && typeof Data.factors[rId] !== "undefined") ? Number(Data.factors[rId]) : Number(Data.factor);
+					stepCostPow += Math.pow(Number(Data.costResources[rId]) * Math.pow(f, i - 1), 0.3);
+				}
+			}
+			s += Math.max(1, Math.floor(Data.elementTime * (stepCostPow / baseCostPow)));
+		} else {
+			s += Math.max(1, Math.floor(Data.elementTime * Math.pow(Data.factor, 0.3 * (i - 1))));
+		}
+	}
 	
 	{ m = Math.floor( s / 60 ); s = s - m * 60; }
 	{ h = Math.floor( m / 60 ); m = m - h * 60; }

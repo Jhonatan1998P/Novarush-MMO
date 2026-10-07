@@ -22,6 +22,23 @@ function AJAX()
 		rakets = data.rakets;
 		msg = data.msg;
       }
+
+      if(typeof data.usersOnline !== 'undefined')
+      {
+        var onlineSpan = jQuery('#online_user span');
+        if(onlineSpan.length > 0 && onlineSpan.text() != data.usersOnline)
+        {
+          onlineSpan.text(data.usersOnline);
+        }
+      }
     }, "json"
   );
+}
+
+if (typeof document.addEventListener !== 'undefined') {
+  document.addEventListener('visibilitychange', function() {
+    if (document.visibilityState === 'visible') {
+      AJAX();
+    }
+  });
 }

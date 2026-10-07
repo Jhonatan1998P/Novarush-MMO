@@ -26,6 +26,12 @@ class ShowBandPage extends AbstractGamePage
 
 	public function UpdateBand($Element)
 	{
+		$this->printMessage('La compra de mercenarios se encuentra actualmente desactivada.', true, array('game.php?page=overview', 3));
+		return;
+	}
+
+	public function DisabledUpdateBand($Element)
+	{
 		global $PLANET, $USER, $reslist, $resource, $pricelist, $LNG, $BonusElement;
 		
 		$costAM = (float) PremiumEconomy::get('band_price_am', 100);
@@ -129,7 +135,7 @@ class ShowBandPage extends AbstractGamePage
 				}
 				
 				$costResources = array(922 => $costAM);
-				$buyable       = BuildFunctions::isElementBuyable($USER, $PLANET, $Element, $costResources);
+				$buyable       = false;
 				$costOverflow  = BuildFunctions::getRestPrice($USER, $PLANET, $Element, $costResources);
 				$elementBonus  = BuildFunctions::getAvalibleBonus($Element);
 				

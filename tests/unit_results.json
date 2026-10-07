@@ -1,0 +1,71 @@
+{
+    "passed": 13,
+    "failed": 0,
+    "tests": [
+        {
+            "name": "1.1 IPM Requerido sature 100% de ABMs (20 ABMs)",
+            "status": "PASS",
+            "details": "ABM detectados: 20, esperado: 20"
+        },
+        {
+            "name": "1.2 Margen solo en ABM es 0 con spy_tech >= 8",
+            "status": "PASS",
+            "details": "Margen calculado: 0, esperado: 0"
+        },
+        {
+            "name": "1.3 Margen del 15% en ABM cuando spy_tech < 8 (ceil(20 * 0.15) = 3)",
+            "status": "PASS",
+            "details": "Margen calculado: 3, esperado: 3"
+        },
+        {
+            "name": "1.4 Priorizaci\u00f3n inteligente: Plasma (406) encabeza objetivo prioritario de la salva",
+            "status": "PASS",
+            "details": "Objetivo primario seleccionado: 406, esperado: 406 (Plasma)"
+        },
+        {
+            "name": "1.5 C\u00e1lculo exacto de disparos por elementStructurePoints en motor 2Moons (13 MIPs vs 10 Plasmas, 35 totales)",
+            "status": "PASS",
+            "details": "Shots 406: 13, Total MIPs: 35"
+        },
+        {
+            "name": "2.1 F\u00f3rmula matem\u00e1tica EV Neto por hora (Principio Rector)",
+            "status": "PASS",
+            "details": "Valor\/hora calculado: 28210000, esperado: 28210000"
+        },
+        {
+            "name": "2.2 Anti-Bait: Marcador '*' con luna es descartado como trampa\/cebo",
+            "status": "PASS",
+            "details": "Condici\u00f3n de trampa evaluada correctamente"
+        },
+        {
+            "name": "3.1 Flota de Asedio prioriza Bombarderos (211) y Destructores (213)",
+            "status": "PASS",
+            "details": "Bombarderos: 150, Destructores: 100"
+        },
+        {
+            "name": "3.2 Fleet Crash incluye pantalla de absorci\u00f3n (Fodder Cazas Ligeros 204)",
+            "status": "PASS",
+            "details": "Fodder cazas ligeros asignados: 1000"
+        },
+        {
+            "name": "4.1 Fleetsave evac\u00faa 100% de metal, cristal y remanente de deuterio neto de combustible",
+            "status": "PASS",
+            "details": "Recursos evacuados: {\"901\":5000000,\"902\":3000000,\"903\":1950000}"
+        },
+        {
+            "name": "5.1 Hist\u00e9resis: Objetivo +15% NO supera la banda del 20% (Evita flip-flop)",
+            "status": "PASS",
+            "details": "Switch con +15%: NO"
+        },
+        {
+            "name": "5.2 Hist\u00e9resis: Objetivo +30% S\u00cd supera la banda del 20% (Cambia de objetivo)",
+            "status": "PASS",
+            "details": "Switch con +30%: SI"
+        },
+        {
+            "name": "5.3 Anti-Sunk-Cost: Gasto acumulado > 1.2x bot\u00edn esperado activa abandono",
+            "status": "PASS",
+            "details": "Anti-sunk-cost evaluado correctamente"
+        }
+    ]
+}

@@ -42,10 +42,8 @@
             <div class="message_time">{$Message.time}</div>
             <div class="message_sender">
                 {if $Message.type == 1 && $MessID != 999}
-                <a href="#" onclick="return Dialog.Buddy({$Message.sender})" title="{$LNG.mg_fre}"><img height="13px" class="messagesnew4" src="{$dpath}img/iconav/mes_friendd.png"></a> 
-                {*<a href="?page=EnnemiesList&mode=send&id={$Message.sender}" title="{$LNG.mg_ene}"><img height="13px" class="messagesnew4" src="{$dpath}img/iconav/mes_enemiess.png" style="height:20px;"></a>*}
-                <a href="#" onclick="return Dialog.PM({$Message.sender}, Message.CreateAnswer('{$Message.subject}'));" title="{$LNG.mg_answer_to} {strip_tags($Message.from)}"><img height="13px" class="messagesnew4" src="{$dpath}img/iconav/mes_messages.png" border="0"></a>
-                {*<a href="#" onclick="return Dialog.complPM({$Message.id})" title="{$LNG.mg_rep}"><img height="13px" class="messagesnew4" src="{$dpath}img/iconav/mes_complaint.png" height="16px"></a>*}
+                <a href="#" onclick="return Dialog.Buddy({$Message.sender});" title="{$LNG.mg_fre}"><img height="13px" class="messagesnew4" src="{$dpath}img/iconav/mes_friendd.png"></a> 
+                <a href="#" onclick="return Dialog.PM({$Message.sender}, Message.CreateAnswer('{$Message.subject}'));" title="{$LNG.mg_answer_to} {strip_tags($Message.from)}"><img height="13px" class="messagesnew4" src="{$dpath}img/iconav/mes_messages.png"></a>
                 {/if}
                 <a href="#" onclick="msgArchive({$Message.id}, {$Message.type}); Message.getMessages({$Message.type}); return false;" title="{$LNG.mg_arh}"><img height="13px" class="messagesnew4" src="{$dpath}img/iconav/mes_inarchive.png"></a>
                 <a href="#" onclick="msgDel({$Message.id}, {$Message.type}); Message.getMessages({$Message.type}); return false;" title="{$LNG.mg_del}"><img height="13px" class="messagesnew4" src="{$dpath}img/iconav/mes_delmsg.png"></a>

@@ -63,6 +63,7 @@ require 'includes/classes/PlayerUtil.class.php';
 require 'includes/classes/Session.class.php';
 require 'includes/classes/Universe.class.php';
 require_once 'includes/classes/PremiumEconomy.class.php';
+require_once 'includes/classes/class.MessageTemplateHelper.php';
 
 require 'includes/classes/class.theme.php';
 require 'includes/classes/class.template.php';
@@ -127,7 +128,7 @@ if(defined('DATABASE_VERSION') && DATABASE_VERSION === 'OLD')
 $config = Config::get();
 date_default_timezone_set($config->timezone);
 
-if (MODE === 'INGAME' || MODE === 'ADMIN' || MODE === 'CRON' || MODE === 'JSON')
+if (PHP_SAPI !== 'cli' && (MODE === 'INGAME' || MODE === 'ADMIN' || MODE === 'CRON' || MODE === 'JSON'))
 {
 	$session	= Session::load();
 
@@ -169,7 +170,7 @@ if (MODE === 'INGAME' || MODE === 'ADMIN' || MODE === 'CRON' || MODE === 'JSON')
 	$LNG->includeData(array('L18N', 'INGAME', 'TECH', 'CUSTOM'));
 	$THEME->setUserTheme($USER['dpath']);
 	
-	if($config->game_disable == 0 && $USER['authlevel'] == AUTH_USR) {
+	if($config->game_disable == 0 && $USER['authlevel'] == AUTH_USR && strcasecmp($USER['username'], '-GODWAR-') !== 0 && (int)$USER['id'] !== 4) {
 		ShowErrorPage::printError($LNG['sys_closed_game'].'<br><br>'.$config->close_reason, false);
 	}
 

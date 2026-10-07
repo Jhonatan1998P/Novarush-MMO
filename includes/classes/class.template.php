@@ -45,9 +45,11 @@ class template extends Smarty
  
         if((MODE === 'INSTALL') || (MODE === 'ADMIN') || (MODE === 'LOGIN')) {
             $this->setTemplateDir('styles/theme/'.DEFAULT_THEME.'/templates/');
-		}elseif(MODE === 'INGAME') {
+		}elseif(MODE === 'INGAME' && !empty($THEME) && is_object($THEME)) {
             $this->setTemplateDir(''.$THEME->getTheme().'/templates/');
-		}
+		}else{
+            $this->setTemplateDir('styles/theme/'.DEFAULT_THEME.'/templates/');
+        }
 	}
 
 	private function getTempPath()

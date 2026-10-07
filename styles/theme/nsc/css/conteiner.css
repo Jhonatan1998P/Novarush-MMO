@@ -1,43 +1,608 @@
-.conteiner_rows {
-    margin: 0px 7px 4px 7px;
-    background: #000813;
-    padding: 2px;
+/* ==========================================================================
+   NovaRush — Strategic Container Bay (Modern Sci-Fi Supply Terminal)
+   Theme: NSC / New-Star Dark Galactic Edition
+   Adaptive Split-Width Architecture (Bordeo de Menú + Ensanchamiento Inferior)
+   ========================================================================== */
+
+:root {
+    --cont-bg-deep: #050d1a;
+    --cont-bg-card: rgba(8, 22, 38, 0.9);
+    --cont-bg-card-hover: rgba(13, 33, 56, 0.98);
+    --cont-border: #13385c;
+    --cont-border-bright: #0088cc;
+    --cont-glow: rgba(0, 168, 255, 0.25);
+    --cont-cyan: #00d2ff;
+    --cont-gold: #f6c343;
+    --cont-green: #2ecc71;
+    --cont-purple: #bb86fc;
+    --cont-text-main: #e2e8f0;
+    --cont-text-dim: #8fa0b5;
+}
+
+/* --- Root Page Overrides for Container View --- */
+#page.conteiner_page_root {
+    margin-left: 0 !important;
+    padding-top: 80px !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    box-sizing: border-box !important;
+    overflow-x: hidden !important;
+}
+
+#page.conteiner_page_root #content {
+    margin: 0 !important;
+    padding: 0 !important;
+    width: 100% !important;
+    box-sizing: border-box !important;
+}
+
+#ally_content.conteiner_custom_bay {
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    background: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+    overflow: visible !important;
+}
+
+.cont_full_wrapper {
+    width: 100%;
+    box-sizing: border-box;
+    font-family: 'Roboto', 'Segoe UI', Tahoma, sans-serif;
+    color: var(--cont-text-main);
+}
+
+.cont_full_wrapper *,
+.cont_full_wrapper *::before,
+.cont_full_wrapper *::after {
+    box-sizing: border-box;
+}
+
+/* ==========================================================================
+   1. ZONA SUPERIOR: Bordeo del Menú de Navegación Izquierdo
+   El menú #left_side ocupa ~252px + margen = 264px a la izquierda.
+   La parte superior se ciñe a la derecha del menú para que NADA quede tapado.
+   ========================================================================== */
+.cont_upper_section {
+    margin-left: 272px !important;
+    max-width: calc(100% - 285px) !important;
+    box-sizing: border-box;
+    padding-right: 15px;
+    transition: all 0.25s ease;
+}
+
+/* --- Hero Banner Compacto --- */
+.cont_hero_card {
     position: relative;
+    border-radius: 6px;
     overflow: hidden;
-    border: 1px solid #091d2e;
-    box-shadow: 0 4px 3px 0 rgba(0, 0, 0, 0.5) !important;
-    -webkit-box-shadow: 0 4px 3px 0 rgba(0, 0, 0, 0.5) !important;
-    -moz-box-shadow: 0 4px 3px 0 rgba(0, 0, 0, 0.5) !important;
-    -moz-border-radius: 5px;
-    -webkit-border-radius: 5px;
+    margin-bottom: 12px;
+    border: 1px solid var(--cont-border);
+    background: var(--cont-bg-deep);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
+}
+
+.cont_hero_banner {
+    position: relative;
+    width: 100%;
+    height: 85px; /* Altura compacta para ahorrar espacio vertical */
+    overflow: hidden;
+    background: #000;
+}
+
+.cont_hero_banner img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    object-position: center;
+    filter: brightness(0.65) contrast(1.15);
+}
+
+.cont_hero_overlay {
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(180deg, rgba(5, 13, 26, 0.2) 0%, rgba(5, 13, 26, 0.95) 100%);
+    display: flex;
+    align-items: center;
+    padding: 10px 16px;
+}
+
+.cont_hero_info {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    width: 100%;
+    flex-wrap: wrap;
+    gap: 10px;
+}
+
+.cont_title_group h2 {
+    margin: 0 0 3px 0;
+    font-size: 17px;
+    font-weight: 700;
+    color: #ffffff;
+    text-shadow: 0 2px 8px rgba(0, 195, 255, 0.5);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.cont_dest_badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 11px;
+    color: var(--cont-text-dim);
+    background: rgba(0, 0, 0, 0.6);
+    padding: 3px 8px;
+    border-radius: 14px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.cont_dest_badge b {
+    color: var(--cont-cyan);
+}
+
+.cont_stats_strip {
+    display: flex;
+    gap: 8px;
+}
+
+.cont_stat_pill {
+    background: rgba(4, 15, 28, 0.9);
+    border: 1px solid var(--cont-border);
+    padding: 4px 10px;
+    border-radius: 5px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    min-width: 75px;
+}
+
+.cont_stat_pill.highlight {
+    border-color: var(--cont-cyan);
+    box-shadow: 0 0 10px rgba(0, 210, 255, 0.25);
+}
+
+.cont_stat_label {
+    font-size: 9px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--cont-text-dim);
+}
+
+.cont_stat_val {
+    font-size: 15px;
+    font-weight: 800;
+    color: #fff;
+}
+
+.cont_stat_pill.highlight .cont_stat_val {
+    color: var(--cont-cyan);
+}
+
+/* --- Subtítulos de sección compactos --- */
+.cont_section_header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 8px;
+    border-bottom: 1px solid var(--cont-border);
+    padding-bottom: 5px;
+}
+
+.cont_section_header h3 {
+    margin: 0;
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+    color: var(--cont-cyan);
+    text-transform: uppercase;
+}
+
+.cont_section_subtitle {
+    font-size: 11px;
+    color: var(--cont-text-dim);
+}
+
+/* --- Tarjeta de Rendimiento Estimado Compacta --- */
+.cont_preview_card {
+    background: var(--cont-bg-card);
+    border: 1px solid var(--cont-border);
+    border-radius: 6px;
+    padding: 10px 12px;
+    margin-bottom: 12px;
+    box-shadow: 0 3px 12px rgba(0, 0, 0, 0.35);
+}
+
+.cont_grid_rewards {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 10px;
+}
+
+.cont_group_box {
+    background: rgba(3, 10, 20, 0.65);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: 5px;
+    padding: 8px 10px;
+}
+
+.cont_group_label {
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+    margin-bottom: 6px;
+    display: flex;
+    justify-content: space-between;
+    color: var(--cont-text-dim);
+}
+
+.cont_reward_row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 4px 6px;
+    border-radius: 4px;
+    background: rgba(255, 255, 255, 0.02);
+    margin-bottom: 4px;
+}
+
+.cont_reward_left {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.cont_reward_icon {
+    width: 22px;
+    height: 22px;
+    border-radius: 3px;
+    overflow: hidden;
+    background: #000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.cont_reward_icon img {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+}
+
+.cont_reward_name {
+    font-size: 12px;
+    font-weight: 500;
+    color: #d8e2ec;
+}
+
+.cont_reward_val {
+    font-size: 12px;
+    font-weight: 700;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+}
+
+.val_metal { color: var(--cont-green); }
+.val_crystal { color: #64b5f6; }
+.val_deut { color: var(--cont-gold); }
+.val_fleet { color: var(--cont-purple); }
+
+/* --- Terminal de Apertura / Formulario Compacto --- */
+.cont_control_card {
+    background: linear-gradient(145deg, rgba(8, 25, 45, 0.95), rgba(4, 15, 28, 0.98));
+    border: 1px solid var(--cont-border-bright);
+    box-shadow: 0 0 16px rgba(0, 136, 204, 0.2);
+    border-radius: 6px;
+    padding: 12px 14px;
+    margin-bottom: 12px;
+}
+
+.cont_form_layout {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.cont_inputs_row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 10px;
+}
+
+.cont_stepper_group {
+    display: flex;
+    align-items: center;
+    background: #02070f;
+    border: 1px solid var(--cont-border);
+    border-radius: 5px;
+    overflow: hidden;
+    padding: 1px;
+}
+
+.cont_step_btn {
+    width: 38px;
+    height: 36px;
+    background: #071728;
+    color: #fff;
+    border: none;
+    font-size: 16px;
+    font-weight: bold;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.2s;
+    user-select: none;
+}
+
+.cont_step_btn:hover {
+    background: #0d2c4d;
+    color: var(--cont-cyan);
+}
+
+.cont_num_input {
+    width: 65px;
+    height: 36px;
+    background: transparent;
+    border: none;
+    color: #ffffff;
+    font-size: 16px;
+    font-weight: 700;
+    text-align: center;
+    outline: none;
+    -moz-appearance: textfield;
+}
+
+.cont_num_input::-webkit-outer-spin-button,
+.cont_num_input::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}
+
+/* Presets rápidos */
+.cont_presets_group {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.cont_preset_btn {
+    background: rgba(9, 29, 50, 0.85);
+    border: 1px solid var(--cont-border);
+    color: #bed0e2;
+    padding: 6px 10px;
+    border-radius: 4px;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    user-select: none;
+    min-height: 36px;
+}
+
+.cont_preset_btn:hover {
+    background: rgba(0, 136, 204, 0.25);
+    border-color: var(--cont-cyan);
+    color: #fff;
+}
+
+.cont_preset_btn.active {
+    background: #006699;
+    border-color: var(--cont-cyan);
+    color: #fff;
+    box-shadow: 0 0 8px rgba(0, 210, 255, 0.4);
+}
+
+/* Botón de Apertura Principal */
+.cont_action_row {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+}
+
+.cont_submit_btn {
+    flex: 1;
+    min-height: 42px;
+    background: linear-gradient(135deg, #0077b6 0%, #004d7a 100%);
+    border: 1px solid var(--cont-cyan);
+    border-radius: 5px;
+    color: #ffffff;
+    font-size: 14px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    transition: all 0.2s ease;
+    box-shadow: 0 3px 10px rgba(0, 119, 182, 0.35);
+    text-transform: uppercase;
+}
+
+.cont_submit_btn:hover:not(:disabled) {
+    background: linear-gradient(135deg, #0096c7 0%, #005a87 100%);
+    box-shadow: 0 4px 16px rgba(0, 210, 255, 0.5);
+}
+
+.cont_submit_btn:disabled {
+    background: #0a1724;
+    border-color: #172a3a;
+    color: #516377;
+    cursor: not-allowed;
+    box-shadow: none;
+}
+
+.cont_notice_safety {
+    font-size: 11px;
+    color: var(--cont-text-dim);
+    display: flex;
+    align-items: center;
+    gap: 5px;
+}
+
+/* ==========================================================================
+   2. ZONA INFERIOR: Se ensancha al ancho completo por debajo del Menú
+   Aquí el menú ya terminó arriba, por lo que el historial aprovecha
+   todo el ancho de la pantalla (100% / max-width: 1100px).
+   ========================================================================== */
+.cont_lower_section {
+    margin-left: 14px !important;
+    width: calc(100% - 28px) !important;
+    max-width: 1150px !important;
+    box-sizing: border-box;
+    margin-top: 20px;
+    clear: both;
+}
+
+.cont_history_card {
+    background: var(--cont-bg-card);
+    border: 1px solid var(--cont-border);
+    border-radius: 6px;
+    padding: 14px;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.4);
+}
+
+.cont_history_list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    max-height: 550px;
+    overflow-y: auto;
+    padding-right: 4px;
+}
+
+.cont_history_list::-webkit-scrollbar {
+    width: 6px;
+}
+.cont_history_list::-webkit-scrollbar-thumb {
+    background: var(--cont-border);
+    border-radius: 3px;
+}
+
+.cont_batch_item {
+    background: rgba(4, 13, 24, 0.75);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    border-radius: 5px;
+    padding: 10px 14px;
+    transition: background 0.2s, border-color 0.2s;
+}
+
+.cont_batch_item:hover {
+    background: rgba(7, 20, 36, 0.9);
+    border-color: rgba(0, 136, 204, 0.35);
+}
+
+.cont_batch_header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 11px;
+    color: var(--cont-text-dim);
+    margin-bottom: 8px;
+    border-bottom: 1px dashed rgba(255, 255, 255, 0.07);
+    padding-bottom: 5px;
+}
+
+.cont_batch_time {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    color: #94a3b8;
+}
+
+.cont_batch_badge {
+    background: rgba(0, 180, 216, 0.15);
+    border: 1px solid rgba(0, 180, 216, 0.3);
+    color: var(--cont-cyan);
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-size: 10px;
+    font-weight: 700;
+}
+
+.cont_chips_wrap {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.cont_chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: rgba(0, 0, 0, 0.45);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 4px;
+    padding: 4px 8px;
+    font-size: 12px;
+}
+
+.cont_chip img {
+    width: 18px;
+    height: 18px;
+    object-fit: contain;
+}
+
+.cont_chip_name {
+    color: #cbd5e1;
+    font-size: 11px;
+}
+
+.cont_chip_qty {
+    font-weight: 700;
+}
+
+.cont_empty_state {
+    padding: 25px 15px;
+    text-align: center;
+    color: var(--cont-text-dim);
+    font-size: 13px;
+    border: 1px dashed var(--cont-border);
     border-radius: 5px;
 }
 
-.conteiner_rows:hover {
-    background: #000818;
-}
-
-.conteiner_rows .conteiner_img_utits {
-    width: 30px;
-    height: 30px;
-    float: left;
-    margin-right: 5px;
-}
-
-.conteiner_rows .conteiner_img_utits img {
-    width: 100%;
-    max-width: 100%;
-}
-
-.conteiner_rows .conteiner_name_utits {
-    line-height: 30px;
-    height: 30px;
-    width: 270px;
-    margin-left: 2px;
-    float: left;
-}
-.conteiner_rows .count_blocks {
-    float: left;
-    margin-left: 5px;
-    line-height: 30px;
+/* ==========================================================================
+   3. RESPONSIVE BREAKPOINTS (Mobile & Tablet)
+   ========================================================================== */
+@media (max-width: 768px) {
+    .cont_upper_section {
+        margin-left: 260px !important;
+        max-width: calc(100% - 268px) !important;
+        padding-right: 8px;
+    }
+    .cont_lower_section {
+        margin-left: 8px !important;
+        width: calc(100% - 16px) !important;
+    }
+    .cont_hero_banner {
+        height: 75px;
+    }
+    .cont_hero_info {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 6px;
+    }
+    .cont_stats_strip {
+        width: 100%;
+        justify-content: flex-start;
+    }
+    .cont_inputs_row {
+        flex-direction: column;
+        align-items: stretch;
+    }
+    .cont_stepper_group {
+        justify-content: center;
+    }
+    .cont_presets_group {
+        justify-content: center;
+    }
 }

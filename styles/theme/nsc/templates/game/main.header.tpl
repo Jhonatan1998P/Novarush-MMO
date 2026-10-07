@@ -59,11 +59,11 @@
         }, 1000);
 	</script>
     <script type="text/javascript" src="./scripts/base/tooltip.js"></script>
-	<script type="text/javascript" src="./scripts/game/base.js"></script>
+	<script type="text/javascript" src="./scripts/game/base.js?v=20261004_v2"></script>
     <script type="text/javascript" src="./scripts/game/game.class.js"></script>
     <!--script-->
 	{foreach item=scriptname from=$scripts}
-	<script type="text/javascript" src="./scripts/game/{$scriptname}.js"></script>
+	<script type="text/javascript" src="./scripts/game/{$scriptname}.js?v=20261005_fleet_fix_v2"></script>
 	{/foreach}
 	{block name="script"}{/block}
 	<script type="text/javascript">

@@ -44,6 +44,8 @@ class ShowFleetStep1Page extends AbstractGamePage
         
 		foreach ($listorder as $id => $ShipID)
 		{
+			$ShipID = (int) trim($ShipID);
+			if ($ShipID <= 0) continue;
 			$amount	= max(0, round(HTTP::_GP('ship'.$ShipID, 0.0, 0.0)));
 			
 			if ($amount < 1) continue;
@@ -62,7 +64,10 @@ class ShowFleetStep1Page extends AbstractGamePage
 		$FleetRoom	*= 1 + $USER['factor']['ShipStorage'];
 		
 		if (empty($Fleet)){
-			 $this->printMessage($LNG['NFCoosen']);
+			$this->printMessage($LNG['NFCoosen'], array(array(
+				'label'	=> $LNG['sys_back'],
+				'url'	=> 'game.php?page=fleetTable'
+			)));
 		}
 		
 		if (empty($Fleet))
@@ -197,8 +202,9 @@ class ShowFleetStep1Page extends AbstractGamePage
 		global $PLANET, $USER;
 		
 		$ColonyList	= array();
+		$planetSource = !empty($USER['PLANETSHIDDEN']) ? $USER['PLANETSHIDDEN'] : getPlanetsHIDDEN($USER);
 		
-		foreach($USER['PLANETS'] as $CurPlanetID => $CurPlanet)
+		foreach($planetSource as $CurPlanetID => $CurPlanet)
 		{
 			if ($PLANET['id'] == $CurPlanet['id'])
 				continue;
@@ -310,7 +316,7 @@ class ShowFleetStep1Page extends AbstractGamePage
 			}
 
 			if(!empty($planetData))
-			if ($planetData['id'] != $USER['id'] && Config::get()->adm_attack == 1 && $planetData['authattack'] > $USER['authlevel'])
+			if ($planetData['id'] != $USER['id'] && ($planetData['id'] == 1 || (Config::get()->adm_attack == 1 && $planetData['authattack'] > $USER['authlevel'])))
 			{
 				$this->sendJSON($LNG['fl_admin_attack']);
 			}

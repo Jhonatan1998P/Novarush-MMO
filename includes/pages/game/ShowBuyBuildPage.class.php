@@ -67,20 +67,10 @@ class ShowBuyBuildPage extends AbstractGamePage
 		
 		if(!empty($Element) && in_array($Element, $Elements) && BuildFunctions::isTechnologieAccessible($USER, $PLANET, $Element, array()) && (in_array($Element, $Elements) || in_array($Element, $reslist['not_bought'])))
 		{ 
-			// Calculate instant completion cost based on remaining/build time: max(10, ceil(40 * (hRest)^0.9)) MO
-			$k   = PremiumEconomy::get('instant_k', 40);
-			$exp = PremiumEconomy::get('instant_exp', 0.9);
-			$min = PremiumEconomy::get('instant_min', 10);
-			
 			$curLvl = (int) ($PLANET[$resource[$Element]] ?? 0);
-			$totalCost = 0;
-			for ($i = 0; $i < $Count; $i++) {
-				$timeSec = BuildFunctions::getBuildingTime($USER, $PLANET, $Element, $curLvl + $i);
-				$hRest = max(0.001, $timeSec / 3600.0);
-				$totalCost += (float) max($min, ceil($k * pow($hRest, $exp)));
-			}
+			$totalCost = BuildFunctions::getInstantPriceTotalLevels($Element, $curLvl, $Count);
 			
-			if (!PremiumEconomy::debit($USER, 921, $totalCost, 'buy_build_instant', $Element, "cnt={$Count};cost={$totalCost}")) {
+			if (!PremiumEconomy::debit($USER, 921, $totalCost, 'buy_build', $Element, "cnt={$Count};from={$curLvl};cost={$totalCost}")) {
 				$this->printMessage("".$LNG['bd_notres']."", true, array("game.php?page=buyBuild", 1));
 				return;
 			}
@@ -110,10 +100,6 @@ class ShowBuyBuildPage extends AbstractGamePage
 		$allowedElements = array();
 		$Cost = array();
 		
-		$k   = PremiumEconomy::get('instant_k', 40);
-		$exp = PremiumEconomy::get('instant_exp', 0.9);
-		$min = PremiumEconomy::get('instant_min', 10);
-		
 		foreach($Elements as $Element)
 		{
 			if(!BuildFunctions::isTechnologieAccessible($USER, $PLANET, $Element, array()) || !in_array($Element, $Elements) || in_array($Element, $reslist['not_bought']))
@@ -121,14 +107,12 @@ class ShowBuyBuildPage extends AbstractGamePage
 				
 			$allowedElements[] = $Element;
             
-			$timeSec = BuildFunctions::getBuildingTime($USER, $PLANET, $Element);
-			$hRest = max(0.001, $timeSec / 3600.0);
-			$instantPrice = (float) max($min, ceil($k * pow($hRest, $exp)));
+			$baseCostMO = BuildFunctions::getInstantMSE($Element) / 250.0;
 			
 			$Cost[$Element] = array(
 				$PLANET[$resource[$Element]] ?? 0,
 				$LNG['tech'][$Element],
-				$instantPrice,
+				$baseCostMO,
 				$pricelist[$Element]['factor'] ?? 1.0
 			);
 		}

@@ -294,7 +294,7 @@
    	short_minute 	= '{$LNG.short_minute}';
    	short_second 	= '{$LNG.short_second}';
     </script>
-    <script src="scripts/game/shipyard.js"></script>
+    <script src="scripts/game/shipyard.js?v=20261001_timecalc_v5"></script>
     {if !empty($BuildList)}
     <script src="scripts/base/bcmath.js"></script>
     <script type="text/javascript">

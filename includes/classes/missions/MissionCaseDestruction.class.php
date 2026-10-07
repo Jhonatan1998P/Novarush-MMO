@@ -47,27 +47,6 @@ class MissionCaseDestruction extends MissionFunctions implements Mission
 
 		$debrisResource	= array(901, 902);
 
-		$messageHTML	= <<<HTML
-<div class="raportMessage">
-	<table>
-		<tr>
-			<td colspan="2"><a href="game.php?page=raport&raport=%s" target="_blank"><span class="%s">%s %s (%s)</span></a></td>
-		</tr>
-		<tr>
-			<td>%s</td><td><span class="%s">%s: %s</span>&nbsp;<span class="%s">%s: %s</span></td>
-		</tr>
-		<tr>
-			<td>%s</td><td><span>%s:&nbsp;<span class="reportSteal element901">%s</span>&nbsp;</span><span>%s:&nbsp;<span class="reportSteal element902">%s</span>&nbsp;</span><span>%s:&nbsp;<span class="reportSteal element903">%s</span></span></td>
-		</tr>
-		<tr>
-			<td>%s</td><td><span>%s:&nbsp;<span class="reportDebris element901">%s</span>&nbsp;</span><span>%s:&nbsp;<span class="reportDebris element902">%s</span></span></td>
-		</tr>
-	</table>
-</div>
-HTML;
-		//Minize HTML
-		$messageHTML	= str_replace(array("\n", "\t", "\r"), "", $messageHTML);
-
 		$sql			= "SELECT * FROM %%PLANETS%% WHERE id = :planetId;";
 		$targetPlanet 	= $db->selectSingle($sql, array(
 			':planetId'	=> $this->_fleet['fleet_end_id']
@@ -77,6 +56,8 @@ HTML;
 		$targetUser		= $db->selectSingle($sql, array(
 			':userId'	=> $targetPlanet['id_owner']
 		));
+
+
 		$targetUser['factor']	= getFactors($targetUser, 'basic', $this->_fleet['fleet_start_time']);
 
 		$planetUpdater	= new ResourceUpdate();
@@ -474,38 +455,29 @@ HTML;
 		{
 			foreach($data as $userID => $userName)
 			{
-				$LNG		= $this->getLanguage(NULL, $userID);
-
-				$message	= sprintf($messageHTML,
+				$LNG = $this->getLanguage(NULL, $userID);
+				$targetInfo = array(
+					'name'        => $targetPlanet['name'] ?? '',
+					'galaxy'      => $this->_fleet['fleet_end_galaxy'],
+					'system'      => $this->_fleet['fleet_end_system'],
+					'planet'      => $this->_fleet['fleet_end_planet'],
+					'planet_type' => $this->_fleet['fleet_end_type']
+				);
+				$isAttacker = ($i === 0);
+				$message = MessageTemplateHelper::buildCombatCard(
 					$reportID,
-					$class[$i],
-					$LNG['sys_mess_attack_report'],
-					sprintf(
-						$LNG['sys_adress_planet'],
-						$this->_fleet['fleet_end_galaxy'],
-						$this->_fleet['fleet_end_system'],
-						$this->_fleet['fleet_end_planet']
+					$combatResult['won'],
+					$targetInfo,
+					$combatResult['unitLost'],
+					$stealResource,
+					$debris,
+					array(
+						'created' => false,
+						'chance'  => 0,
+						'name'    => ''
 					),
-					$LNG['type_planet_short_'.$this->_fleet['fleet_end_type']],
-					$LNG['sys_lost'],
-					$class[0],
-					$LNG['sys_attack_attacker_pos'],
-					pretty_number($combatResult['unitLost']['attacker']),
-					$class[1],
-					$LNG['sys_attack_defender_pos'],
-					pretty_number($combatResult['unitLost']['defender']),
-					$LNG['sys_gain'],
-					$LNG['tech'][901],
-					pretty_number($stealResource[901]),
-					$LNG['tech'][902],
-					pretty_number($stealResource[902]),
-					$LNG['tech'][903],
-					pretty_number($stealResource[903]),
-					$LNG['sys_debris'],
-					$LNG['tech'][901],
-					pretty_number($debris[901]),
-					$LNG['tech'][902],
-					pretty_number($debris[902])
+					$isAttacker,
+					$LNG
 				);
 
 				PlayerUtil::sendMessage($userID, 0, $LNG['sys_mess_tower'], 3, $LNG['sys_mess_attack_report'],
@@ -561,6 +533,13 @@ HTML;
 			':planetId'		=> $this->_fleet['fleet_end_id']
 		));
 
+		$topkbResult = $combatResult['won'];
+		if ($topkbResult === 'w') {
+			$attackerLost = $combatResult['unitLost']['attacker'] ?? 0;
+			$defenderLost = $combatResult['unitLost']['defender'] ?? 0;
+			$topkbResult  = ($attackerLost <= $defenderLost) ? 'a' : 'r';
+		}
+
 		$sql = 'INSERT INTO %%TOPKB%% SET
 		units 		= :units,
 		rid			= :reportId,
@@ -573,7 +552,7 @@ HTML;
 			':reportId'	=> $reportID,
 			':time'		=> $this->_fleet['fleet_start_time'],
 			':universe'	=> $this->_fleet['fleet_universe'],
-			':result'	=> $combatResult['won']
+			':result'	=> $topkbResult
 		));
 
 		$sql = 'UPDATE %%USERS%% SET
@@ -625,13 +604,31 @@ HTML;
 			':planetId'	=> $this->_fleet['fleet_start_id'],
 		), 'name');
 
-		$Message	= sprintf(
-			$LNG['sys_fleet_won'],
-			$planetName,
-			GetTargetAddressLink($this->_fleet, ''),
-			pretty_number($this->_fleet['fleet_resource_metal']), $LNG['tech'][901],
-			pretty_number($this->_fleet['fleet_resource_crystal']), $LNG['tech'][902],
-			pretty_number($this->_fleet['fleet_resource_deuterium']), $LNG['tech'][903]
+		$origin = array(
+			'name'   => 'Destino',
+			'galaxy' => $this->_fleet['fleet_end_galaxy'],
+			'system' => $this->_fleet['fleet_end_system'],
+			'planet' => $this->_fleet['fleet_end_planet']
+		);
+		$target = array(
+			'name'   => $planetName,
+			'galaxy' => $this->_fleet['fleet_start_galaxy'],
+			'system' => $this->_fleet['fleet_start_system'],
+			'planet' => $this->_fleet['fleet_start_planet']
+		);
+		$resources = array(
+			901 => $this->_fleet['fleet_resource_metal'],
+			902 => $this->_fleet['fleet_resource_crystal'],
+			903 => $this->_fleet['fleet_resource_deuterium']
+		);
+
+		$Message = MessageTemplateHelper::buildLogisticsCard(
+			'return',
+			$LNG['sys_mess_fleetback'],
+			$origin,
+			$target,
+			$resources,
+			$LNG
 		);
 
 		PlayerUtil::sendMessage($this->_fleet['fleet_owner'], 0, $LNG['sys_mess_tower'], 4, $LNG['sys_mess_fleetback'],

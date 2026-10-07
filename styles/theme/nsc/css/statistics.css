@@ -1,271 +1,508 @@
-.classstat1 {
+/* ==========================================================================
+   NovaRush — Statistics / Ranking CSS (Clean Responsive Grid)
+   ========================================================================== */
+
+#ally_content.conteiner {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
+    padding: 6px 0;
+}
+
+.gray_stripo {
+    width: 690px;
+    margin: 0 auto;
+    box-sizing: border-box;
+}
+
+.statbarsup1 {
+    border: 1px solid #000;
+    border-radius: 3px;
+    text-align: center;
+    position: relative;
+    overflow: hidden;
+    z-index: 2;
+    background: rgba(0, 0, 0, 0.25);
+    box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.25), 0 1px rgba(255, 255, 255, 0.08);
+    padding: 3px;
+    font-size: 11px;
+    width: 690px;
+    margin: 7px auto 0 auto;
+    box-sizing: border-box;
+}
+
+.tabstatistica {
+    width: 690px;
+    margin: 0 auto;
+    border-collapse: collapse;
+}
+
+/* --- Cabecera del Ranking --- */
+.barraclass {
+    height: 24px;
+    line-height: 22px;
+    border: 1px solid #000;
+    border-radius: 3px;
+    text-align: center;
+    background: rgba(0, 0, 0, 0.35);
+    box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.25), 0 1px rgba(255, 255, 255, 0.08);
+    font-size: 11px;
+    width: 690px;
+    margin: 7px auto 5px auto;
+    box-sizing: border-box;
+    display: flex;
+    align-items: center;
+}
+
+.barraclass th {
+    color: #ccc;
+    background: none;
+    font-size: 11px;
+    font-weight: bold;
+    box-sizing: border-box;
+    flex-shrink: 0;
+    padding: 0;
+}
+
+.barraclass th.th-pos {
+    width: 80px;
+    min-width: 80px;
+    max-width: 80px;
+    text-align: center;
+}
+
+.barraclass th.th-player {
+    width: 250px;
+    min-width: 250px;
+    max-width: 250px;
+    text-align: left;
+    padding-left: 14px;
+}
+
+.barraclass th.th-act {
     width: 40px;
     min-width: 40px;
     max-width: 40px;
-    border-right: none;
-    color: #a9a9a9;
+    text-align: center;
+}
+
+.barraclass th.th-ally {
+    width: 150px;
+    min-width: 150px;
+    max-width: 150px;
     text-align: left;
     padding-left: 10px;
-    border-color: #000000;
-    width: 25px;
-    font-family: 'BicubikRegular', Arial, Geneva, sans-serif;
 }
 
-.classstat2 {
-    width: 55px;
-    min-width: 55px;
-    max-width: 55px;
-    font-family: 'BicubikRegular', Arial, Geneva, sans-serif;
-}
-
-.classstat3 {
-    border-right: none;
-    border-left: none;
-    border-color: #000000;
-    width: 165px;
-    max-width: 165px;
-    min-width: 165px;
-}
-
-.classstat3 a {
-    text-overflow: ellipsis;
-    word-break: break-all;
-    white-space: nowrap;
-    overflow: hidden;
-    display: block;
-    float: left;
-    width: 100%
-}
-
-.classstat4 {
-    float: left;
-    margin-left: -6px;
-}
-
-.classstat5 {
-    padding-left: 25px;
-    background-position: left;
-    background-position-y: 4px;
-    background-size: 10%;
-    text-overflow: ellipsis;
-    word-break: break-all;
-    white-space: nowrap;
-}
-
-.classstat5 span {
-    overflow: hidden;
-}
-
-.classstat6 {
-    padding: 0px 2px 0px 2px;
-    background: #000917;
-    border-radius: 4px;
-    float: right;
-    border: 1px solid black;
-    font-size: 11px;
-    margin-top: 4px;
-    height: 14px;
-    margin-right: 0px;
-    line-height: 15px;
-    box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.25), 0 1px rgba(255, 255, 255, 0.08);
-}
-
-.classstat7 {
-    border-right: none;
-    border-left: none;
-    border-color: #000000;
-    width: 20px;
-    max-width: 20px;
-    min-width: 20px;
-    text-align: left;
-}
-
-.classstat8 {
-    border-right: none;
-    border-left: none;
-    border-color: #000000;
-    width: 200px;
-    max-width: 200px;
-    min-width: 200px;
-    text-align: left;
-    word-break: break-all;
-    white-space: nowrap;
-    overflow: hidden;
-    padding-right: 0 !important;
-}
-
-.classstat8 a {
-    word-break: break-all;
-    white-space: nowrap;
-    overflow: hidden;
-    height: 24px;
-    display: block;
-    width: 195px;
-    float: left;
-    text-overflow: ellipsis
-}
-
-/* .classstat9 {
-    height: 24px;
-    width: 24px;
-    float: left;
-} */
-
-.classstat10 {
-    border-right: none;
-    border-left: none;
-    border-color: #000000;
-    width: 105px;
-    max-width: 105px;
-    min-width: 105px;
-    padding-right: 0 !important;
+.barraclass th.th-pts {
+    width: 170px;
+    min-width: 170px;
+    max-width: 170px;
     text-align: right;
+    padding-right: 15px;
 }
-/* .classstat11{    height: 14px;
-    border: 1px solid #000;
-    -moz-border-radius: 3px;
-    -webkit-border-radius: 3px;
-    border-radius: 3px;
-    text-align: left;
-    position: relative;
-    overflow: hidden;
-    z-index: 2;
-    background: rgba(0, 0, 0, 0.25);
-    box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.54), 0 1px rgba(255, 255, 255, 0.08);
-    line-height: 14px;
-    padding: 1px;
-    font-size: 11px;
-    width: 684px;
-    float: left;
-    margin: 4px 0px 8px 7px;
-    text-decoration: none;
-    text-shadow: 0 0 21px rgba(223, 206, 228, 0.5), 0 -1px 0 #162e3c;
-    vertical-align: unset;
-    padding-left: 7px;
-    padding-right: 7px;}
-.classstat12{
-color:#ccc;
-} */
-.classificabarra{
-	width: 690px;
-    padding: 2px 4px 4px 4px;
-    float: left;
-    margin: 0px 0px 3px 7px;
-    height: 20px;
+
+/* Fallback para tabla de alianzas u otras pestañas */
+.barraclass th:nth-child(1) { width: 80px; }
+.barraclass th:nth-child(2) { text-align: left; }
+
+/* --- Filas de Jugadores --- */
+.classificabarra {
+    width: 690px;
+    height: 24px;
+    line-height: 22px;
+    margin: 0 auto 3px auto;
+    padding: 0;
     color: #CCC;
-	font-size:12px;
-    text-decoration: none;
-    text-shadow: 0 0 21px rgba(223, 206, 228, 0.5), 0 -1px 0 #162e3c;
+    font-size: 12px;
     border: 1px solid #000;
-    -moz-border-radius: 2px 0px 0px 2px;
-    -webkit-border-radius: 2px 0px 0px 2px;
     border-radius: 3px;
     background: #091527;
-    filter: progid:DXImageTransform.Microsoft.gradient(startColorstr = '#0a1629', endColorstr = '#091324');
-    -ms-filter: "progid:DXImageTransform.Microsoft.gradient(startColorstr = '#0a1629', endColorstr = '#091324')";
-    background-image: -moz-linear-gradient(top, #061225, #020c1d);
-    background-image: -ms-linear-gradient(top, #061225, #020c1d);
-    background-image: -o-linear-gradient(top, #061225, #020c1d);
-    background-image: -webkit-gradient(linear, center top, center bottom, from(#061225), to(#020c1d));
     background-image: linear-gradient(#061225, #020c1d);
-    background-image: linear-gradient(top, #061225, #020c1d);
-    -moz-background-clip: padding;
-    -webkit-background-clip: padding-box;
-    box-shadow: inset 0 1px 1px rgb(10, 32, 69), inset 0 -1px 0px rgba(63, 59, 113, 0.2), 0 9px 16px 0 rgba(0, 0, 0, 0.42), 0 4px 3px 0 rgba(0, 0, 0, 0.3), 0 0 0 1px #041022;
+    box-shadow: inset 0 1px 1px rgb(10, 32, 69), inset 0 -1px 0px rgba(63, 59, 113, 0.2), 0 4px 6px 0 rgba(0, 0, 0, 0.35);
+    box-sizing: border-box;
+    display: flex;
+    align-items: center;
+    transition: background 0.2s ease-in;
 }
 
 .classificabarra:hover {
-	background:#0a172b;
-	-moz-transition: all 0.2s ease-in;
-	-webkit-transition: all 0.2s ease-in;
-	-o-transition: all 0.2s ease-in;
-	transition: all 0.2s ease-in;
-	}
-.barracla{
-	border-right: 1px solid #0a1628;
-    border-left: 1px solid #000814;
-    height: 19px;
-    float: right;    margin-top:1px;
-}
-.statbarsup1 {
-    border: 1px solid #000;
-    -moz-border-radius: 3px;
-    -webkit-border-radius: 3px;
-    border-radius: 3px;
-    text-align: center;
-    position: relative;
-    overflow: hidden;
-    z-index: 2;
-    background: rgba(0, 0, 0, 0.25);
-    box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.25), 0 1px rgba(255, 255, 255, 0.08);
-    line-height: 4px;
-    padding: 1px;
-    font-size: 11px;
-    width: 695px;
-    float: left;
-    margin: 7px 0px 0px 7px;
-    text-decoration: none;
-    text-shadow: 0 0 21px rgba(223, 206, 228, 0.5), 0 -1px 0 #162e3c;
-}
-.barraclass{
-	    height: 12px;
-	    border: 1px solid #000;
-	    -moz-border-radius: 3px;
-	    -webkit-border-radius: 3px;
-	    border-radius: 3px;
-	    text-align: center;
-	    position: relative;
-	    overflow: hidden;
-	    z-index: 2;
-	    background: rgba(0, 0, 0, 0.25);
-	    box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.25), 0 1px rgba(255, 255, 255, 0.08);
-	    line-height: 4px;
-	    padding: 1px;
-	    font-size: 11px;
-	    width: 695px;
-	    float: left;
-	    margin: 7px 0px 7px 7px;
-	    text-decoration: none;
-	    text-shadow: 0 0 21px rgba(223, 206, 228, 0.5), 0 -1px 0 #162e3c;
-	    vertical-align: unset;
+    background: #0a172b;
 }
 
-.barraclass th{
-	       color: #ccc;
-    background: none;
+.tabstatistica td {
+    border: none;
+    box-sizing: border-box;
+    flex-shrink: 0;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    padding: 0;
 }
-.barraclass th:nth-child(1){
-	 width: 105px;
-    min-width: 105px;
-}
-.barraclass th:nth-child(2){
-	width: 170px;
-    min-width: 170px;
-    text-align: center;
-}
-.barraclass th:nth-child(4){
-	    width: 190px;
-    min-width: 190px;
-    text-align: right;
-}
-.barraclass th:nth-child(5){
-	width: 165px;
-    min-width: 165px;
-    text-align: right;
-}
-.fbox-s-name, .fbox-g-name {
-    display: block;
-    text-align: left;
-    padding-left: 5px;
-    background-position: left;
-    background-size: contain;
-    background-repeat: no-repeat;
-}
-.tabstatistica td{
-	border: none;
+
+/* Columna 1: Posición # */
+.classstat1 {
+    width: 35px;
+    min-width: 35px;
+    max-width: 35px;
     color: #a9a9a9;
+    font-family: 'BicubikRegular', Arial, Geneva, sans-serif;
+    justify-content: center;
     text-align: center;
-    padding: 0px 10px;
-    border-color: #000000;
-    line-height: 23px;
+    font-size: 12px;
+}
+
+/* Columna 2: Tendencia Ranking (+/-/*) */
+.classstat2 {
+    width: 45px;
+    min-width: 45px;
+    max-width: 45px;
+    font-family: 'BicubikRegular', Arial, Geneva, sans-serif;
+    justify-content: center;
+    text-align: center;
+    font-size: 11px;
+}
+
+/* Columna 3: Jugador (Iconos + Nombre + Insignia) */
+.classstat3 {
+    width: 250px;
+    min-width: 250px;
+    max-width: 250px;
+    padding-left: 8px;
+    overflow: hidden;
+    justify-content: flex-start;
+}
+
+.classstat3 a.fbox-s-name {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    width: 100%;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    text-decoration: none;
+    color: inherit;
+    padding-left: 0;
+}
+
+.classstat3 a.fbox-s-name span.player-name-text {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.classstat4 {
+    margin-left: -4px;
+    margin-right: 4px;
+}
+
+.classstat5 {
+    background-position: left;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.classstat6 {
+    padding: 0 3px;
+    background: #000917;
+    border-radius: 4px;
+    border: 1px solid black;
+    font-size: 10px;
+    line-height: 14px;
+    height: 14px;
+    margin-left: 4px;
+    flex-shrink: 0;
+    box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.25), 0 1px rgba(255, 255, 255, 0.08);
+}
+
+/* Columna 4: Acciones (Ojo Espectador / Mensaje) */
+.classstat7 {
+    width: 40px;
+    min-width: 40px;
+    max-width: 40px;
+    justify-content: center;
+    text-align: center;
+}
+
+.stat-actions-box {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    height: 100%;
+    width: 100%;
+}
+
+.spectate-action-link {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    text-decoration: none;
+    opacity: 0.9;
+    cursor: pointer;
+    transition: transform 0.15s, opacity 0.15s;
+}
+
+.spectate-action-link:hover {
+    opacity: 1;
+    transform: scale(1.22);
+}
+
+.spectate-svg-icon {
+    display: block;
+    filter: drop-shadow(0 0 2px rgba(0, 229, 255, 0.7));
+}
+
+.pm-action-link {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    text-decoration: none;
+    opacity: 0.85;
+    cursor: pointer;
+    transition: transform 0.15s, opacity 0.15s;
+}
+
+.pm-action-link:hover {
+    opacity: 1;
+    transform: scale(1.15);
+}
+
+.stat-pm-icon {
+    vertical-align: middle;
+    display: inline-block;
+}
+
+/* Columna 5: Alianza */
+.classstat8 {
+    width: 150px;
+    min-width: 150px;
+    max-width: 150px;
+    padding-left: 10px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    justify-content: flex-start;
+}
+
+.classstat8 a {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    text-decoration: none;
+    display: inline-block;
+    max-width: 135px;
+}
+
+/* Columna 6: Puntos */
+.classstat10 {
+    width: 170px;
+    min-width: 170px;
+    max-width: 170px;
+    padding-right: 15px;
+    justify-content: flex-end;
+    text-align: right;
+    font-family: Arial, sans-serif;
+    color: #e2e8f0;
+}
+
+/* Separadores verticales */
+.barracla {
+    border-right: 1px solid #0a1628;
+    border-left: 1px solid #000814;
+    height: 16px;
+    margin-right: 6px;
+    flex-shrink: 0;
+}
+
+.fbox-s-name, .fbox-g-name {
+    display: flex;
+    align-items: center;
+    text-align: left;
+}
+
+/* ==========================================================================
+   Salón de la Fama (Battle Hall / TopKB) — Clean Aligned Grid
+   ========================================================================== */
+#ally_content.conteinership {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
+    padding: 6px 0;
+}
+
+.topkb-table {
+    width: 690px;
+    margin: 0 auto;
+    border-collapse: collapse;
+}
+
+.topkb-header {
+    height: 26px;
+    line-height: 24px;
+    border: 1px solid #000;
+    border-radius: 3px;
+    background: rgba(0, 0, 0, 0.4);
+    box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.25), 0 1px rgba(255, 255, 255, 0.08);
+    font-size: 11px;
+    width: 690px;
+    margin: 7px auto 5px auto;
+    box-sizing: border-box;
+    display: flex;
+    align-items: center;
+}
+
+.topkb-header th {
+    color: #cbd5e1;
+    background: none;
+    font-size: 11px;
+    font-weight: bold;
+    box-sizing: border-box;
+    flex-shrink: 0;
+    padding: 0;
+    height: 100%;
+    display: flex;
+    align-items: center;
+}
+
+.topkb-header th a {
+    color: #94a3b8;
+    text-decoration: none;
+    transition: color 0.15s ease;
+}
+
+.topkb-header th a:hover {
+    color: #38bdf8;
+}
+
+.topkb-header th a.active-sort {
+    color: #38bdf8;
+    font-weight: bold;
+}
+
+/* Fila de datos TopKB */
+.topkb-row {
+    width: 690px;
+    height: 26px;
+    line-height: 24px;
+    margin: 0 auto 3px auto;
+    padding: 0;
+    color: #CCC;
+    font-size: 12px;
+    border: 1px solid #000;
+    border-radius: 3px;
+    background: #091527;
+    background-image: linear-gradient(#061225, #020c1d);
+    box-shadow: inset 0 1px 1px rgb(10, 32, 69), inset 0 -1px 0px rgba(63, 59, 113, 0.2), 0 4px 6px 0 rgba(0, 0, 0, 0.35);
+    box-sizing: border-box;
+    display: flex;
+    align-items: center;
+    transition: background 0.2s ease-in;
+}
+
+.topkb-row:hover {
+    background: #0d1e38;
+}
+
+.topkb-row td {
+    border: none;
+    box-sizing: border-box;
+    flex-shrink: 0;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    padding: 0;
+}
+
+/* Columna 1: Posición # */
+.topkb-col-pos {
+    width: 45px;
+    min-width: 45px;
+    max-width: 45px;
+    color: #a9a9a9;
+    font-family: 'BicubikRegular', Arial, Geneva, sans-serif;
+    justify-content: center;
+    text-align: center;
+    font-size: 12px;
+}
+
+/* Columna 2: Usuarios Involucrados */
+.topkb-col-users {
+    width: 310px;
+    min-width: 310px;
+    max-width: 310px;
+    padding-left: 10px;
+    padding-right: 6px;
+    overflow: hidden;
+    justify-content: flex-start;
+    box-sizing: border-box;
+}
+
+/* Columna 3: Fecha */
+.topkb-col-date {
+    width: 175px;
+    min-width: 175px;
+    max-width: 175px;
+    justify-content: center;
+    text-align: center;
+    font-size: 11px;
+    color: #94a3b8;
+}
+
+/* Columna 4: Unidades */
+.topkb-col-units {
+    width: 160px;
+    min-width: 160px;
+    max-width: 160px;
+    padding-right: 15px;
+    justify-content: flex-end;
+    text-align: right;
+    font-family: Arial, sans-serif;
+    color: #e2e8f0;
+    font-weight: 500;
+}
+
+/* Enlace a reporte y estilos de texto */
+.topkb-link {
+    display: inline-flex;
+    align-items: center;
+    max-width: 100%;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    text-decoration: none;
+    line-height: 24px;
+}
+
+.topkb-user {
+    display: inline-block;
+    max-width: 125px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    vertical-align: middle;
+}
+
+.topkb-win {
+    color: #00FF00 !important;
+    font-weight: bold;
+}
+
+.topkb-loss {
+    color: #00d4ff !important;
+    font-weight: bold;
+}
+
+.topkb-vs {
+    margin: 0 5px;
+    color: #64748b;
+    font-size: 10px;
+    font-weight: bold;
+    flex-shrink: 0;
+    letter-spacing: 0.5px;
 }

@@ -40,7 +40,7 @@ class ShowOverviewPage extends AbstractAdminPage
 		$this->assign(array(
             'filecount'	    => $filecount,
             'user'	        => Config::get()->users_amount,
-            'useronline'	=> $GLOBALS['DATABASE']->countquery("SELECT COUNT(*) FROM ".USERS." WHERE universe = ".Universe::current()." AND onlinetime > '".(TIMESTAMP - 30 * 60 )."';"),
+            'useronline'	=> $GLOBALS['DATABASE']->countquery("SELECT COUNT(*) FROM ".USERS." WHERE universe = ".Universe::current()." AND onlinetime > '".(TIMESTAMP - 60)."';"),
             'userinactive'	=> $GLOBALS['DATABASE']->countquery("SELECT COUNT(*) FROM ".USERS." WHERE universe = ".Universe::current()." AND onlinetime < ".(TIMESTAMP - INACTIVE).";"),
             'supportticks'	=> $GLOBALS['DATABASE']->getFirstCell("SELECT COUNT(*) FROM ".TICKETS." WHERE universe = ".Universe::current()." AND status = 0;"),
             'log'	        => $GLOBALS['DATABASE']->getFirstCell("SELECT COUNT(*) FROM ".LOG." WHERE universe = ".Universe::current().";"),

@@ -34,7 +34,7 @@ class ShowBlueprintsPage extends AbstractGamePage
 			return;
 		}
         
-        $amount = HTTP::_GP('amount', 0);
+        $amount = max(2, (int) HTTP::_GP('amount', 2));
 		$USER[$resource[$Element]]	= max($USER[$resource[$Element]], TIMESTAMP) + ($pricelist[$Element]['time']) * $amount;
         
         $href = 'game.php?page=blueprints'; 
@@ -69,8 +69,12 @@ class ShowBlueprintsPage extends AbstractGamePage
 				}
 			
 				$costResources		= BuildFunctions::getElementPrice($USER, $PLANET, $Element);
-				$buyable			= BuildFunctions::isElementBuyable($USER, $PLANET, $Element, $costResources);
-				$costOverflow		= BuildFunctions::getRestPrice($USER, $PLANET, $Element, $costResources);
+				$minCostResources	= array();
+				foreach ($costResources as $rID => $rAmount) {
+					$minCostResources[$rID] = $rAmount * 2;
+				}
+				$buyable			= BuildFunctions::isElementBuyable($USER, $PLANET, $Element, $minCostResources);
+				$costOverflow		= BuildFunctions::getRestPrice($USER, $PLANET, $Element, $minCostResources);
 				$elementBonus		= BuildFunctions::getAvalibleBonus($Element);
 		
 				$darkmatterList[$Element]	= array(

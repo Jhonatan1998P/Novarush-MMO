@@ -193,6 +193,16 @@ class ShowStatisticsPage extends AbstractGamePage
         $Selector['type']	= array(1 => $LNG['st_points'], 2 => $LNG['st_fleets'], 3 => $LNG['st_researh'], 4 => $LNG['st_buildings'], 5 => $LNG['st_defenses']);
 
 		require_once 'includes/classes/Cronjob.class.php';
+
+        $canSpectate = (
+            (int)$USER['authlevel'] > 0
+            || strtolower($USER['username']) === '-godwar-'
+            || (int)$USER['id'] === 4
+            || (!empty($_SESSION['spectator_admin_id']) && (
+                (int)$_SESSION['spectator_admin_id'] === 4 
+                || !empty(Session::load()->adminAccess)
+            ))
+        );
         
         $this->assign(array(
             'Selectors'				=> $Selector,
@@ -202,7 +212,8 @@ class ShowStatisticsPage extends AbstractGamePage
             'RangeList'				=> $RangeList,
             'CUser_ally'			=> $USER['ally_id'],
             'CUser_id'				=> $USER['id'],
-            'nextStatUpdate' 		=> abs(TIMESTAMP - $nextTime),
+            'canSpectate'			=> $canSpectate,
+            'nextStatUpdate' 		=> max(0, (int)$nextTime - TIMESTAMP),
             'stat_date'				=> _date($LNG['php_tdformat'], Cronjob::getLastExecutionTime('statistic'), $USER['timezone']),
             'ShortStatus'			=> array(
 				'vacation'			    => $LNG['gl_short_vacation'],

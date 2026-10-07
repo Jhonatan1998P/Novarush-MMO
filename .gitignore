@@ -1,0 +1,21 @@
+# Sessions and temporary caches
+cache/sessions/*
+!cache/sessions/.htaccess
+cache/templates/*
+!cache/templates/.htaccess
+cache/*.cache.php
+cache/*.tpl.php
+cache/*^*.php
+
+# Local backups and database dumps
+includes/backups/Backup_*.sql
+!includes/backups/.gitkeep
+
+# Temporary and IDE folders
+scratch/
+.idea/
+.vscode/
+*.log
+includes/error.log
+Thumbs.db
+.DS_Store

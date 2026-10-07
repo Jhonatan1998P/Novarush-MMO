@@ -198,3 +198,40 @@ table.tabagg tr:nth-child(even){
 	border-color:#000;
 	border-bottom: none !important;
 }
+
+/* Correcciones de precisión no invasivas para el modal de información */
+#information .row {
+    margin-left: 0;
+    margin-right: 0;
+}
+#information .col-12,
+#information .col-6,
+#information .col-4 {
+    min-width: 0;
+    box-sizing: border-box;
+    padding-left: 2px;
+    padding-right: 2px;
+}
+#information .card {
+    min-width: 0;
+}
+#information .card-body {
+    padding: 6px 8px;
+    min-height: 48px;
+    box-sizing: border-box;
+}
+#information .card-title {
+    font-size: 11.5px;
+    line-height: 14px;
+    margin-bottom: 2px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+#information .card-text {
+    font-size: 12px;
+    line-height: 16px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}

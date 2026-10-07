@@ -47,27 +47,6 @@ class MissionCaseAttack extends MissionFunctions implements Mission
 		$planetDebris	= array();
 		
 		$debrisResource	= array(901, 902);
-		
-		$messageHTML	= <<<HTML
-<div class="raportMessage">
-	<table>
-		<tr>
-			<td colspan="2"><a href="game.php?page=raport&raport=%s" target="_blank"><span class="%s">%s %s (%s)</span></a></td>
-		</tr>
-		<tr>
-			<td>%s</td><td><span class="%s">%s: %s</span>&nbsp;<span class="%s">%s: %s</span></td>
-		</tr>
-		<tr>
-			<td>%s</td><td><span>%s:&nbsp;<span class="reportSteal element901">%s</span>&nbsp;</span><span>%s:&nbsp;<span class="reportSteal element902">%s</span>&nbsp;</span><span>%s:&nbsp;<span class="reportSteal element903">%s</span></span></td>
-		</tr>
-		<tr>
-			<td>%s</td><td><span>%s:&nbsp;<span class="reportDebris element901">%s</span>&nbsp;</span><span>%s:&nbsp;<span class="reportDebris element902">%s</span></span></td>
-		</tr>
-	</table>
-</div>
-HTML;
-		//Minize HTML
-		$messageHTML	= str_replace(array("\n", "\t", "\r"), "", $messageHTML);
 
 		$sql			= "SELECT * FROM %%PLANETS%% WHERE id = :planetId;";
 		$targetPlanet 	= $db->selectSingle($sql, array(
@@ -78,6 +57,18 @@ HTML;
 		$targetUser		= $db->selectSingle($sql, array(
 			':userId'	=> $targetPlanet['id_owner']
 		));
+
+
+		require_once 'includes/classes/events/WarEventBossEngine.class.php';
+		if ($targetUser['id'] == WarEventBossEngine::NPC_USER_ID) {
+			$event = WarEventBossEngine::getActiveEvent();
+			if (empty($event) || $event['planet_id'] != $targetPlanet['id']) {
+				$this->setState(FLEET_RETURN);
+				$this->SaveFleet();
+				return;
+			}
+		}
+
 		$targetUser['factor']	= getFactors($targetUser, 'basic', $this->_fleet['fleet_start_time']);
 
 		$planetUpdater	= new ResourceUpdate();
@@ -328,6 +319,14 @@ HTML;
                     ));
                 }
             }
+
+            // Hook: War Event Boss Final Blow
+            require_once 'includes/classes/events/WarEventBossEngine.class.php';
+            $winningOwners = array();
+            foreach ($incomingFleets as $f) {
+                $winningOwners[] = $f['fleet_owner'];
+            }
+            WarEventBossEngine::checkFinalBlow($targetPlanet['id'], $winningOwners);
 		}
 		
 		if($this->_fleet['fleet_end_type'] == 3)
@@ -448,38 +447,30 @@ HTML;
 		{
 			foreach($data as $userID => $userName)
 			{
-				$LNG		= $this->getLanguage(NULL, $userID);
-				
-				$message	= sprintf($messageHTML,
+				$LNG = $this->getLanguage(NULL, $userID);
+				$targetInfo = array(
+					'name'        => $targetPlanet['name'] ?? '',
+					'galaxy'      => $this->_fleet['fleet_end_galaxy'],
+					'system'      => $this->_fleet['fleet_end_system'],
+					'planet'      => $this->_fleet['fleet_end_planet'],
+					'planet_type' => $this->_fleet['fleet_end_type'],
+					'image'       => $targetPlanet['image'] ?? 'normaltempplanet01'
+				);
+				$isAttacker = ($i === 0);
+				$message = MessageTemplateHelper::buildCombatCard(
 					$reportID,
-					$class[$i],
-					$LNG['sys_mess_attack_report'],
-					sprintf(
-						$LNG['sys_adress_planet'],
-						$this->_fleet['fleet_end_galaxy'],
-						$this->_fleet['fleet_end_system'],
-						$this->_fleet['fleet_end_planet']
+					$combatResult['won'],
+					$targetInfo,
+					$combatResult['unitLost'],
+					$stealResource,
+					$debris,
+					array(
+						'created' => ($randChance <= $chanceCreateMoon),
+						'chance'  => $chanceCreateMoon,
+						'name'    => $reportInfo['moonName'] ?? ''
 					),
-					$LNG['type_planet_short_'.$this->_fleet['fleet_end_type']],
-					$LNG['sys_lost'],
-					$class[0],
-					$LNG['sys_attack_attacker_pos'],
-					pretty_number($combatResult['unitLost']['attacker']),
-					$class[1],
-					$LNG['sys_attack_defender_pos'],
-					pretty_number($combatResult['unitLost']['defender']),
-					$LNG['sys_gain'],
-					$LNG['tech'][901],
-					pretty_number($stealResource[901]),
-					$LNG['tech'][902],
-					pretty_number($stealResource[902]),
-					$LNG['tech'][903],
-					pretty_number($stealResource[903]),
-					$LNG['sys_debris'],
-					$LNG['tech'][901],
-					pretty_number($debris[901]), 
-					$LNG['tech'][902],
-					pretty_number($debris[902])
+					$isAttacker,
+					$LNG
 				);
 
 				PlayerUtil::sendMessage($userID, 0, $LNG['sys_mess_tower'], 3, $LNG['sys_mess_attack_report'],
@@ -535,6 +526,13 @@ HTML;
 			':planetId'		=> $this->_fleet['fleet_end_id']
 		));
 
+		$topkbResult = $combatResult['won'];
+		if ($topkbResult === 'w') {
+			$attackerLost = $combatResult['unitLost']['attacker'] ?? 0;
+			$defenderLost = $combatResult['unitLost']['defender'] ?? 0;
+			$topkbResult  = ($attackerLost <= $defenderLost) ? 'a' : 'r';
+		}
+
 		$sql = 'INSERT INTO %%TOPKB%% SET
 		units 		= :units,
 		rid			= :reportId,
@@ -547,7 +545,7 @@ HTML;
 			':reportId'	=> $reportID,
 			':time'		=> $this->_fleet['fleet_start_time'],
 			':universe'	=> $this->_fleet['fleet_universe'],
-			':result'	=> $combatResult['won']
+			':result'	=> $topkbResult
 		));
 
 		$sql = 'UPDATE %%USERS%% SET
@@ -580,6 +578,123 @@ HTML;
 			':destroyedUnits'	=> $combatResult['unitLost']['attacker']
 		));
 
+		// Hook for NovaRush Bot AI: Post-Combat Learning & Telemetry
+		if (file_exists('includes/classes/bot/Perception/IntelStore.class.php')) {
+			try {
+				$botOwnerId = (int)$this->_fleet['fleet_owner'];
+				$dbInst = Database::get();
+				$isBot = $dbInst->selectSingle("SELECT bot_id FROM " . DB_PREFIX . "bots WHERE bot_id = :id AND is_active = 1;", array(':id' => $botOwnerId));
+
+				if (!empty($isBot)) {
+					// 1. Extract confirmed enemy forces seen during battle
+					$lastRound = !empty($reportData['rounds']) ? end($reportData['rounds']) : array();
+					$observedDefenses = array();
+					$observedFleets   = array();
+
+					// Global reslist for separating fleets and defenses
+					global $reslist;
+					$fleetIds = (isset($reslist['fleet']) && is_array($reslist['fleet'])) ? $reslist['fleet'] : array();
+
+					// Surviving defender units from the final round
+					if (!empty($lastRound['defender'])) {
+						foreach ($lastRound['defender'] as $dGroup) {
+							if (empty($dGroup['ships'])) continue;
+							foreach ($dGroup['ships'] as $uId => $uData) {
+								$cnt = (int)$uData[0];
+								if ($cnt <= 0) continue;
+								if (in_array($uId, $fleetIds)) {
+									$observedFleets[$uId] = ($observedFleets[$uId] ?? 0) + $cnt;
+								} else {
+									$observedDefenses[$uId] = ($observedDefenses[$uId] ?? 0) + $cnt;
+								}
+							}
+						}
+					}
+
+					// Resources remaining on target (subtract looted resources)
+					$remMetal = max(0, (float)$targetPlanet['metal'] - (float)($stealResource[901] ?? 0));
+					$remCry   = max(0, (float)$targetPlanet['crystal'] - (float)($stealResource[902] ?? 0));
+					$remDeut  = max(0, (float)$targetPlanet['deuterium'] - (float)($stealResource[903] ?? 0));
+
+					// Save 100% accurate combat intelligence (defense_scouted = true)
+					require_once 'includes/classes/bot/Perception/IntelStore.class.php';
+					$bStore = new BotIntelStore($botOwnerId);
+					$bStore->saveIntel(
+						(int)$this->_fleet['fleet_end_id'],
+						(int)$this->_fleet['fleet_target_owner'],
+						(int)$this->_fleet['fleet_end_galaxy'],
+						(int)$this->_fleet['fleet_end_system'],
+						(int)$this->_fleet['fleet_end_planet'],
+						(int)$this->_fleet['fleet_end_type'],
+						array(901 => $remMetal, 902 => $remCry, 903 => $remDeut),
+						$observedFleets,
+						$observedDefenses,
+						null,
+						null
+					);
+
+					// 2. If the bot suffered a defeat / wipeout ('r'), release target lock
+					if ($combatResult['won'] === 'r') {
+						$tG = (int)$this->_fleet['fleet_end_galaxy'];
+						$tS = (int)$this->_fleet['fleet_end_system'];
+						$tP = (int)$this->_fleet['fleet_end_planet'];
+
+						$dbInst->update("UPDATE " . DB_PREFIX . "bots SET 
+							target_galaxy = 0, 
+							target_system = 0, 
+							target_planet = 0, 
+							target_type = '', 
+							target_initial_mse = 0, 
+							siege_cycles = 0 
+							WHERE bot_id = :id 
+							  AND target_galaxy = :g 
+							  AND target_system = :s 
+							  AND target_planet = :p;", array(
+							':id' => $botOwnerId,
+							':g'  => $tG,
+							':s'  => $tS,
+							':p'  => $tP,
+						));
+
+						// Record telemetry in decision log if available
+						if (file_exists('includes/classes/bot/Telemetry/DecisionLog.class.php')) {
+							require_once 'includes/classes/bot/Telemetry/DecisionLog.class.php';
+							$dLog = new BotDecisionLog($botOwnerId);
+							$dLog->record(
+								'combat_wipeout_release',
+								"Fleet destroyed in action against [{$tG}:{$tS}:{$tP}]. Target lock released, defenses updated in intelligence store.",
+								array('galaxy' => $tG, 'system' => $tS, 'planet' => $tP, 'rid' => $reportID),
+								"wipeout_{$tG}_{$tS}_{$tP}",
+								-5000.0
+							);
+						}
+					}
+
+					// 3. NovaRush Bot Anti-Bashing & Target Rotation Blacklist
+					// If the bot achieved a successful victory ('a'), record victory
+					if ($combatResult['won'] === 'a') {
+						require_once 'includes/classes/bot/Military/TargetBlacklist.class.php';
+						foreach ($userAttack as $atkUserId => $atkUserName) {
+							$atkBot = $dbInst->selectSingle("SELECT bot_id FROM " . DB_PREFIX . "bots WHERE bot_id = :id AND is_active = 1;", array(':id' => (int)$atkUserId));
+							if (!empty($atkBot)) {
+								BotTargetBlacklist::recordAttackVictory(
+									(int)$atkUserId,
+									(int)$this->_fleet['fleet_target_owner'],
+									(int)$this->_fleet['fleet_end_id'],
+									(int)$this->_fleet['fleet_end_galaxy'],
+									(int)$this->_fleet['fleet_end_system'],
+									(int)$this->_fleet['fleet_end_planet'],
+									TIMESTAMP
+								);
+							}
+						}
+					}
+				}
+			} catch (\Throwable $e) {
+				// Suppress exceptions to guarantee game mission execution never fails
+			}
+		}
+
 		$this->setState(FLEET_RETURN);
 		$this->SaveFleet();
 	}
@@ -599,16 +714,31 @@ HTML;
 			':planetId'	=> $this->_fleet['fleet_start_id'],
 		), 'name');
 
-		$Message	= sprintf(
-			$LNG['sys_fleet_won'],
-			$planetName,
-			GetTargetAddressLink($this->_fleet, ''),
-			pretty_number($this->_fleet['fleet_resource_metal']),
-			$LNG['tech'][901],
-			pretty_number($this->_fleet['fleet_resource_crystal']),
-			$LNG['tech'][902],
-			pretty_number($this->_fleet['fleet_resource_deuterium']),
-			$LNG['tech'][903]
+		$origin = array(
+			'name'   => 'Destino',
+			'galaxy' => $this->_fleet['fleet_end_galaxy'],
+			'system' => $this->_fleet['fleet_end_system'],
+			'planet' => $this->_fleet['fleet_end_planet']
+		);
+		$target = array(
+			'name'   => $planetName,
+			'galaxy' => $this->_fleet['fleet_start_galaxy'],
+			'system' => $this->_fleet['fleet_start_system'],
+			'planet' => $this->_fleet['fleet_start_planet']
+		);
+		$resources = array(
+			901 => $this->_fleet['fleet_resource_metal'],
+			902 => $this->_fleet['fleet_resource_crystal'],
+			903 => $this->_fleet['fleet_resource_deuterium']
+		);
+
+		$Message = MessageTemplateHelper::buildLogisticsCard(
+			'return',
+			$LNG['sys_mess_fleetback'],
+			$origin,
+			$target,
+			$resources,
+			$LNG
 		);
 
 		PlayerUtil::sendMessage($this->_fleet['fleet_owner'], 0, $LNG['sys_mess_tower'], 4, $LNG['sys_mess_fleetback'],

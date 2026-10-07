@@ -146,7 +146,7 @@ class ShowFleetAjaxPage extends AbstractGamePage
 
 		if($targetMission == 6)
 		{
-			if(Config::get()->adm_attack == 1 && $targetData['authattack'] > $USER['authlevel']) {
+			if(($targetData['id_owner'] == 1 && $USER['id'] != 1) || (Config::get()->adm_attack == 1 && $targetData['authattack'] > $USER['authlevel'])) {
 				$this->sendData(619, $LNG['fa_action_not_allowed']);
 			}
 

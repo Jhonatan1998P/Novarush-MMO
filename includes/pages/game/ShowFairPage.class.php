@@ -36,9 +36,19 @@ class ShowFairPage extends AbstractGamePage
 				return;
 			}
 			
+			$dailyKey = 'fair_res_' . $Element;
+			$dailyLimit = (int) PremiumEconomy::get('fair_daily_limit', 3);
+			$n = PremiumEconomy::dailyCount($USER['id'], $dailyKey);
+			
+			if ($n >= $dailyLimit) {
+				$this->printMessage("Has alcanzado el límite de {$dailyLimit} conversiones diarias para este recurso. Se reinicia a medianoche.", true, array('game.php?page=fair', 2));
+				return;
+			}
+			
+			$amount = min($amount, $dailyLimit - $n);
+			
 			$H = PremiumEconomy::get('fair_hours', 6);
 			$P = PremiumEconomy::indexedHourlyMSE($USER['id']);
-			$n = PremiumEconomy::dailyCount($USER['id'], 'fair_res');
 			
 			$totalCost = 0;
 			$resId = 901;
@@ -82,7 +92,7 @@ class ShowFairPage extends AbstractGamePage
 			
 			// Increment daily counter for each conversion
 			for ($k = 0; $k < $amount; $k++) {
-				PremiumEconomy::dailyIncrement($USER['id'], 'fair_res');
+				PremiumEconomy::dailyIncrement($USER['id'], $dailyKey);
 			}
 			
 			// Cooldown
@@ -96,7 +106,47 @@ class ShowFairPage extends AbstractGamePage
 			return;
 		}
 		
-		// Currency trades (2304-2308)
+		// Intercambio de Contenedores <-> Antimateria (2307, 2308)
+		if (in_array($Element, array(2307, 2308))) {
+			$dailyKey = 'fair_trade_' . $Element;
+			$dailyLimit = 3;
+			$n = PremiumEconomy::dailyCount($USER['id'], $dailyKey);
+			
+			if ($n >= $dailyLimit) {
+				$this->printMessage("Has alcanzado el límite de {$dailyLimit} compras diarias para esta oferta. Se reinicia a medianoche.", true, array('game.php?page=fair', 2));
+				return;
+			}
+			
+			$amount = max(1, min($amount, $dailyLimit - $n));
+			
+			$costCur = ($Element == 2307) ? 924 : 922; // 2307: 25 Contenedores -> 2500 Antimateria; 2308: 5000 Antimateria -> 25 Contenedores
+			$baseCost = ($Element == 2307) ? 25 : 5000;
+			$rewardCur = ($Element == 2307) ? 922 : 924;
+			$baseReward = ($Element == 2307) ? 2500 : 25;
+			
+			$totalCost = 0;
+			for ($i = 0; $i < $amount; $i++) {
+				$mult = pow(1.25, $n + $i);
+				$totalCost += (float) ceil($baseCost * $mult);
+			}
+			
+			if (!PremiumEconomy::debit($USER, $costCur, $totalCost, 'fair_trade', $Element, "n={$n};amt={$amount}")) {
+				$this->printMessage(''.$LNG['bd_notres'].'', true, array('game.php?page=fair', 2));
+				return;
+			}
+			
+			$totalReward = $baseReward * $amount;
+			PremiumEconomy::credit($USER, $rewardCur, $totalReward, 'fair_trade', $Element, "amt={$amount}");
+			
+			for ($k = 0; $k < $amount; $k++) {
+				PremiumEconomy::dailyIncrement($USER['id'], $dailyKey);
+			}
+			
+			$this->printMessage(''.$LNG['bd_buy_yes'].'', true, array('game.php?page=fair', 2));
+			return;
+		}
+		
+		// Currency trades (2304-2306)
 		if (TIMESTAMP <= $USER[$resource[$Element]]) {
 			$this->printMessage(''.$LNG['bd_restart_no'].'', true, array('game.php?page=fair', 2));
 			return;
@@ -157,8 +207,7 @@ class ShowFairPage extends AbstractGamePage
 		{
 			$H = PremiumEconomy::get('fair_hours', 6);
 			$P = PremiumEconomy::indexedHourlyMSE($USER['id']);
-			$n = PremiumEconomy::dailyCount($USER['id'], 'fair_res');
-			$mult = pow(PremiumEconomy::get('fair_growth', 1.25), $n);
+			$dailyLimit = (int) PremiumEconomy::get('fair_daily_limit', 3);
 			
 			foreach($reslist['fair'] as $Element)
 			{
@@ -167,28 +216,62 @@ class ShowFairPage extends AbstractGamePage
 				}
 				$bonusElementList = BuildFunctions::bonusElementList($Element);
 				
-				if ($Element == 2301) {
-					$costResources = array(901 => (float) ceil($H * $P * $mult));
-				} elseif ($Element == 2302) {
-					$costResources = array(902 => (float) ceil($H * $P * $mult / 2));
-				} elseif ($Element == 2303) {
-					$costResources = array(903 => (float) ceil($H * $P * $mult / 4));
+				$dailyUsed = null;
+				$elementDailyLimit = null;
+				$mult = 1.0;
+				
+				if (in_array($Element, array(2301, 2302, 2303))) {
+					$n = PremiumEconomy::dailyCount($USER['id'], 'fair_res_' . $Element);
+					$mult = pow(PremiumEconomy::get('fair_growth', 1.25), $n);
+					
+					if ($Element == 2301) {
+						$costResources = array(901 => (float) ceil($H * $P * $mult));
+					} elseif ($Element == 2302) {
+						$costResources = array(902 => (float) ceil($H * $P * $mult / 2));
+					} else {
+						$costResources = array(903 => (float) ceil($H * $P * $mult / 4));
+					}
+					
+					$remainingDaily = max(0, $dailyLimit - $n);
+					$buyable = ($remainingDaily > 0) && BuildFunctions::isElementBuyable($USER, $PLANET, $Element, $costResources);
+					$maxAllowed = min((int) ($pricelist[$Element]['max'] ?? 3), $remainingDaily);
+					$dailyUsed = $n;
+					$elementDailyLimit = $dailyLimit;
+				} elseif (in_array($Element, array(2307, 2308))) {
+					$dailyKey = 'fair_trade_' . $Element;
+					$limitTrades = 3;
+					$n = PremiumEconomy::dailyCount($USER['id'], $dailyKey);
+					$mult = pow(1.25, $n);
+					
+					$costCur = ($Element == 2307) ? 924 : 922;
+					$baseCost = ($Element == 2307) ? 25 : 5000;
+					$costResources = array($costCur => (float) ceil($baseCost * $mult));
+					
+					$remainingDaily = max(0, $limitTrades - $n);
+					$buyable = ($remainingDaily > 0) && BuildFunctions::isElementBuyable($USER, $PLANET, $Element, $costResources);
+					$maxAllowed = min(1, $remainingDaily);
+					$dailyUsed = $n;
+					$elementDailyLimit = $limitTrades;
 				} else {
 					$costResources = BuildFunctions::getElementPrice($USER, $PLANET, $Element);
+					$buyable       = BuildFunctions::isElementBuyable($USER, $PLANET, $Element, $costResources);
+					$maxAllowed    = (int) ($pricelist[$Element]['max'] ?? 1);
 				}
 				
-				$buyable       = BuildFunctions::isElementBuyable($USER, $PLANET, $Element, $costResources);
 				$costOverflow  = BuildFunctions::getRestPrice($USER, $PLANET, $Element, $costResources);
 				$elementBonus  = BuildFunctions::getAvalibleBonus($Element);
 				
 				$fairList[$Element] = array(
-					'maxLevel'      => $pricelist[$Element]['max'],
-					'timeLeft'      => max($USER[$resource[$Element]] - TIMESTAMP, 0),
-					'costResources' => $costResources,
-					'buyable'       => $buyable,
-					'costOverflow'  => $costOverflow,
-					'elementBonus'  => $elementBonus,
-					'AllTech'       => $bonusElementList,
+					'maxLevel'             => $maxAllowed,
+					'timeLeft'             => in_array($Element, array(2307, 2308)) ? 0 : max($USER[$resource[$Element]] - TIMESTAMP, 0),
+					'costResources'        => $costResources,
+					'buyable'              => $buyable,
+					'costOverflow'         => $costOverflow,
+					'elementBonus'         => $elementBonus,
+					'AllTech'              => $bonusElementList,
+					'dailyUsed'            => $dailyUsed,
+					'dailyLimit'           => $elementDailyLimit,
+					'priceIncreasePercent' => round(($mult - 1) * 100),
 				);
 			}
 		}

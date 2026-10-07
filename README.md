@@ -1,48 +1,75 @@
-# New-Star
+# NovaRush MMO 🚀🌌
 
-New-Star is a web browser game engine. The goal of this work is to completely restart 2Moons: a new design, a new gameplay and much more. The open source browsergame framework is based on [2Moons](https://github.com/jkroepke/2Moons). 
+**NovaRush MMO** es una edición personalizada y avanzada del clásico juego de estrategia y conquista espacial en navegador, desarrollado sobre las bases de **New-Star** y **2Moons**.
 
-## Website New-Star
+Esta versión incorpora un motor de combate táctico multicapa rediseñado, un ecosistema de **Inteligencia Artificial para bots autónomos**, modo espectador en tiempo real, eventos dinámicos y un rebalanceo económico integral.
 
-Do you want to know more about us? Then go to our [website](https://yaro2709.github.io/New-Star-website).
+---
 
-## Gallery New-Star
+## 🙏 Créditos & Agradecimientos Especiales (Credits & Acknowledgements)
 
-There is also a [gallery](https://yaro2709.github.io/New-Star-website/gallery) of the project so that anyone can visually familiarize themselves with the project.
+NovaRush MMO no hubiera sido posible sin el talento y la dedicación de los desarrolladores originales que construyeron y modernizaron los cimientos de este motor:
 
-## Community New-Star
+* **Jan Kröpke ([@jkroepke](https://github.com/jkroepke))** — Creador y arquitecto original de **[2Moons](https://github.com/jkroepke/2Moons)** (y las bases históricas de *XG-Project*), quien diseñó la infraestructura del juego en PHP/MySQL que definió a toda una generación de servidores espaciales de código abierto.
+* **Tsvira Yaroslav ([@Yaro2709](https://github.com/Yaro2709))** — Creador de **[New-Star](https://github.com/Yaro2709/New-Star)**, proyecto que redefinió 2Moons v1.8.0 con una interfaz moderna, nuevo diseño visual, compatibilidad actualizada y expansiones mecánicas fundamentales.
 
-Want to keep abreast of the latest developments? Then come visit us on [Discord](https://discord.gg/pu7faEb), [Telegram](https://t.me/newstarnet), [Facebook](https://www.facebook.com/groups/newstarnet), [Instagram](https://www.instagram.com/newstarnet)!
+NovaRush toma ese gran legado como punto de partida y lo evoluciona hacia una experiencia MMO propia, adaptada a nuestros gustos y con sistemas propietarios de juego continuo.
 
-## Repository structure
+---
 
-- [cache] - temporary cached server .tpl webpages
-- [chat] - AJAX ingame client-side chat
-- [includes]
-  - game engine
-  - configuration
-  - administration
-  - database scheme
-  - external libraries
-  - webpages functionality
-- [install]
-  - first installation
-  - database creation
-- [language] - translations: EN, RU
-- [licenses] - open source license schemes
-- [sound] - media files
-- [mods] - modifications that are devoid of support
-- [scripts] - client-side web browser .js scripts
-- [styles] 
-  - webpages .css templates
-  - webpages .tpl templates
-  - fonts
-  - images
- 
-## Local installation
+## ✨ Características Principales de NovaRush MMO
 
-- Clone the repo: `git clone https://github.com/New-Star/New-Star`
-- Install components: `apt install apache2 php7.3 php7.3-gd php7.3-fpm php7.3-mysql php7.3-curl php-ds libapache2-mod mysql-server`
-- Setup mysql: `create user USER identified by PASSWORD; create database DB; grant all privileges on DB.* to USER;`
-- Set write privileges to dirs: `cache/`, `includes/`
-- Run wizard: `127.0.0.1/install/install.php`
+### 🧠 1. Motor de Inteligencia Artificial para Bots (AI Engine)
+* **Toma de Decisiones Autónomas:** Sistema de IA militar y económica capaz de simular jugadores reales en el universo.
+* **Asedios Tácticos y Misiles Interplanetarios (MIP):** Coordinación de salvas de desgaste contra defensas antibalísticas (ABM) antes de lanzar asaltos de flota.
+* **Simulador de Rentabilidad en Tiempo Real:** Algoritmo que evalúa escombros generados, botín robable y pérdidas netas antes de autorizar misiones de ataque y reciclaje coordinado.
+* **Personalidades Tácticas:** Bots con roles específicos, incluyendo perfiles de alta agresividad táctica (ej. *LaParca*).
+
+### ⚔️ 2. Motor de Batalla Avanzado & Matriz de Daño
+* **Matriz de Penetración de Armas:** Sistema de 3 capas (Escudo con regeneración, Blindaje ligero/medio/pesado y Casco).
+* **Armamento Especializado:** Efectividad diferenciada para armamento Láser, Iónico, Plasma y Gravitatorio.
+* **Rebalanceo de Naves Híbridas:** Integración de naves como la *Fragata Pesada* y el *Nómada Negro* para combate sin puntos ciegos.
+
+### 👁️ 3. Modo Espectador en Primera Persona (Spectator Mode)
+* Herramienta administrativa y de depuración integrada (`game.php?page=spectate`) para supervisar en vivo la vista de cualquier jugador o bot sin perder la sesión del administrador.
+
+### 💎 4. Economía Rebalanceada & Contenedores
+* **Contenedores de Producción Real:** Apertura basada en la producción horaria dinámica del imperio ($MSE_M, MSE_C, MSE_D$).
+* **Economía Premium Equilibrada:** Gestión controlada de Materia Oscura y Antimateria sin desvirtuar la progresión militar.
+* **Automatización Industrial:** Soporte para colas de desarrollo optimizadas y gestión eficiente de recursos excedentes.
+
+### 🌐 5. Infraestructura & Conectividad
+* Servidor configurado para alta disponibilidad con túnel persistente Cloudflare Zero Trust con reconexión automática y soporte multiplataforma.
+
+---
+
+## 📂 Estructura del Repositorio
+
+```text
+├── cache/            # Almacenamiento temporal de plantillas compiladas
+├── chat/             # Sistema de mensajería y chat en tiempo real
+├── includes/         # Núcleo del juego, clases, APIs, bots y misiones
+│   ├── classes/      # Clases del motor (Database, FleetFunctions, etc.)
+│   │   ├── bot/      # Núcleo de IA (Kernel, Intel, EngineSimulator, Gateway)
+│   │   ├── cronjob/  # Tareas programadas de bots, eventos y estadísticas
+│   │   └── missions/ # Casos de misión (Ataques, Reciclajes, MIP, Espionaje)
+├── install/          # Asistente de instalación de base de datos
+├── language/         # Traducciones del sistema (Español, Inglés, etc.)
+├── scripts/          # Lógica del cliente y scripts de automatización
+├── styles/           # Temas visuales, estilos CSS, plantillas TPL y recursos
+└── tools/            # Herramientas de mantenimiento, auditoría e inspección
+```
+
+---
+
+## 🛠️ Requisitos de Instalación
+
+* **Servidor Web:** Apache 2.4 o Nginx
+* **PHP:** PHP 7.4+ (con extensiones `pdo_mysql`, `gd`, `curl`, `mbstring`, `json`)
+* **Base de Datos:** MySQL 5.7+ o MariaDB 10.3+
+
+---
+
+## 📜 Licencias & Reconocimientos
+
+NovaRush MMO se distribuye bajo los términos y licencias de código abierto heredados de **2Moons** (GNU GPL v3 / Licencias correspondientes) y **New-Star**. Todos los derechos sobre las marcas y conceptos originales pertenecen a sus respectivos autores.

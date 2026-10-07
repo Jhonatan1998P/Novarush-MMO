@@ -431,7 +431,7 @@ function calculateAttack(&$attackers, &$defenders, $FleetTF, $DefTF)
 				$max_removePoints = floor($amount * $Max_dex * ($defenseShoting[$CombatCaps[$element]['type_defend']]+($defenseAmountRF * $minimize_RF)) / $attackAmount[$fleetID] * $attackPct[$fleetID]);
 				$max_removePoints += min($max_removePoints, floor($max_removePoints*$CV*$CR)); // цепная реакция
 				
-				$amount_dex 	= min($attackAmount[$fleetID], min($max_removePoints * rand(1,3), ($attackAmount[$fleetID] * ((($defenseDamage['total'] * $attackPct[$fleetID])) / (($attArray[$fleetID][$element]['def']/10 + $attArray[$fleetID][$element]['shield'])))))); // число максимально уничтоженных за залп игнорируя скарострел
+				$amount_dex 	= min($attackAmount[$fleetID], min($max_removePoints * rand(1,3), ($attackAmount[$fleetID] * ((($defenseDamage['total'] * $attackPct[$fleetID])) / max(1, ($attArray[$fleetID][$element]['def']/10 + $attArray[$fleetID][$element]['shield'])))))); // число максимально уничтоженных за залп игнорируя скарострел
 				$procent_wars	= ($amount_dex / $attackAmount[$fleetID]) * max(0.5,$Fcus); // процент стражающихся пачки по которой стреляют
 				
 				$attacker_shield  += min(round($procent_wars * $attArray[$fleetID][$element]['shield']), $defender_moc);
@@ -519,7 +519,7 @@ function calculateAttack(&$attackers, &$defenders, $FleetTF, $DefTF)
 				$max_removePoints = floor($amount * $Max_dex * ($attackShoting[$CombatCaps[$element]['type_defend']]+($attackAmountRF * $minimize_RF)) / $defenseAmount[$fleetID] * $defensePct[$fleetID]);
 				$max_removePoints += min($max_removePoints, floor($max_removePoints*$CV*$CR)); // цепная реакция
 				
-				$amount_dex 	= min($defenseAmount[$fleetID], min($max_removePoints * rand(1,3), ($defenseAmount[$fleetID] * ((($attackDamage['total'] * $defensePct[$fleetID])) / (($defArray[$fleetID][$element]['def']/10 + $defArray[$fleetID][$element]['shield'])))))); // число максимально уничтоженных за залп игнорируя скарострел
+				$amount_dex 	= min($defenseAmount[$fleetID], min($max_removePoints * rand(1,3), ($defenseAmount[$fleetID] * ((($attackDamage['total'] * $defensePct[$fleetID])) / max(1, ($defArray[$fleetID][$element]['def']/10 + $defArray[$fleetID][$element]['shield'])))))); // число максимально уничтоженных за залп игнорируя скарострел
 				$procent_wars	= ($amount_dex / $defenseAmount[$fleetID]) * max(0.5,$Fcus); // процент стражающихся пачки по которой стреляют
 				
 				$defender_shield += min(round($procent_wars * $defArray[$fleetID][$element]['shield']), $attacker_moc);
@@ -579,7 +579,16 @@ function calculateAttack(&$attackers, &$defenders, $FleetTF, $DefTF)
 				$TRES['defender'] -= $pricelist[$element]['cost'][902] * $amount ;
 
 				$lost = $STARTDEF[$element] - $amount;
-				$giveback = round($lost * (rand(50+$RD, 70+$RD) / 100));
+
+				// Regla para eventos de guerra (NPC 999 - Fortaleza Ancestral):
+				// Si el atacante gana el combate ($won == 'a'), no hay reconstrucción de defensas (0%)
+				$isBossDef = (isset($defender['player']['id']) && $defender['player']['id'] == 999);
+				if ($isBossDef && $won == 'a') {
+					$giveback = 0;
+				} else {
+					$giveback = round($lost * (rand(50+$RD, 70+$RD) / 100));
+				}
+
 				$defenders[$fleetID]['unit'][$element] += $giveback;
 				$DRESDefs['metal'] 	 += $pricelist[$element]['cost'][901] * ($lost - $giveback) ;
 				$DRESDefs['crystal'] += $pricelist[$element]['cost'][902] * ($lost - $giveback) ;

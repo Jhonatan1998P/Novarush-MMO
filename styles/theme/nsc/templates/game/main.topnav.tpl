@@ -1,4 +1,11 @@
 <div id="header">
+{if !empty($isSpectator)}
+    <!-- BOTÓN FLOTANTE DISCRETO PARA RETORNAR DE MODO ESPECTADOR SIN ALTERAR EL LAYOUT -->
+    <div id="spectator_return_pill" style="position: fixed; bottom: 20px; right: 20px; background: rgba(20, 25, 35, 0.95); border: 2px solid #ffd700; border-radius: 30px; padding: 6px 14px; box-shadow: 0 4px 15px rgba(0,0,0,0.85); z-index: 999999; display: flex; align-items: center; gap: 8px; font-family: Arial, sans-serif; font-size: 12px; color: #fff;">
+        <span>👁️ Viendo a <strong style="color: #ffd700;">{$spectatorTarget}</strong></span>
+        <a href="game.php?page=spectate&amp;target=return" style="background: #ffd700; color: #000; font-weight: bold; padding: 4px 12px; border-radius: 12px; text-decoration: none; font-size: 11px; margin-left: 6px; box-shadow: 0 2px 5px rgba(0,0,0,0.4);">⬅️ Volver a mi cuenta</a>
+    </div>
+{/if}
     <div id="top_nav" class="otopnav"> 
         <a title="{$LNG.lm_overview}" href="game.php?page=overview">
             <img src="{$dpath}img/general/logo.png" class="game_logo">

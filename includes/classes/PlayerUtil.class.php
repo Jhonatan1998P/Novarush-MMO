@@ -341,9 +341,9 @@ class PlayerUtil
 		$maxTemperature = $parentPlanet['temp_max'] - mt_rand(10, 45);
 		$minTemperature = $parentPlanet['temp_min'] - mt_rand(10, 45);
 
-		if(isset($moonName))
+		if(!isset($moonName) || empty($moonName))
 		{
-			$moonName		= $LNG['type_planet_3'];
+			$moonName		= !empty($LNG['type_planet_3']) ? $LNG['type_planet_3'] : 'Luna';
 		}
 
 		$sql	= "INSERT INTO %%PLANETS%% SET

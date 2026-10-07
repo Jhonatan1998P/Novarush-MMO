@@ -431,7 +431,15 @@ div.shortcut-edit{
 	    -moz-border-radius: 6px;
 	    -webkit-border-radius: 6px;
 	    border-radius: 6px;
-	    animation-duration: 0.8s;
+	    touch-action: manipulation;
+	    -webkit-tap-highlight-color: rgba(0, 0, 0, 0);
+	    user-select: none;
+}
+.fleet_my_planet_kord * {
+	    pointer-events: none;
+}
+.shortcut_block {
+	    touch-action: manipulation;
 }
 .fleetstep1-1{
 	    height: 194px;

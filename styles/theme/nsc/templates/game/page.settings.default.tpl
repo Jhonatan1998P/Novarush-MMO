@@ -161,7 +161,11 @@
                             <div class="content_box">
                                 <div class="clear"></div>
                                 <label class="left_label" style="width: 300px;">{$LNG.op_activate_vacation_mode}</label>
+                                {if !empty($vacationLocked)}
+                                <span style="color: #ff6666; line-height: 20px;">{$LNG.op_cant_activate_vacation_mode_cooldown|sprintf:$vacationUntil}</span>
+                                {else}
                                 <input name="vacation" type="checkbox" value="1">
+                                {/if}
                                 <div class="clear"></div>
                                 <label class="left_label" style="width: 300px;">{$LNG.op_dlte_account}</label>
                                 <input name="delete" type="checkbox" value="1" {if $delete > 0}checked="checked"{/if}>

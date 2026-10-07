@@ -1,64 +1,141 @@
-<ul id="rules">
-	<li>
-		<h1>1. Accounts</h1>
-		<p>Each player is allowed to control a single account. Each account is entitled to be played by a single player at a time, account sitting being the only exception.
-Account sitting entitles a given player to have his account watched over under the following regulations:
-<br />
-<br />- Support must be informed before the sitting takes place, by opening a ticket.
-<br />- No Fleet movements are allowed while the account is being sat unless an attack that may raid or crash the account is incoming, in which case you may save your fleet(s) by deploying or transporting to a planet or to a moon owned by the account being sat. You may not ninja an incoming attack in cases where you would need to move a fleet for it.
-<br />- An account may only be sat for a maximum period of 48 continuous hours (admin permission needs to be obtained in cases where a time extension is needed).
-<br /><br />The sitter may, on the account being sat and while the sitting period lasts:
+<div class="rules-container">
+    <div class="alert alert-info border-info mb-4" role="alert" style="background: rgba(13, 110, 253, 0.12); border-left: 4px solid #0d6efd; color: #d0e2ff;">
+        <h5 class="alert-heading font-weight-bold" style="color: #62b1f6;">🛡️ Código de Honor y Juego Limpio de NovaRush</h5>
+        <p class="mb-0">El objetivo de NovaRush es ofrecer una experiencia de conquista espacial competitiva, equilibrada y divertida para todos los comandantes. Estas reglas existen para garantizar la igualdad de condiciones y proteger la diversión colectiva de la comunidad. El desconocimiento de estas normas no exime de su cumplimiento.</p>
+    </div>
 
-<br />- Spend Resources on buildings or researches.
-<br />- Fleetsave any ship that imminently endangered by an incoming attacking fleet, only with a deployment or transport mission to one of the accounts own planets.
-<br />- Place an account into vacation mode.
+    <!-- Regla 1 -->
+    <div class="card bg-dark text-light border-secondary mb-4 shadow-sm">
+        <div class="card-header bg-secondary text-white d-flex justify-content-between align-items-center">
+            <h5 class="mb-0 font-weight-bold">1. Cuentas, Conexiones Compartidas y Cuidado (Sitting)</h5>
+            <span class="badge badge-info" style="font-size: 12px;">Gestión de Cuentas</span>
+        </div>
+        <div class="card-body">
+            <p><strong>1.1. Una cuenta por jugador:</strong> Cada comandante puede poseer y operar únicamente <strong>una cuenta por universo</strong>. El uso o control de múltiples cuentas (multicuentas) está estrictamente prohibido y conlleva el bloqueo de todas las cuentas involucradas.</p>
+            
+            <p><strong>1.2. Conexiones o IPs compartidas:</strong> Si dos o más jugadores acceden desde la misma red, domicilio, oficina o centro de estudios, <u>deben informar a la Administración mediante un ticket de soporte</u>. Las cuentas que comparten conexión tienen terminantemente prohibido interactuar entre sí (no pueden realizar ataques mutuos, comercio directo, reciclaje coordinado de escombros ni defensa conjunta ACS).</p>
+            
+            <p><strong>1.3. Cuidado de Cuenta (Account Sitting):</strong> Si necesitas ausentarte por motivos personales, otro comandante puede vigilar tu cuenta temporalmente bajo las siguientes condiciones:</p>
+            <ul>
+                <li><strong>Duración máxima:</strong> Hasta <strong>48 horas continuas</strong>. Si requieres una extensión excepcional por causa mayor, debes solicitar autorización previa al Staff mediante ticket.</li>
+                <li><strong>Aviso obligatorio:</strong> Se debe abrir un ticket de soporte <strong>antes</strong> de iniciar el sitting, indicando el nombre del cuidador.</li>
+                <li><strong>Enfriamiento entre sittings:</strong> No se puede cuidar una cuenta si cuidaste otra en los últimos 7 días, ni una cuenta puede ser cuidada más de una vez cada 7 días.</li>
+                <li><strong>Acciones permitidas al cuidador:</strong>
+                    <ul>
+                        <li>Gastar los recursos ya disponibles en el planeta en colas de construcción o investigación.</li>
+                        <li>Salvar flotas en peligro inminente por ataque entrante (fleetsave) exclusivamente mediante misión de despliegue o transporte hacia colonias o lunas propias de la cuenta cuidada.</li>
+                        <li>Activar el Modo Vacaciones.</li>
+                    </ul>
+                </li>
+                <li><strong>Acciones estrictamente prohibidas al cuidador:</strong>
+                    <ul>
+                        <li>Lanzar ataques contra otros jugadores o participar en misiones ofensivas.</li>
+                        <li>Transferir recursos hacia cuentas externas o comerciar.</li>
+                        <li>Desactivar el Modo Vacaciones sin autorización del Staff.</li>
+                    </ul>
+                </li>
+            </ul>
+        </div>
+    </div>
 
-<br /><br />The sitter may not:
+    <!-- Regla 2 -->
+    <div class="card bg-dark text-light border-secondary mb-4 shadow-sm">
+        <div class="card-header bg-secondary text-white d-flex justify-content-between align-items-center">
+            <h5 class="mb-0 font-weight-bold">2. Pushing y Comercio Justo</h5>
+            <span class="badge badge-warning text-dark" style="font-size: 12px;">Economía y Comercio</span>
+        </div>
+        <div class="card-body">
+            <p><strong>2.1. Definición de Pushing:</strong> Se considera pushing cualquier transferencia desproporcionada, artificial o ventajosa de recursos desde una cuenta de menor puntuación hacia una cuenta de mayor puntuación sin una contraprestación equivalente.</p>
+            
+            <p><strong>Prácticas estrictamente prohibidas:</strong></p>
+            <ul>
+                <li>Envíos unilaterales de recursos ("donaciones" o "regalos") de una cuenta de menor ranking a una más fuerte.</li>
+                <li>Estrellar flotas intencionalmente contra flotas o defensas de un jugador de mayor rango para que este se beneficie recolectando los escombros (flotas suicidas pactadas).</li>
+                <li>Préstamos de recursos o flotas que no sean devueltos dentro de un plazo máximo de <strong>48 horas</strong>.</li>
+                <li>Extorsión, pago de "tributos" o rescates en recursos hacia jugadores más fuertes.</li>
+            </ul>
 
-<br />- Transport resources, neither between planets/moons of the account being sat, nor to any other planet/moon.
-<br />- Spend Resources on defensive structures or ships.
-<br />- Sit an account if he sat another one within the previous 7 days.
-<br />- Sit an account that was sat within the previous 7 days.
-<br />- Remove an account from vacation mode.</p>
-	</li>
-	<li>
-		<h1>2. Pushing</h1>
-		<p>It is not allowed for any account to obtain unfair profit out of a lower ranked account in a matter of resources.
-This includes but is not limited to:
+            <p><strong>2.2. Comercio y Tasas de Intercambio:</strong> Todo intercambio de recursos entre jugadores debe completarse dentro de las 48 horas posteriores al envío inicial. Las transacciones deben realizarse dentro de los márgenes de ratios oficiales del universo (ratios base de mercado recomendados entre <strong>3:2:1</strong> y <strong>2:1:1</strong> para Metal, Cristal y Deuterio).</p>
+        </div>
+    </div>
 
-<br />- Resources sent from a lower ranked account to a higher ranked one with nothing tangible in return.
-<br />- A player crashing his fleet into a higher ranked one for the higher ranked one to keep the Debris Field, and thus profiting from it.
-<br />- Loans that are not returned within 48 hours.
-<br />- Trades in which the higher ranked player does not return the resources within 48 hours.
-<br />- Players answering to a higher ranked player extortion by paying resources.
-<br />- Trades that mean an unfair profit to the higher ranked player by falling outside the following range of ratios:
-<br />
-<br />3:2:1 Where each unit of deuterium is worth 2 units of crystal or 3 units of metal.
-<br />2:1:1 Where each unit of deuterium is worth 1 unit of crystal or 2 units of metal.</p>
-	</li>
-	<li>
-		<h1>3. Bashing</h1>
-		<p>It is not allowed to attack any given planet or moon owned by a player over 6 times in a single 24 hours period.
-Bashing is only allowed when your Alliance is at war with another Alliance. The war must be announced in the forum and both leaders must agree to the terms.
-The bashing rule only applies for active users and excludes misile attacks and espionage missions.</p>
-	</li>
-	<li>
-		<h1>4. Bugusing</h1>
-		<p>Using a bug for anyones profit intentionally or not reporting a bug intentionally is strictly forbidden.</p>
-	</li>
-	<li>
-		<h1>5. Forbidden content</h1>
-		<p>Implying that you are going to locate and harm another player, is forbidden.
-<br />Also spam, mass sending messages, and advertisements of foreign games/products arent allowed.</p>
-	</li>
-	<li>
-		<h1>6. Wars</h1>
-		<p>After the Leaders of the alliances both agree to the war, it is officially on. And will continue until one of the alliances cancels it. To officially cancel the war they need to cancel the war pact from in-game, and announce it in the thread they started initially.
-While the war is on, the bashing rule between the alliances involved does not count. Meaning any members belonging to the alliances in said war can be attack an infinite amount of times with out punishment.
-If either alliance gives up and cancels the war, the bashing rule will take effect again, and any members breaking it after the war has ended with be punished with a 1 day ban, More if the degree of attack is extremely high.
-<br />
-If the opposing alliance has a fleet in flight. And the war is canceled before they arrive. They will NOT be punished for that attack. But any fleet sent after the war cancellation will count toward the bashing rule.
-<br /><br />For New Wars one of the leaders need to create a new thread in the war/diplomacy section.
-There they can set any specific rules or terms, they want for the war. Any rules set in place, and are agreed to by the opposing alliance must be fallowed, and must not contradict any rules set here.</p>
-	</li>
-</ul>
+    <!-- Regla 3 -->
+    <div class="card bg-dark text-light border-secondary mb-4 shadow-sm">
+        <div class="card-header bg-secondary text-white d-flex justify-content-between align-items-center">
+            <h5 class="mb-0 font-weight-bold">3. Bashing (Límite de Ataques)</h5>
+            <span class="badge badge-danger" style="font-size: 12px;">Combate</span>
+        </div>
+        <div class="card-body">
+            <p><strong>3.1. Límite de Ataques:</strong> No está permitido atacar el mismo planeta o luna de un jugador activo más de <strong>6 veces en un lapso de 24 horas continuas</strong>.</p>
+            
+            <p><strong>3.2. Excepciones que NO cuentan como Bashing:</strong></p>
+            <ul>
+                <li>Las misiones de <strong>Espionaje</strong> (sondas).</li>
+                <li>Los ataques con <strong>Misiles Interplanetarios</strong>.</li>
+                <li>Los ataques contra jugadores <strong>inactivos</strong> (marcados en la galaxia con 'i' o 'I').</li>
+                <li>Guerras oficiales declaradas y activas entre Alianzas (ver Regla 4).</li>
+            </ul>
+            <div class="alert alert-warning text-dark mb-0 py-2">
+                <strong>Aclaración ACS:</strong> Los ataques realizados en Sistema de Combate en Alianza (ACS) se computan dentro de este límite por cada flota independiente que impacte contra el objetivo.
+            </div>
+        </div>
+    </div>
+
+    <!-- Regla 4 -->
+    <div class="card bg-dark text-light border-secondary mb-4 shadow-sm">
+        <div class="card-header bg-secondary text-white d-flex justify-content-between align-items-center">
+            <h5 class="mb-0 font-weight-bold">4. Guerras entre Alianzas</h5>
+            <span class="badge badge-primary" style="font-size: 12px;">Diplomacia y Alianzas</span>
+        </div>
+        <div class="card-body">
+            <p><strong>4.1. Validez de la Guerra:</strong> Para que una guerra sea reconocida oficialmente en el universo, debe ser declarada formalmente a través del sistema de diplomacia del juego o en el foro/comunidad oficial por los líderes de ambas alianzas.</p>
+            
+            <p><strong>4.2. Suspensión del Bashing:</strong> Mientras la guerra esté oficialmente activa, el límite de Bashing queda anulado exclusivamente entre los miembros pertenecientes a las dos alianzas beligerantes. Ambas partes pueden atacarse sin límite de ataques durante el conflicto.</p>
+            
+            <p><strong>4.3. Finalización de la Guerra:</strong> La guerra finaliza cuando una de las partes se rinde formalmente, se acuerda la paz o se cancela el pacto de guerra en el sistema. Al momento de la cancelación, la regla de Bashing se restablece de inmediato. Las flotas enviadas antes de la cancelación que ya se encuentren en vuelo no serán sancionadas al llegar a destino.</p>
+        </div>
+    </div>
+
+    <!-- Regla 5 -->
+    <div class="card bg-dark text-light border-secondary mb-4 shadow-sm">
+        <div class="card-header bg-secondary text-white d-flex justify-content-between align-items-center">
+            <h5 class="mb-0 font-weight-bold">5. Errores del Juego (Bugusing), Exploits y Bots</h5>
+            <span class="badge badge-danger" style="font-size: 12px;">Seguridad y Software</span>
+        </div>
+        <div class="card-body">
+            <p><strong>5.1. Aprovechamiento de Bugs:</strong> Aprovechar cualquier fallo de programación, exploit o vulnerabilidad técnica en beneficio propio o ajeno está penado con suspensión permanente de la cuenta.</p>
+            
+            <p><strong>5.2. Obligación de Notificación:</strong> Todo comandante que detecte un fallo técnico o error inesperado debe reportarlo inmediatamente mediante un ticket de soporte. Quienes colaboren reportando fallos de forma constructiva recibirán reconocimiento y recompensas por parte de la Administración.</p>
+            
+            <p><strong>5.3. Prohibición de Bots y Automatizaciones:</strong> Queda terminantemente prohibido el empleo de bots, scripts no autorizados, macros de auto-recolección, extensiones de auto-ataque o cualquier software que simule acciones humanas o juegue de forma automática.</p>
+        </div>
+    </div>
+
+    <!-- Regla 6 -->
+    <div class="card bg-dark text-light border-secondary mb-4 shadow-sm">
+        <div class="card-header bg-secondary text-white d-flex justify-content-between align-items-center">
+            <h5 class="mb-0 font-weight-bold">6. Respeto, Convivencia y Contenido Prohibido</h5>
+            <span class="badge badge-info" style="font-size: 12px;">Comunidad y Convivencia</span>
+        </div>
+        <div class="card-body">
+            <p><strong>6.1. Respeto entre Comandantes:</strong> La rivalidad táctica y la guerra son la esencia de NovaRush, pero el respeto personal es indispensable. No se tolerarán insultos graves, xenofobia, amenazas en la vida real, acoso continuado ni lenguaje de odio en mensajes privados o chat público.</p>
+            
+            <p><strong>6.2. Spam y Publicidad Externa:</strong> Queda prohibido el envío masivo de mensajes (spam), cadenas, enlaces de malware o publicidad de servicios, productos o juegos externos.</p>
+            
+            <p><strong>6.3. Suplantación de Identidad:</strong> Queda terminantemente prohibido hacerse pasar por Administradores, Operadores o miembros del Staff del juego.</p>
+        </div>
+    </div>
+
+    <!-- Regla 7 -->
+    <div class="card bg-dark text-light border-secondary mb-4 shadow-sm">
+        <div class="card-header bg-secondary text-white d-flex justify-content-between align-items-center">
+            <h5 class="mb-0 font-weight-bold">7. Sanciones, Tickets de Soporte y Apelaciones</h5>
+            <span class="badge badge-success" style="font-size: 12px;">Administración</span>
+        </div>
+        <div class="card-body">
+            <p><strong>7.1. Aplicación de Sanciones:</strong> El incumplimiento de cualquiera de estas normas resultará en advertencias formales, bloqueos temporales (con o sin modo vacaciones) o el bloqueo definitivo de la cuenta, según la gravedad y reincidencia de la falta.</p>
+            
+            <p><strong>7.2. Apelaciones Constructivas:</strong> Si consideras que una sanción aplicada fue errónea o deseas aclarar una situación con la Administración, comunícate exclusivamente a través del <strong>Sistema de Tickets de Soporte</strong> manteniendo una actitud respetuosa y abierta al diálogo. El equipo de NovaRush revisará tu caso con imparcialidad y transparencia.</p>
+        </div>
+    </div>
+</div>

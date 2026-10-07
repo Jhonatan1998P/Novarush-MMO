@@ -50,7 +50,8 @@ class FlyingFleetHandler
 		$sql = 'SELECT %%FLEETS%%.*
 		FROM %%FLEETS_EVENT%%
 		INNER JOIN %%FLEETS%% ON fleetID = fleet_id
-		WHERE `lock` = :token;';
+		WHERE `lock` = :token
+		ORDER BY %%FLEETS_EVENT%%.`time` ASC, %%FLEETS%%.fleet_mission ASC;';
 
 		$fleetResult = $db->select($sql, array(
 			':token'	=> $this->token

@@ -53,7 +53,7 @@
                   {foreach $shortcutList as $shortcutID => $shortcutRow}
                   <div class="shortcut-colum shortcut_block shortcut-isset">
                      <div class="shortcut-link" style="display: block;">      
-                        <a href="javascript:setTarget({$shortcutRow.galaxy},{$shortcutRow.system},{$shortcutRow.planet},{$shortcutRow.type});updateVars();">
+                        <a href="javascript:void(0);" onclick="setTarget({$shortcutRow.galaxy},{$shortcutRow.system},{$shortcutRow.planet},{$shortcutRow.type});updateVars();" class="shortcut-link-action" data-galaxy="{$shortcutRow.galaxy}" data-system="{$shortcutRow.system}" data-planet="{$shortcutRow.planet}" data-type="{$shortcutRow.type}">
                             <span class="shortcut_link_name">{$shortcutRow.name}</span>
                             <span class="shortcut_link_kord">{if $shortcutRow.type == 1}{$LNG.fl_planet_shortcut}{elseif $shortcutRow.type == 2}{$LNG.fl_debris_shortcut}{elseif $shortcutRow.type == 3}{$LNG.fl_moon_shortcut}{/if} [{$shortcutRow.galaxy}:{$shortcutRow.system}:{$shortcutRow.planet}]</span>
                         </a>
@@ -63,8 +63,8 @@
                         <div class="shortcut-delete" title="{$LNG.fl_dlte_shortcut}"></div>
                      </div>
                      <div class="shortcut-edit" style="display: none;">
-                        <input type="text" class="shortcut-input shortcut-input-system" name="shortcut[{$shortcutID}][galaxy]" value="{$shortcutRow.galaxy}" size="3" maxlength="2" placeholder="{$shortcutRow.galaxy}" pattern="[0-9]*">
-                        <input type="text" class="shortcut-input shortcut-input-system" name="shortcut[{$shortcutID}][system]" value="{$shortcutRow.system}" size="3" maxlength="4" placeholder="{$shortcutRow.system}" pattern="[0-9]*">
+                        <input type="text" class="shortcut-input shortcut-input-system" name="shortcut[{$shortcutID}][galaxy]" value="{$shortcutRow.galaxy}" size="3" maxlength="2" placeholder="{$shortcutRow.galaxy}" pattern="[0-9]*">:
+                        <input type="text" class="shortcut-input shortcut-input-system" name="shortcut[{$shortcutID}][system]" value="{$shortcutRow.system}" size="3" maxlength="4" placeholder="{$shortcutRow.system}" pattern="[0-9]*">:
                         <input type="text" class="shortcut-input shortcut-input-system" name="shortcut[{$shortcutID}][planet]" value="{$shortcutRow.planet}" size="3" maxlength="2" placeholder="{$shortcutRow.planet}" pattern="[0-9]*">
                      </div>
                      <div class="shortcut-edit" style="display: none;">
@@ -79,7 +79,7 @@
                   </div>
                   {/foreach}
                </div>
-               <div class="shortcut-edit shortcut-new">
+               <div class="shortcut-edit shortcut-new" style="display: none;">
                   <div class="shortcut-colum shortcut_block">
                      <div class="shortcut-link" style="display: none;">
                      </div>
@@ -99,23 +99,24 @@
                      </div>
                   </div>
                </div>
-            </div>
-            <div class="fleet_my_planet_kord shortcut-edit" style="line-height: 15px; height: 13px; text-align: right; width: 15px; font-size: 30px; font-family: BicubikRegular, Arial, Geneva, sans-serif; text-shadow: rgba(0, 0, 0, 0.55) 1px 2px; color: rgb(9, 29, 46); cursor: pointer; display: none;" onclick="AddShortcuts();return false">        	
-                <span>+</span>            
+               <div class="shortcut-edit shortcut-add-box" style="display: none; clear: both; padding: 6px 4px; text-align: left;">
+                  <a href="#" onclick="AddShortcuts();return false;" style="display: inline-block; padding: 4px 10px; background: rgba(9, 29, 46, 0.8); border: 1px solid #143c64; color: #62b1f6; border-radius: 3px; font-size: 12px; text-decoration: none;">+ {$LNG.fl_shortcut_add|default:'+ Agregar atajo'}</a>
+               </div>
             </div>
 	    
     <div class="gray_ship1"><div class="gray_ship3">
     	{$LNG.fl_my_planets}
    </div> </div> 
 		
-                    {foreach $colonyList as $ColonyRow}
-            <div class="fleet_my_planet_kord" onclick="setTarget({$ColonyRow.galaxy},{$ColonyRow.system},{$ColonyRow.planet},{$ColonyRow.type});updateVars();">
+            {foreach $colonyList as $ColonyRow}
+            <div class="fleet_my_planet_kord" data-galaxy="{$ColonyRow.galaxy}" data-system="{$ColonyRow.system}" data-planet="{$ColonyRow.planet}" data-type="{$ColonyRow.type}" onclick="setTarget({$ColonyRow.galaxy},{$ColonyRow.system},{$ColonyRow.planet},{$ColonyRow.type});updateVars();" role="button" tabindex="0">
             <img src="{$dpath}planeten/planet2d/{$ColonyRow.image}.png" class="fleestep1-13">
                <span class="fleet_my_planet_kord_kord">[{$ColonyRow.galaxy}:{$ColonyRow.system}:{$ColonyRow.planet}]</span>
                <span class="fleet_my_planet_kord_name">{$ColonyRow.name} {if $ColonyRow.type == 3}{$LNG.fl_moon_shortcut}{/if}</span>
             </div>
             {foreachelse}
-            {/foreach}			   
+            {/foreach}
+            <div class="clear"></div>
             {if $ACSList}
             <table class="tablesorter ally_ranks" style="table-layout: fixed;">
                <tr style="height:20px;">
@@ -150,8 +151,5 @@
       shortCutRows	= {$themeSettings.SHORTCUT_ROWS_ON_FLEET1};
       fl_no_shortcuts	= '{$LNG.fl_no_shortcuts}';
    </script>
-</div>
-</div>
 <div class="clear"></div>
-</div>
 {/block}

@@ -65,7 +65,8 @@ class ShowBuildingsPage extends AbstractGamePage
 				$BuildEndTime	= TIMESTAMP;
 				$NewQueueArray	= array();
 				foreach($CurrentQueue as $ListIDArray) {
-					$BuildEndTime	   += BuildFunctions::getBuildingTime($USER, $PLANET, $ListIDArray[0], NULL, $ListIDArray[4] == 'destroy');
+					$levelForTime	   = ($ListIDArray[4] == 'destroy') ? $ListIDArray[1] : ($ListIDArray[1] - 1);
+					$BuildEndTime	   += BuildFunctions::getBuildingTime($USER, $PLANET, $ListIDArray[0], NULL, $ListIDArray[4] == 'destroy', $levelForTime);
 					$ListIDArray[3]		= $BuildEndTime;
 					$NewQueueArray[]	= $ListIDArray;					
 				}
@@ -112,7 +113,8 @@ class ShowBuildingsPage extends AbstractGamePage
 				if($Element == $ListIDArray[0])
 					continue;
 					
-				$BuildEndTime       += BuildFunctions::getBuildingTime($USER, $PLANET, $ListIDArray[0], NULL, $ListIDArray[4] == 'destroy');
+				$levelForTime       = ($ListIDArray[4] == 'destroy') ? $ListIDArray[1] : ($ListIDArray[1] - 1);
+				$BuildEndTime       += BuildFunctions::getBuildingTime($USER, $PLANET, $ListIDArray[0], NULL, $ListIDArray[4] == 'destroy', $levelForTime);
 				$ListIDArray[3]		= $BuildEndTime;
 				$NewQueueArray[]	= $ListIDArray;					
 			}
@@ -162,7 +164,8 @@ class ShowBuildingsPage extends AbstractGamePage
 				if($Element == $ListIDArray[0] || empty($ListIDArray[0]))
 					continue;
 
-				$BuildEndTime       += BuildFunctions::getBuildingTime($USER, $PLANET, $ListIDArray[0]);
+				$levelForTime       = ($ListIDArray[4] == 'destroy') ? $ListIDArray[1] : ($ListIDArray[1] - 1);
+				$BuildEndTime       += BuildFunctions::getBuildingTime($USER, $PLANET, $ListIDArray[0], NULL, $ListIDArray[4] == 'destroy', $levelForTime);
 				$ListIDArray[3]		= $BuildEndTime;
 				$NewQueueArray[]	= $ListIDArray;				
 			}
@@ -272,7 +275,8 @@ class ShowBuildingsPage extends AbstractGamePage
 			if($pricelist[$Element]['max'] < $BuildLevel)
 				return;
 				
-			$elementTime    			= BuildFunctions::getBuildingTime($USER, $PLANET, $Element, NULL, !$AddMode, $BuildLevel);
+			$levelForTime    			= $AddMode ? ($BuildLevel - 1) : $BuildLevel;
+			$elementTime    			= BuildFunctions::getBuildingTime($USER, $PLANET, $Element, NULL, !$AddMode, $levelForTime);
 			$BuildEndTime				= $CurrentQueue[$ActualCount - 1][3] + $elementTime;
 			$CurrentQueue[]				= array($Element, $BuildLevel, $elementTime, $BuildEndTime, $BuildMode);
 			$PLANET['b_building_id']	= serialize($CurrentQueue);		

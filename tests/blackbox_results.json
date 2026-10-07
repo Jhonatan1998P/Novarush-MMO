@@ -1,0 +1,53 @@
+{
+    "passed": 5,
+    "failed": 0,
+    "bugs_found": [
+        {
+            "file": "StrikePlanner.class.php:689",
+            "severity": "ALTA",
+            "description": "Discrepancia de clave: StrikePlanner lee $intel['tech'] pero IntelStore::getIntel() entrega $intel['techs']. Provoca que las tecnolog\u00edas de armadura (111) y escudo (110) del defensor siempre se asuman en 0, subestimando la salud de defensas enemigas en salvas MIP."
+        },
+        {
+            "file": "StrikePlanner.class.php:889,907",
+            "severity": "CR\u00cdTICA",
+            "description": "Estructura de array: executeParallelFarming busca $cData[$resource[202]] directamente sobre el array de planeta de EmpireState (donde las naves est\u00e1n en $cData['data'][$resource[202]]). Adem\u00e1s pasa $originColony a buildTacticalStrikeFleet en vez de $originColony['data']. Provoca que las flotas de granjeo paralelo siempre se calculen con 0 cargueros y NUNCA se lancen granjeos paralelos."
+        },
+        {
+            "file": "FleetsaveCalculator.class.php:73-96",
+            "severity": "MEDIA",
+            "description": "Falta de validaci\u00f3n de amenaza cruzada: FleetsaveCalculator eval\u00faa destino por distancia y luna pero no consulta el ThreatBoard para descartar planetas propios que tambi\u00e9n tengan flotas hostiles entrantes, incumpliendo la regla 'No FS hacia otra entrante'."
+        },
+        {
+            "file": "FleetsaveCalculator.class.php:188 & BotKernel.class.php:228",
+            "severity": "MEDIA",
+            "description": "Recall incondicional: Se agenda un fleetsave_recall a threatArrivalTime + 120s ciegamente sin evaluar si la ventana de aterrizaje es segura o si el atacante sigue en vuelo\/retrasado."
+        }
+    ],
+    "tests": [
+        {
+            "name": "1.1 Turno de BotKernel ejecuta sin excepciones fatales ni fallos de bloqueo",
+            "status": "PASS",
+            "details": "Turno completado: 0 decisiones registradas"
+        },
+        {
+            "name": "1.2 Lock consultivo de MySQL liberado correctamente (sin bloqueos hu\u00e9rfanos\/deadlocks)",
+            "status": "PASS",
+            "details": "Lock adquirido y liberado inmediatamente"
+        },
+        {
+            "name": "2.1 Bloqueo administrativo restringe flotas de otros bots (bot_id != 1007)",
+            "status": "PASS",
+            "details": "Bot 1001 bloqueado: SI | Bot 1007 permitido: SI"
+        },
+        {
+            "name": "3.1 Registro y despacho de tareas diferidas (MIPs escalonados \/ recalls) en uni1_bot_tasks",
+            "status": "PASS",
+            "details": "Tarea programada encontrada en cola y marcada como completada"
+        },
+        {
+            "name": "4.1 Strike In Flight Guard detecta salvas escalonadas pendientes en BotScheduler",
+            "status": "PASS",
+            "details": "Guard detect\u00f3 tarea programada pendiente: SI"
+        }
+    ]
+}

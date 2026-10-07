@@ -32,36 +32,79 @@ margin-bottom: 14px;
     top: 7px;
 }
 .message_head{
-	    position: relative;
-    height: 18px;
-    background: rgba(9, 29, 46, 0.70);
-    border-bottom: 1px solid rgba(9, 29, 46, 1);
+    position: relative;
+    height: 22px;
+    line-height: 22px;
+    background: rgba(9, 29, 46, 0.85);
+    border-bottom: 1px solid rgba(0, 153, 204, 0.25);
+    padding: 0 8px;
+    box-sizing: border-box;
 }
 .mes_unread{    font-weight: bold;}
-.message_sender{position: absolute;
-    right: 7px;
-    top: 2px;}
-.message_check{position: relative;
-    float: right;
-    margin-top: 1px;
-    margin-left: 4px;
-    opacity: 0.6;
-	 -moz-transition: all 0.2s ease-in;
-    -webkit-transition: all 0.2s ease-in;
-    -o-transition: all 0.2s ease-in;
-transition: all 0.2s ease-in;}
+.message_sender{
+    position: absolute;
+    right: 8px;
+    top: 0;
+    bottom: 0;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    z-index: 5;
+}
+.messagesnew4 {
+    height: 14px;
+    width: auto;
+    vertical-align: middle;
+    opacity: 0.8;
+    cursor: pointer;
+    transition: opacity 0.15s ease, transform 0.15s ease;
+    display: inline-block;
+}
+.messagesnew4:hover {
+    opacity: 1;
+    transform: scale(1.18);
+}
+.message_check{
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    margin: 0;
+    opacity: 0.8;
+    transition: all 0.2s ease-in;
+}
 .message_check:hover{ opacity:1;}
-.message_title{position: absolute;
+.message_check input[type="checkbox"] {
+    cursor: pointer;
+    margin: 0;
+    vertical-align: middle;
+}
+.message_title{
+    position: absolute;
     left: 0;
     right: 0;
     width: fit-content;
-    top: 2px;
-    margin: auto;}
-.message_time{position: absolute;
-    color: #ccc;
-    top: 2px;
-    left: 7px;
-    font-size: 11px;}
+    top: 0;
+    bottom: 0;
+    display: flex;
+    align-items: center;
+    margin: auto;
+    z-index: 2;
+    pointer-events: none;
+}
+.message_title a, .message_title span {
+    pointer-events: auto;
+}
+.message_time{
+    position: absolute;
+    color: #8fa2b8;
+    top: 0;
+    bottom: 0;
+    display: flex;
+    align-items: center;
+    left: 8px;
+    font-size: 11px;
+    z-index: 1;
+}
 .messages_body td{
 	background:#000813 !important;
 }
@@ -118,4 +161,536 @@ transition: all 0.2s ease-in;
 span.achiev_mes_head{
 	font-weight:bold;
 	color:#846728;
+}
+
+/* Tactical Message Cards Design System */
+.message_text:has(.spy-report-card),
+.message_text:has(.msg-card) {
+	padding: 0;
+}
+.head_row_msg:has(.spy-report-card),
+.head_row_msg:has(.msg-card) {
+	border-color: #0c3350;
+	background: #010a14;
+}
+
+.msg-card {
+	background: rgba(5, 16, 32, 0.9);
+	border: 1px solid rgba(13, 56, 86, 0.85);
+	border-radius: 5px;
+	overflow: hidden;
+	color: #cbe3f7;
+	font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, "Helvetica Neue", sans-serif;
+	box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+	margin: 0;
+	text-align: left;
+}
+
+.msg-card-header {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	padding: 8px 12px;
+	background: rgba(9, 29, 46, 0.9);
+	border-bottom: 1px solid rgba(0, 153, 204, 0.3);
+	flex-wrap: wrap;
+	gap: 8px;
+}
+
+.msg-card-title {
+	display: inline-flex;
+	align-items: center;
+	gap: 8px;
+	font-size: 13px;
+	font-weight: 700;
+	text-transform: uppercase;
+	letter-spacing: 0.6px;
+	color: #66ccff;
+}
+
+.msg-card-title a {
+	color: #66ccff;
+	text-decoration: none;
+}
+.msg-card-title a:hover {
+	color: #ffffff;
+	text-shadow: 0 0 6px rgba(102, 204, 255, 0.6);
+}
+
+.msg-card-body {
+	padding: 10px 12px;
+}
+
+/* Badges */
+.msg-badge {
+	display: inline-flex;
+	align-items: center;
+	gap: 5px;
+	padding: 3px 10px;
+	border-radius: 12px;
+	font-size: 11px;
+	font-weight: 700;
+	text-transform: uppercase;
+	letter-spacing: 0.4px;
+	white-space: nowrap;
+}
+
+.msg-badge-win,
+.msg-badge-success {
+	background: rgba(16, 85, 45, 0.45);
+	border: 1px solid #10b981;
+	color: #4ade80;
+	box-shadow: 0 0 8px rgba(16, 185, 129, 0.25);
+}
+
+.msg-badge-loss,
+.msg-badge-danger {
+	background: rgba(120, 20, 30, 0.5);
+	border: 1px solid #ef4444;
+	color: #fca5a5;
+	box-shadow: 0 0 8px rgba(239, 68, 68, 0.3);
+}
+
+.msg-badge-draw,
+.msg-badge-warning {
+	background: rgba(100, 70, 10, 0.45);
+	border: 1px solid #eab308;
+	color: #fde047;
+	box-shadow: 0 0 8px rgba(234, 179, 8, 0.25);
+}
+
+.msg-badge-info {
+	background: rgba(6, 43, 71, 0.5);
+	border: 1px solid #06b6d4;
+	color: #67e8f9;
+	box-shadow: 0 0 8px rgba(6, 182, 212, 0.25);
+}
+
+.msg-badge-purple {
+	background: rgba(70, 20, 90, 0.45);
+	border: 1px solid #a855f7;
+	color: #d8b4fe;
+	box-shadow: 0 0 8px rgba(168, 85, 247, 0.25);
+}
+
+.msg-badge-neutral {
+	background: rgba(30, 41, 59, 0.6);
+	border: 1px solid #64748b;
+	color: #94a3b8;
+}
+
+/* Metadata Row */
+.msg-meta-row {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	font-size: 11px;
+	color: #8da4be;
+	margin-bottom: 8px;
+	flex-wrap: wrap;
+}
+
+.msg-meta-item {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+}
+
+.msg-meta-item a {
+	color: #38bdf8;
+	text-decoration: none;
+	font-weight: 600;
+}
+.msg-meta-item a:hover {
+	text-decoration: underline;
+}
+
+/* Combat Losses Bar */
+.msg-losses-bar {
+	display: grid;
+	grid-template-columns: 1fr 1fr;
+	gap: 8px;
+	margin-bottom: 10px;
+}
+
+.msg-loss-box {
+	display: flex;
+	flex-direction: column;
+	padding: 6px 10px;
+	border-radius: 4px;
+	background: rgba(9, 23, 41, 0.7);
+	border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.msg-loss-label {
+	font-size: 10px;
+	text-transform: uppercase;
+	color: #8da4be;
+	margin-bottom: 2px;
+}
+
+.msg-loss-value {
+	font-size: 13px;
+	font-weight: 700;
+}
+
+.msg-loss-value.is-attacker {
+	color: #f87171;
+}
+
+.msg-loss-value.is-defender {
+	color: #60a5fa;
+}
+
+/* Resources Grid & Chips */
+.msg-res-grid {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+	gap: 6px;
+	margin-bottom: 10px;
+}
+
+.msg-res-chip {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 5px 8px;
+	border-radius: 4px;
+	background: rgba(9, 23, 41, 0.8);
+	border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.msg-res-chip img {
+	width: 22px;
+	height: 22px;
+	object-fit: contain;
+	flex-shrink: 0;
+}
+
+.msg-res-data {
+	min-width: 0;
+	flex: 1;
+}
+
+.msg-res-label {
+	font-size: 10px;
+	color: #7b90a6;
+	text-transform: uppercase;
+	line-height: 1.1;
+}
+
+.msg-res-val {
+	font-size: 12px;
+	font-weight: 700;
+	line-height: 1.2;
+}
+
+.res-metal .msg-res-val { color: #d1b89d; }
+.res-crystal .msg-res-val { color: #a4cbf0; }
+.res-deut .msg-res-val { color: #4ade80; }
+.res-dm .msg-res-val { color: #f43f5e; }
+.res-energy .msg-res-val { color: #facc15; }
+.res-minerals .msg-res-val { color: #34d399; }
+.res-so .msg-res-val { color: #e879f9; }
+.res-cont .msg-res-val { color: #fbbf24; }
+
+/* Panels (Loot, Debris, Telemetry) */
+.msg-panel {
+	margin-bottom: 10px;
+	padding: 8px 10px;
+	background: rgba(7, 21, 38, 0.7);
+	border: 1px dashed rgba(0, 153, 204, 0.35);
+	border-radius: 4px;
+}
+
+.msg-panel-head {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	margin-bottom: 6px;
+	font-size: 11px;
+	text-transform: uppercase;
+	color: #66ccff;
+	font-weight: 700;
+}
+
+.msg-panel-body {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	flex-wrap: wrap;
+	gap: 6px;
+}
+
+/* Narrative Log (Expeditions) */
+.msg-narrative {
+	background: rgba(4, 13, 24, 0.75);
+	border-left: 3px solid #0099cc;
+	padding: 8px 12px;
+	margin-bottom: 10px;
+	border-radius: 0 4px 4px 0;
+	line-height: 1.5;
+	color: #e2e8f0;
+	font-size: 12px;
+	font-style: italic;
+}
+
+/* Compact Units/Ship Chips Bar */
+.msg-unit-chips {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 6px;
+	margin-bottom: 10px;
+}
+
+.msg-unit-chip {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	padding: 4px 8px;
+	border-radius: 3px;
+	background: rgba(9, 23, 41, 0.85);
+	border: 1px solid rgba(0, 153, 204, 0.3);
+	font-size: 11px;
+	color: #cbe3f7;
+}
+
+.msg-unit-chip img {
+	width: 18px;
+	height: 18px;
+	border-radius: 2px;
+	object-fit: cover;
+	background: #000;
+}
+
+.msg-unit-chip .unit-name {
+	color: #94a3b8;
+}
+
+.msg-unit-chip .unit-count {
+	color: #fbbf24;
+	font-weight: 700;
+}
+
+/* Unit Grid (for Destroyed Defenses / Structures) */
+.msg-unit-grid {
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+	gap: 6px;
+	margin-bottom: 10px;
+}
+
+.msg-unit-item {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	padding: 4px 6px;
+	background: rgba(7, 21, 38, 0.75);
+	border: 1px solid rgba(13, 56, 86, 0.6);
+	border-radius: 3px;
+}
+
+.msg-unit-item img {
+	width: 24px;
+	height: 24px;
+	object-fit: cover;
+	border-radius: 2px;
+	background: #000;
+}
+
+.msg-unit-item-info {
+	min-width: 0;
+	flex: 1;
+}
+
+.msg-unit-item-name {
+	font-size: 10px;
+	color: #94a3b8;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.msg-unit-item-count {
+	font-size: 11px;
+	font-weight: 700;
+	color: #f87171;
+}
+
+/* Moon Notification Banner */
+.msg-banner-moon {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	padding: 8px 12px;
+	background: rgba(60, 45, 10, 0.5);
+	border: 1px solid #eab308;
+	border-radius: 4px;
+	color: #fef08a;
+	font-size: 12px;
+	font-weight: 600;
+	margin-bottom: 10px;
+	box-shadow: 0 0 10px rgba(234, 179, 8, 0.2);
+}
+
+.msg-banner-moon img {
+	width: 24px;
+	height: 24px;
+	border-radius: 50%;
+}
+
+/* Action Buttons */
+.msg-actions-bar {
+	display: flex;
+	justify-content: flex-end;
+	align-items: center;
+	gap: 8px;
+	padding-top: 6px;
+	border-top: 1px solid rgba(255, 255, 255, 0.05);
+	flex-wrap: wrap;
+}
+
+.msg-btn {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	gap: 5px;
+	padding: 5px 12px;
+	font-size: 11px;
+	font-weight: 700;
+	text-decoration: none !important;
+	border-radius: 4px;
+	cursor: pointer;
+	transition: all 0.15s ease;
+	letter-spacing: 0.3px;
+	line-height: 1.2;
+}
+
+.msg-btn-attack {
+	background: #3a0d13;
+	border: 1px solid #c53030;
+	color: #ff6b6b !important;
+}
+.msg-btn-attack:hover {
+	background: #52131b;
+	border-color: #e53e3e;
+	color: #ffffff !important;
+	box-shadow: 0 0 10px rgba(229, 62, 62, 0.4);
+}
+
+.msg-btn-recycle {
+	background: #092f20;
+	border: 1px solid #10b981;
+	color: #4ade80 !important;
+}
+.msg-btn-recycle:hover {
+	background: #0f4832;
+	border-color: #34d399;
+	color: #ffffff !important;
+	box-shadow: 0 0 10px rgba(16, 185, 129, 0.4);
+}
+
+.msg-btn-sim {
+	background: #062b47;
+	border: 1px solid #0099cc;
+	color: #66ccff !important;
+}
+.msg-btn-sim:hover {
+	background: #083c63;
+	border-color: #33bbf5;
+	color: #ffffff !important;
+	box-shadow: 0 0 10px rgba(0, 153, 204, 0.4);
+}
+
+.msg-btn-secondary {
+	background: #111e33;
+	border: 1px solid #2b4c7e;
+	color: #9bb7e0 !important;
+}
+.msg-btn-secondary:hover {
+	background: #172a48;
+	border-color: #4a75b5;
+	color: #ffffff !important;
+}
+
+.msg-svg {
+	width: 14px;
+	height: 14px;
+	fill: currentColor;
+	vertical-align: middle;
+	flex-shrink: 0;
+}
+
+/* Modernized Row Header Icons */
+.msg-action-icon-btn {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 22px;
+	height: 22px;
+	border-radius: 3px;
+	background: rgba(13, 35, 56, 0.6);
+	border: 1px solid rgba(0, 153, 204, 0.2);
+	color: #94a3b8;
+	transition: all 0.15s ease;
+	cursor: pointer;
+	text-decoration: none !important;
+	margin-right: 4px;
+}
+.msg-action-icon-btn:hover {
+	background: rgba(0, 153, 204, 0.3);
+	border-color: #0099cc;
+	color: #38bdf8;
+	box-shadow: 0 0 6px rgba(0, 153, 204, 0.3);
+}
+.msg-action-icon-btn.is-delete:hover {
+	background: rgba(185, 28, 28, 0.3);
+	border-color: #ef4444;
+	color: #fca5a5;
+	box-shadow: 0 0 6px rgba(239, 68, 68, 0.3);
+}
+
+/* Responsive Rules for Small Devices */
+@media (max-width: 640px) {
+	.msg-card-header {
+		flex-direction: column;
+		align-items: flex-start;
+		gap: 6px;
+	}
+	.msg-badge {
+		width: 100%;
+		justify-content: center;
+		box-sizing: border-box;
+	}
+	.msg-res-grid {
+		grid-template-columns: 1fr 1fr;
+		gap: 4px;
+	}
+	.msg-losses-bar {
+		grid-template-columns: 1fr;
+		gap: 4px;
+	}
+	.msg-actions-bar {
+		flex-direction: column;
+		width: 100%;
+	}
+	.msg-btn {
+		width: 100%;
+		box-sizing: border-box;
+		min-height: 32px;
+	}
+	.message_head {
+		height: 24px;
+		line-height: 24px;
+	}
+	.message_title {
+		max-width: 140px;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+		font-size: 11px;
+	}
+	.message_time {
+		font-size: 10px;
+	}
 }

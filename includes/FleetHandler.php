@@ -15,22 +15,36 @@
  * @Basis New-Star: 2Moons v1.8.0
  */
 
-$token	= getRandomString();
+require_once 'includes/vars/General.php';
+require_once 'includes/classes/class.BuildFunctions.php';
+require_once 'includes/classes/class.PlanetRessUpdate.php';
+require_once 'includes/classes/class.FlyingFleetHandler.php';
+
 $db		= Database::get();
+$loops	= 0;
 
-$fleetResult	= $db->update("UPDATE %%FLEETS_EVENT%% SET `lock` = :token WHERE `lock` IS NULL AND `time` <= :time;", array(
-	':time'		=> TIMESTAMP,
-	':token'	=> $token
-));
+while($loops < 10)
+{
+	$token	= getRandomString();
 
-if($db->rowCount() !== 0) {
-	require 'includes/classes/class.FlyingFleetHandler.php';
-	
-	$fleetObj	= new FlyingFleetHandler();
-	$fleetObj->setToken($token);
-	$fleetObj->run();
-
-	$db->update("UPDATE %%FLEETS_EVENT%% SET `lock` = NULL WHERE `lock` = :token;", array(
-		':token' => $token
+	$fleetResult	= $db->update("UPDATE %%FLEETS_EVENT%% SET `lock` = :token WHERE `lock` IS NULL AND `time` <= :time;", array(
+		':time'		=> TIMESTAMP,
+		':token'	=> $token
 	));
+
+	if($db->rowCount() === 0) {
+		break;
+	}
+
+	try {
+		$fleetObj	= new FlyingFleetHandler();
+		$fleetObj->setToken($token);
+		$fleetObj->run();
+	} finally {
+		$db->update("UPDATE %%FLEETS_EVENT%% SET `lock` = NULL WHERE `lock` = :token;", array(
+			':token' => $token
+		));
+	}
+
+	$loops++;
 }

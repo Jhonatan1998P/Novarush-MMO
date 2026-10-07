@@ -38,25 +38,25 @@ class ShowBuyTechPage extends AbstractGamePage
         if($Count == 0){
             $this->printMessage(''.$LNG['bd_limit'].'',true, array('game.php?page=buyTech', 2));	
         }
-        //Цена
-		$cost			= BuildFunctions::instantPurchasePrice($Element) * pow(($pricelist[$Element]['factor']), ($USER[$resource[$Element]] + $Count));
+        //Precio acumulativo calibrado (MSE 4:2:1 / 250)
+		$curLvl			= (int) ($USER[$resource[$Element]] ?? 0);
+		$cost			= BuildFunctions::getInstantPriceTotalLevels($Element, $curLvl, $Count);
         //Ограничение по технологиям и $reslist
-		if(!empty($Element) && in_array($Element, $reslist['tech']) && BuildFunctions::isTechnologieAccessible($USER, $PLANET, $Element, array()) && in_array($Element, $reslist['tech']) || in_array($Element, $reslist['not_bought']))
+		if(!empty($Element) && in_array($Element, $reslist['tech']) && BuildFunctions::isTechnologieAccessible($USER, $PLANET, $Element, array()) && (in_array($Element, $reslist['tech']) || in_array($Element, $reslist['not_bought'])))
 		{ 
-            //Нехватка ресурса.
-			if($USER[$resource[$resglobal['buy_instantly']]] < $cost )
+            //Débito vía PremiumEconomy
+			if(!PremiumEconomy::debit($USER, 921, $cost, 'buy_tech', $Element, "cnt={$Count};from={$curLvl};cost={$cost}"))
 			{
 				$this->printMessage("".$LNG['bd_notres']."", true, array("game.php?page=buyTech", 1));
 				return;
 			}
-			//Всего хватает.
-			$USER[$resource[$resglobal['buy_instantly']]] -= $cost;
 			
             $sql	= 'UPDATE %%USERS%% SET
-            '.$resource[$Element].' = '.$resource[$Element].' + '.$Count.'
+            '.$resource[$Element].' = '.$resource[$Element].' + :cnt
             WHERE id = :Id;';
                 
             Database::get()->update($sql, array(
+                ':cnt'  => $Count,
                 ':Id'	=> $USER['id']
             ));  
             $USER[$resource[$Element]]		+= $Count;
@@ -71,13 +71,15 @@ class ShowBuyTechPage extends AbstractGamePage
         
         //Перебор
 		$allowedElements = array();
+		$Cost = array();
 		foreach($reslist['tech'] as $Element)
 		{
 			if(!BuildFunctions::isTechnologieAccessible($USER, $PLANET, $Element, array()) || !in_array($Element, $reslist['tech']) || in_array($Element, $reslist['not_bought']))
 				continue;
 			$allowedElements[] = $Element;
             
-			$Cost[$Element]	= array($USER[$resource[$Element]], $LNG['tech'][$Element], BuildFunctions::instantPurchasePrice($Element), ($pricelist[$Element]['factor'])) ;
+			$baseCostMO = BuildFunctions::getInstantMSE($Element) / 250.0;
+			$Cost[$Element]	= array($USER[$resource[$Element]], $LNG['tech'][$Element], $baseCostMO, (float)($pricelist[$Element]['factor'])) ;
 		}
 		//Бан, если пусто.
 		if(empty($Cost)) {

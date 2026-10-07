@@ -38,25 +38,25 @@ class ShowBuyDefensePage extends AbstractGamePage
         if($Count == 0){
             $this->printMessage(''.$LNG['bd_limit'].'',true, array('game.php?page=buyDefense', 2));	
         }
-        //Цена
-		$cost			= BuildFunctions::instantPurchasePrice($Element) * $Count;
+        //Precio calibrado (MSE 4:2:1 / 200)
+		$unitCost		= BuildFunctions::getInstantPriceFleetDefense($Element);
+		$cost			= $unitCost * $Count;
         //Ограничение по технологиям и $reslist
-		if(!empty($Element) && in_array($Element, $reslist['defense']) && BuildFunctions::isTechnologieAccessible($USER, $PLANET, $Element, array()) && in_array($Element, $reslist['defense']) || in_array($Element, $reslist['not_bought']))
+		if(!empty($Element) && in_array($Element, $reslist['defense']) && BuildFunctions::isTechnologieAccessible($USER, $PLANET, $Element, array()) && (in_array($Element, $reslist['defense']) || in_array($Element, $reslist['not_bought'])))
 		{ 
-            //Нехватка ресурса.
-			if($USER[$resource[$resglobal['buy_instantly']]] < $cost )
+            //Débito vía PremiumEconomy
+			if(!PremiumEconomy::debit($USER, 921, $cost, 'buy_defense', $Element, "cnt={$Count};cost={$cost}"))
 			{
 				$this->printMessage("".$LNG['bd_notres']."", true, array("game.php?page=buyDefense", 1));
 				return;
 			}
-			//Всего хватает.
-			$USER[$resource[$resglobal['buy_instantly']]] -= $cost;
 			
             $sql	= 'UPDATE %%PLANETS%% SET
-            '.$resource[$Element].' = '.$resource[$Element].' + '.$Count.'
+            '.$resource[$Element].' = '.$resource[$Element].' + :cnt
             WHERE id = :Id;';
                 
             Database::get()->update($sql, array(
+                ':cnt'  => $Count,
                 ':Id'	=> $PLANET['id']
             ));  
             $PLANET[$resource[$Element]]		+= $Count;
@@ -71,13 +71,14 @@ class ShowBuyDefensePage extends AbstractGamePage
         
         //Перебор
 		$allowedElements = array();
+		$Cost = array();
 		foreach($reslist['defense'] as $Element)
 		{
 			if(!BuildFunctions::isTechnologieAccessible($USER, $PLANET, $Element, array()) || !in_array($Element, $reslist['defense']) || in_array($Element, $reslist['not_bought']))
 				continue;
 			$allowedElements[] = $Element;
             
-			$Cost[$Element]	= array($PLANET[$resource[$Element]], $LNG['tech'][$Element], BuildFunctions::instantPurchasePrice($Element), ($pricelist[$Element]['factor'])) ;
+			$Cost[$Element]	= array($PLANET[$resource[$Element]], $LNG['tech'][$Element], BuildFunctions::getInstantPriceFleetDefense($Element), 1);
 		}
 		//Бан, если пусто.
 		if(empty($Cost)) {

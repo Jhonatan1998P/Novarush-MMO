@@ -12,11 +12,11 @@
                     <div class="info_elements">
                         <div class="content_box ">
                             <div class="image">
-                                <img src="{$dpath}gebaeude/{$elementID}.gif" alt="">
+                                {if $elementID == 134}<img src="{$dpath}gebaeude/134.webp" alt="">{else}<img src="{$dpath}gebaeude/{$elementID}.gif" alt="">{/if}
                             </div>
                             <div class="prices info_description">
                                 <p class="info15">{$LNG.longDescription.$elementID}
-                                    {if !empty($Bonus)}
+                                    {if empty($PremiumInfo) && !empty($Bonus)}
                                     <br><b>{$LNG.in_bonus}</b><br>
                                     {foreach $Bonus as $BonusName => $elementBouns}{if $elementBouns[0] < 0}-{else}+{/if}{if $elementBouns[1] == 0}{abs($elementBouns[0] * 100)}%{else}{floatval($elementBouns[0])}{/if} {$LNG.bonus.$BonusName}<br>{/foreach}
                                     {/if}
@@ -38,6 +38,9 @@
                         {/if}
                         {if !empty($MissileList)}
                         {include file="shared.information.missiles.tpl"}
+                        {/if}
+                        {if !empty($PremiumInfo)}
+                        {include file="shared.information.premiumInfo.tpl"}
                         {/if}
                         <div class="clear"></div>
                     </div>

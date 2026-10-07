@@ -173,7 +173,23 @@ $LNG['sec_conv']                                     = 'per sec.';
 //Info bonus
 $LNG['inb_percent']                                  = 'Percentage';
 $LNG['inb_units']                                    = 'Units';
-$LNG['inb_name']                                     = 'Name';
+$LNG['inb_name']                                     = 'Bonus';
+$LNG['inb_title']                                    = 'Empire Bonuses Overview';
+$LNG['inb_all']                                      = 'All';
+$LNG['inb_cat_combat']                               = 'Military Combat';
+$LNG['inb_cat_economy']                              = 'Economy & Mining';
+$LNG['inb_cat_speed']                                = 'Speed & Durations';
+$LNG['inb_cat_expansion']                            = 'Expansion & Fleets';
+$LNG['inb_cat_efficiency']                           = 'Efficiency & Costs';
+$LNG['inb_hide_zero']                                = 'Hide 0% bonuses';
+$LNG['inb_effective_value']                          = 'Effective Value';
+$LNG['inb_breakdown']                                = 'Breakdown';
+$LNG['inb_sources_count']                            = 'active source(s)';
+$LNG['inb_no_active']                                = 'No active bonuses in this category.';
+$LNG['inb_softcap_note']                             = 'Soft Cap Active';
+$LNG['inb_permanent']                                = 'Permanent';
+$LNG['inb_temporary']                                = 'Temporary';
+$LNG['inb_expires_in']                               = 'Expires in';
 //Create moon
 $LNG['crm_value']                                    = 'To create the moon requires:';
 $LNG['crm_war']                                      = 'The moon has a random diameter!';
@@ -187,20 +203,54 @@ $LNG['cont_msg_limit']                               = 'You cannot open as many 
 $LNG['cont_not_cont_user']                           = 'Not enough containers!';
 $LNG['cont_open']                                    = 'You have opened:';
 //Information
-$LNG['in_attack_pt']                                 = 'Standard Attack';
-$LNG['in_attack_laser']                              = 'Laser Attack';
-$LNG['in_attack_ionic']                              = 'Ionic Attack';
-$LNG['in_attack_buster']                             = 'Plasma Attack';
-$LNG['in_attack_graviton']                           = 'Gravity Attack';
-$LNG['in_shield_none']                               = 'There are no shields';
-$LNG['in_shield_light']                              = 'Light Shields';
-$LNG['in_shield_medium']                             = 'Medium Shields';
-$LNG['in_shield_heavy']                              = 'Heavy Shields';
+$LNG['in_attack_total']                              = 'Total Attack Power';
+$LNG['in_attack_pt']                                 = 'Standard Ballistic Weaponry';
+$LNG['in_attack_pt_desc']                            = 'Balanced conventional kinetic firepower';
+$LNG['in_attack_laser']                              = 'Laser Weaponry';
+$LNG['in_attack_laser_desc']                         = 'Highly effective at piercing light armor (Fighters & Transports)';
+$LNG['in_attack_ionic']                              = 'Ion Weaponry';
+$LNG['in_attack_ionic_desc']                         = 'Specialized in collapsing deflector shields & medium armor';
+$LNG['in_attack_buster']                             = 'Plasma Weaponry';
+$LNG['in_attack_buster_desc']                        = 'Extreme thermal penetration designed to melt heavy armor';
+$LNG['in_attack_graviton']                           = 'Graviton Weaponry';
+$LNG['in_attack_graviton_desc']                      = 'Hyper-dense distortion pulses lethal against capital ships';
+$LNG['in_structural_integrity']                      = 'Structure';
+$LNG['in_structural_integrity_desc']                 = 'Total Metal and Crystal invested';
+$LNG['in_hull_points']                               = 'Hull';
+$LNG['in_hull_points_desc']                          = 'Direct hit points (10% of Structure)';
+$LNG['in_armor_class']                               = 'Armor Class';
 $LNG['in_armor_light']                               = 'Light Armor';
 $LNG['in_armor_medium']                              = 'Medium Armor';
 $LNG['in_armor_heavy']                               = 'Heavy Armor';
+$LNG['in_shield_power']                              = 'Shield Power';
+$LNG['in_shield_power_desc']                         = 'Absorbs direct damage per combat round';
+$LNG['in_shield_class']                              = 'Shield Class';
+$LNG['in_shield_none']                               = 'No Shield';
+$LNG['in_shield_light']                              = 'Deflector Shield';
+$LNG['in_shield_medium']                             = 'Phase Shield';
+$LNG['in_shield_heavy']                              = 'Kinetic Shield';
+$LNG['in_base_speed']                                = 'Speed';
+$LNG['in_base_speed_desc']                           = 'Base travel speed';
+$LNG['in_engine_type']                               = 'Propulsion';
+$LNG['in_fuel_consumption']                          = 'Consumption';
+$LNG['in_fuel_consumption_desc']                     = 'Deuterium consumed per voyage';
+$LNG['in_cargo_capacity']                            = 'Capacity';
+$LNG['in_cargo_capacity_desc']                       = 'Maximum cargo hold capacity';
+$LNG['in_rf_title']                                  = 'Rapid Fire';
+$LNG['in_rf_again']                                  = 'Rapid Fire Against';
+$LNG['in_rf_again_desc']                             = 'Consecutive extra shots in the same round';
+$LNG['in_rf_from']                                   = 'Rapid Fire From';
+$LNG['in_rf_from_desc']                              = 'Hostile units with consecutive rapid fire';
+$LNG['in_rf_shoots']                                 = 'shots';
+$LNG['in_rf_prob']                                   = 'chance';
+$LNG['in_cost_title']                                = 'Manufacturing Costs';
+$LNG['in_requirements_title']                         = 'Prerequisite Technologies';
+$LNG['in_req_met']                                   = 'Prerequisite Fulfilled';
+$LNG['in_req_unmet']                                 = 'Prerequisite Missing';
+$LNG['in_defense_recovery_title']                    = 'Automated Reconstruction';
+$LNG['in_defense_recovery_desc']                     = '70% chance of automated free reconstruction after battle';
 $LNG['in_number']                                    = 'Quantity';
-$LNG['in_recovery']                                  = 'Defense is being restored after combat.';
+$LNG['in_recovery']                                  = 'Defenses automatically rebuild 70% after combat.';
 //System
 $LNG['sys_expe_found_ars_1']                         = 'We found the battlefield and we were able to create an upgrade';
 $LNG['sys_expe_found_ars_2']                         = 'The new commander has allowed contact with the new race, even though it violates the charter. She turned out to be quite friendly, and we were able to establish trade relations. Having successfully completed the exchange, the expedition received an upgrade ';
@@ -322,23 +372,109 @@ Base chance of finding Dark Matter 30% <br>
 Minimum Fleet Points 25,000 <br>
 The maximum number of fleet points is not limited <br>
 Debris collection percentage from the fleet: 3% <br> "; 
-$LNG['batl_log_mesage']				                 = '<div class="raportMessage">
-	<table>
+$LNG['batl_log_mesage'] = '<div class="raportMessage" style="background: rgba(9, 29, 46, 0.7); border: 1px solid #1a3c5a; border-radius: 6px; padding: 10px 14px; margin: 4px 0; font-family: inherit; font-size: 12px; line-height: 1.6;">
+	<table style="width: 100%%; border-collapse: collapse; color: #ccc;">
 		<tr>
-			<td colspan="2"><a href="CombatReport.php?raport=%s" onclick="starttraining20()" target="_blank"><span %s>%s %s (%s)</span></a></td>
+			<td colspan="2" style="border-bottom: 1px solid rgba(255,255,255,0.12); padding-bottom: 8px;">
+				<a href="game.php?page=raport&raport=%s" target="_blank" style="text-decoration: none; display: flex; justify-content: space-between; align-items: center;">
+					<span %s style="font-weight: bold; font-size: 13px;">%s: %s (%s)</span>
+					<span style="background: #0070ba; color: #ffffff; padding: 3px 10px; border-radius: 4px; font-weight: bold; font-size: 11px; border: 1px solid #0090ea; text-decoration: none;">[ ⚔ View Battle Report ]</span>
+				</a>
+			</td>
 		</tr>
 		<tr>
-			<td>%s</td><td><span %s>%s: %s</span>&nbsp;<span %s>%s: %s</span></td>
+			<td style="width: 130px; color: #8fa3b0; padding: 5px 0; font-weight: bold;">%s:</td>
+			<td style="padding: 5px 0;">
+				<span %s style="font-weight: bold;">%s: %s</span> &nbsp;|&nbsp; <span %s style="font-weight: bold;">%s: %s</span>
+			</td>
 		</tr>
 		<tr>
-			<td>%s</td><td><span>%s:&nbsp;<span style="color:#a47d7a;">%s</span>&nbsp;</span><span>%s:&nbsp;<span style="color:#5ca6aa;">%s</span>&nbsp;</span><span>%s:&nbsp;<span style="color:#339966;">%s</span></span></td>
+			<td style="color: #8fa3b0; padding: 4px 0; font-weight: bold;">%s:</td>
+			<td style="padding: 4px 0;">
+				<span>%s: <b style="color: #d4a373;">%s</b></span>&nbsp;&nbsp;
+				<span>%s: <b style="color: #5ca6aa;">%s</b></span>&nbsp;&nbsp;
+				<span>%s: <b style="color: #48bb78;">%s</b></span>
+			</td>
 		</tr>
 		<tr>
-			<td>%s</td><td><span>%s:&nbsp;<span style="color:#a47d7a;">%s</font>&nbsp;</span><span>%s:&nbsp;<span style="color:#5ca6aa;">%s</span></span></td>
+			<td style="color: #8fa3b0; padding: 4px 0; font-weight: bold;">%s:</td>
+			<td style="padding: 4px 0;">
+				<span>%s: <b style="color: #d4a373;">%s</b></span>&nbsp;&nbsp;
+				<span>%s: <b style="color: #5ca6aa;">%s</b></span>
+			</td>
 		</tr>
 	</table>
-</div>' ;        
-$LNG['host_mission_mesag']                           = 'Nebula sector';
-$LNG['fl_enemy_msg']['main']                         = 'The expedition stumbled upon an enemy unit %s in the Nebula sector.';
-$LNG['fl_enemy_msg']['tm']                           = 'A container with %s Dark Matter was found.';
-$LNG['fl_enemy_msg']['up']                           = 'It was possible to create an Upgrade for %s in the amount of %s pieces';
+</div>';
+$LNG['host_mission_mesag']                           = 'Nebula Sector';
+$LNG['fl_enemy_msg']['main']                         = 'Our expedition fleet intercepted a hostile <b style="color:#e74c3c;">%s</b> squadron in the Nebula Sector and engaged in battle.';
+$LNG['fl_enemy_msg']['tm']                           = 'A special container was secured with <b style="color:#2ecc71;">%s Dark Matter</b>.';
+$LNG['fl_enemy_msg']['up']                           = 'An upgrade for <b style="color:#f39c12;">%s</b> (Amount: %s) was salvaged from the wreckage.';
+
+// Detailed descriptions for bonus tooltips
+$LNG['bonus_desc'] = array(
+    'AttackA'             => 'Increases fleet firepower when performing offensive missions.',
+    'DefensiveA'          => 'Increases fleet hull and armor integrity during offensive missions.',
+    'ShieldA'             => 'Increases deflector shield absorption on fleet offensive missions.',
+    'AttackD'             => 'Increases firepower of fleets and defenses while defending your planet or moon.',
+    'DefensiveD'          => 'Increases hull and armor integrity of fleets and defenses on defense missions.',
+    'ShieldD'             => 'Increases shield power of stationed fleets and defenses on your planet or moon.',
+    'Attack'              => 'Multiplies global attack power of all ships across all combat scenarios.',
+    'AttackSlaser'        => 'Increases damage dealt by ships and defenses equipped with laser weaponry.',
+    'AttackSion'          => 'Increases damage and shield disruption dealt by ion weaponry.',
+    'AttackSplasma'       => 'Increases destructive yield of plasma turrets and plasma-armed ships.',
+    'AttackSgravity'      => 'Increases massive impact of graviton cannons and capital flagships.',
+    'Defensive'           => 'Multiplies hull armor and structural points of all ships and planetary defenses.',
+    'DefensiveSlight'     => 'Improves armor durability of light class ships (fighters and probes).',
+    'DefensiveSmedium'    => 'Improves armor durability of cruisers and medium combat ships.',
+    'DefensiveSheavy'     => 'Improves structural integrity of battleships, destroyers, and battle stars.',
+    'Shield'              => 'Multiplies energy shield absorption and regeneration across the entire fleet.',
+    'ShieldSlight'        => 'Increases protective shields of light class starships.',
+    'ShieldSmedium'       => 'Increases protective shields of medium class starships.',
+    'ShieldSheavy'        => 'Increases heavy deflector shields of capital ships and planetary shield domes.',
+    'Sbuild'              => 'Reduces time required to construct and upgrade planetary and lunar buildings.',
+    'BuildSlots'          => 'Allows constructing multiple buildings concurrently on the same planet.',
+    'Stech'               => 'Reduces time required to complete research in the research laboratory.',
+    'ResearchSlots'       => 'Allows running multiple technology research projects simultaneously.',
+    'ResearchSlotPlanet'  => 'Networks additional laboratories across colonies to accelerate large projects.',
+    'Sfleet'              => 'Accelerates construction speed of starships in shipyard hangars.',
+    'Sdefense'            => 'Accelerates assembly speed of planetary turrets and defense systems.',
+    'Smissile'            => 'Accelerates fabrication and reloading of interplanetary and interceptor missiles.',
+    'Resource'            => 'Multiplies base extraction rate of Metal, Crystal, and Deuterium on all colonies.',
+    'Pmetal'              => 'Specifically boosts output of Metal Mines.',
+    'Pcrystal'            => 'Specifically boosts output of Crystal Mines.',
+    'Pdeuterium'          => 'Specifically boosts output of Deuterium Synthesizers.',
+    'Senergy'             => 'Boosts energy output of Solar Plants, Fusion Reactors, and Solar Satellites.',
+    'ResourceStorage'     => 'Expands maximum storage capacity of planetary resource depots.',
+    'ShipStorage'         => 'Increases cargo capacity of transport vessels and warships.',
+    'FlyTime'             => 'Increases flight speed of all fleets traveling through space.',
+    'FlyTimeCom'          => 'Increases flight speed of ships powered by Combustion Drive.',
+    'FlyTimeImp'          => 'Increases flight speed of ships powered by Impulse Drive.',
+    'FlyTimeHyp'          => 'Increases flight speed of ships powered by Hyperspace Drive.',
+    'FleetSlots'          => 'Increases maximum number of simultaneous fleet missions your empire can deploy.',
+    'Planets'             => 'Increases maximum number of colonies your empire can settle.',
+    'SpyPower'            => 'Increases effective espionage level when gathering intel on hostile fleets and planets.',
+    'Expedition'          => 'Allows deploying additional fleets simultaneously to explore deep space position 16.',
+    'GateCoolTime'        => 'Reduces required cooldown time between fleet jumps through lunar Jump Gates.',
+    'MoreFound'           => 'Increases odds of encountering valuable discoveries and rewards on expeditions.',
+    'CostRbuild'          => 'Reduces total resource costs to construct and upgrade buildings.',
+    'CostRfleet'          => 'Reduces total resource costs to build combat and transport ships.',
+    'CostRtech'           => 'Reduces total resource costs to research technologies.',
+    'CostRdefense'        => 'Reduces total resource costs to assemble defense structures.',
+    'CostRmissile'        => 'Reduces total resource costs to construct missiles in the silo.',
+    'DoubleAttack'        => 'Chance for ships to inflict critical hits dealing double damage in battle.',
+    'DoubleShield'        => 'Chance for starship shields to absorb twice as much damage before failing.',
+    'DoubleDefensive'     => 'Chance for ship armor to mitigate double damage against enemy fire.',
+    'DoubleAttackBonus'   => 'Increases additional destructive bonus when critical hits trigger.',
+    'DoubleShieldBonus'   => 'Increases extra energy absorption when shields overload.',
+    'DoubleDefensiveBonus'=> 'Increases extra durability when reinforced plating triggers.',
+    'Debris'              => 'Increases percentage of destroyed fleet resources converted into debris fields.',
+    'DefRecovery'         => 'Percentage of destroyed planetary defenses automatically repaired post-combat.',
+    'Focusing'            => 'Increases probability of triggering rapid fire against opposing ships.',
+    'AntiFocusing'        => 'Reduces probability of enemy ships chaining rapid fire against your fleet.',
+    'AccurateShots'       => 'Increases maximum number of enemy targets your ships can eliminate per round.',
+    'ChainReaction'       => 'Chance that destroyed enemy vessels trigger secondary chain explosions.',
+    'ExpBoost'            => 'Increases radius of affected ships caught in secondary explosions.',
+    'FuelConsum'          => 'Reduces deuterium fuel consumption required for fleet travel.',
+    'ShieldDome'          => 'Allows erecting additional planetary shield domes.',
+    'OrbitalBases'        => 'Allows constructing additional orbital defense platforms.',
+);

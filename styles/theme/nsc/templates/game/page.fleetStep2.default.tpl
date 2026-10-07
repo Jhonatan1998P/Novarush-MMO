@@ -9,14 +9,14 @@
                 <div class="gray_stripo">
                 {$LNG.fl_mission} 
                     <span class="tornaindietro fleetstep2-31">
-                        <span class="fleetstep2-3">{$LNG.fl_resources} <a style="float:right; color:#666;" href="javascript:maxResources()">Все ресурсы</a></span>
+                        <span class="fleetstep2-3">{$LNG.fl_resources} <a style="float:right; color:#666;" href="javascript:maxResources()">{$LNG.fl_all_resources}</a></span>
                     </span>
                 </div>
                 <div class="fleetstep2-2">
                     <div class="fl_mission_selector">
                         {foreach $MissionSelector as $MissionID}
                         <div class="fl_mission_selector_row">
-                           <input {if $MissionID == 18}onclick="ListSector()"{/if} id="radio_{$MissionID}" {if $mission == $MissionID} checked {/if}type="radio" name="mission" value="{$MissionID}">
+                           <input {if $MissionID == 18}onclick="ListSector()"{/if} id="radio_{$MissionID}" {if $mission == $MissionID || ($mission == 0 && $MissionID@first)} checked {/if}type="radio" name="mission" value="{$MissionID}">
                            <label {if $MissionID == 18}onclick="ListSector()"{/if} class="i-miss{$MissionID}o" for="radio_{$MissionID}">{$LNG["type_mission_{$MissionID}"]}</label>
                         </div>
                         {if $MissionID == 18}

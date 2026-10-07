@@ -44,14 +44,31 @@ class ShowConteinerPage extends AbstractGamePage
 			return;
 		}
 		
-		// Resources indexed to PRS: V = 0.2 * max(PRS, baseIncomeMSE)
-		$h = PremiumEconomy::get('ct_open_hours', 0.2);
-		$prs = max((float) PremiumEconomy::get('prs', 0), (float) PremiumEconomy::baseIncomeMSE());
-		$V = $h * $prs;
+		// Resources indexed to individual player production: V = ct_open_hours * effectiveMse
+		$h = PremiumEconomy::get('ct_open_hours', 0.5);
+		$prod = PremiumEconomy::playerHourlyProduction((int) $USER['id']);
 		
-		$metalPerCont   = (float) floor($V * 0.5);
-		$crystalPerCont = (float) floor(($V * 0.3) / 2.0);
-		$deutPerCont    = (float) floor(($V * 0.2) / 4.0);
+		$mseM = $prod['metal'];
+		$mseC = 2.0 * $prod['crystal'];
+		$mseD = 4.0 * $prod['deuterium'];
+		$totalMse = $mseM + $mseC + $mseD;
+		
+		if ($totalMse > 0) {
+			$pctM = $mseM / $totalMse;
+			$pctC = $mseC / $totalMse;
+			$pctD = $mseD / $totalMse;
+		} else {
+			$pctM = 0.5;
+			$pctC = 0.3;
+			$pctD = 0.2;
+		}
+		
+		$effectiveMse = max($totalMse, (float) PremiumEconomy::baseIncomeMSE());
+		$V = $h * $effectiveMse;
+		
+		$metalPerCont   = (float) floor($V * $pctM);
+		$crystalPerCont = (float) floor(($V * $pctC) * 0.5);
+		$deutPerCont    = (float) floor(($V * $pctD) * 0.25);
 		
 		$totalMetal   = $metalPerCont * $conts;
 		$totalCrystal = $crystalPerCont * $conts;
@@ -102,7 +119,7 @@ class ShowConteinerPage extends AbstractGamePage
 		global $USER, $PLANET, $LNG;
         
 		$limit = !empty($USER['container_set']) ? (int) $USER['container_set'] : 50;
-		$sql = "SELECT * FROM %%CONT%% WHERE id_owner = :userId ORDER BY time DESC LIMIT ".$limit.";";
+		$sql = "SELECT * FROM %%CONT%% WHERE id_owner = :userId ORDER BY id DESC LIMIT ".$limit.";";
 		$logs = Database::get()->select($sql, array(
 			':userId' => $USER['id']
 		));
@@ -112,10 +129,73 @@ class ShowConteinerPage extends AbstractGamePage
 			':userId' => $USER['id']
 		));
         
+		// Calculate estimated reward for 1 container based on player's current economy
+		$h = PremiumEconomy::get('ct_open_hours', 0.5);
+		$prod = PremiumEconomy::playerHourlyProduction((int) $USER['id']);
+		
+		$mseM = $prod['metal'];
+		$mseC = 2.0 * $prod['crystal'];
+		$mseD = 4.0 * $prod['deuterium'];
+		$totalMse = $mseM + $mseC + $mseD;
+		
+		if ($totalMse > 0) {
+			$pctM = $mseM / $totalMse;
+			$pctC = $mseC / $totalMse;
+			$pctD = $mseD / $totalMse;
+		} else {
+			$pctM = 0.5;
+			$pctC = 0.3;
+			$pctD = 0.2;
+		}
+		
+		$effectiveMse = max($totalMse, (float) PremiumEconomy::baseIncomeMSE());
+		$V = $h * $effectiveMse;
+		
+		$metalPerCont   = (float) floor($V * $pctM);
+		$crystalPerCont = (float) floor(($V * $pctC) * 0.5);
+		$deutPerCont    = (float) floor(($V * $pctD) * 0.25);
+		
+		// Group logs by timestamp for clean presentation
+		$groupedLogs = array();
+		foreach ($logs as $row) {
+			$timeKey = $row['time'];
+			if (!isset($groupedLogs[$timeKey])) {
+				$groupedLogs[$timeKey] = array(
+					'time'      => _date($LNG['php_tdformat'], $row['time'], $USER['timezone']),
+					'timestamp' => $row['time'],
+					'resources' => array(),
+					'fleet'     => array(),
+				);
+			}
+			$itemInfo = array(
+				'item'   => $row['item'],
+				'name'   => isset($LNG['tech'][$row['item']]) ? $LNG['tech'][$row['item']] : 'Item #'.$row['item'],
+				'count'  => $row['count'],
+				'factor' => $row['factor']
+			);
+			if (in_array((int)$row['item'], array(901, 902, 903))) {
+				$groupedLogs[$timeKey]['resources'][] = $itemInfo;
+			} else {
+				$groupedLogs[$timeKey]['fleet'][] = $itemInfo;
+			}
+		}
+
 		$this->tplObj->assign_vars(array(
-			'conteiner' => $USER['container'],
-			'logs'      => $logs,
-			'sum'       => $sum['count'],
+			'conteiner'     => (int) $USER['container'],
+			'logs'          => $logs,
+			'groupedLogs'   => $groupedLogs,
+			'sum'           => (int) $sum['count'],
+			'targetPlanet'  => htmlspecialchars($PLANET['name'], ENT_QUOTES, 'UTF-8'),
+			'targetCoords'  => '[' . $PLANET['galaxy'] . ':' . $PLANET['system'] . ':' . $PLANET['planet'] . ']',
+			'rewardPreview' => array(
+				'metal'         => $metalPerCont,
+				'crystal'       => $crystalPerCont,
+				'deuterium'     => $deutPerCont,
+				'lightFighters' => 25,
+				'heavyFighters' => 15,
+				'cruisers'      => 10,
+				'hours'         => $h,
+			),
 		));
 		$this->display('page.conteiner.default.tpl');
 	}	

@@ -71,6 +71,14 @@ $dbTableNames	= array(
     'PREMIUM_SETTINGS'  => DB_PREFIX.'premium_settings',
     'PREMIUM_LEDGER'    => DB_PREFIX.'premium_ledger',
     'PREMIUM_DAILY'     => DB_PREFIX.'premium_daily',
+    'WAR_EVENTS'        => DB_PREFIX.'war_events',
+    'BOTS'              => DB_PREFIX.'bots',
+    'BOT_LOGS'          => DB_PREFIX.'bot_logs',
+    'BOT_TASKS'         => DB_PREFIX.'bot_tasks',
+    'BOT_INTEL'         => DB_PREFIX.'bot_intel',
+    'BOT_OPPONENTS'     => DB_PREFIX.'bot_opponents',
+    'BOT_DECISIONS'     => DB_PREFIX.'bot_decisions',
+    'BOT_TARGET_BLACKLIST' => DB_PREFIX.'bot_target_blacklist',
     //$new_code
 );
 // MOD-TABLES

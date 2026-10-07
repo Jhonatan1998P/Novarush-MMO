@@ -386,6 +386,12 @@ class statbuilder
 			
 			$UniData[$UserData['universe']]++;
 				
+			if (in_array((int)$UserData['id'], array(998, 999)))
+			{
+				$FinalSQL  .= "(".$UserData['id'].",".$UserData['ally_id'].",1,".$UserData['universe'].",0,0,0,0,0,0,0,0,0,0,0,0,0,0,0), ";
+				continue;
+			}
+				
 			if ((in_array(Config::get()->stat, array(1, 2)) && $UserData['authlevel'] >= Config::get()->stat_level) || !empty($UserData['bana']))
 			{	
 				$FinalSQL  .= "(".$UserData['id'].",".$UserData['ally_id'].",1,".$UserData['universe'].",0,0,0,0,0,0,0,0,0,0,0,0,0,0,0), ";
@@ -407,6 +413,10 @@ class statbuilder
 			$UserPoints[$UserData['id']]['defense']['points']	= $DefensePoints['points'];
 			$UserPoints[$UserData['id']]['techno']['count'] 	= $TechnoPoints['count'];
 			$UserPoints[$UserData['id']]['techno']['points'] 	= $TechnoPoints['points'];
+			
+			if(!isset($UserPoints[$UserData['id']]['build'])) {
+				$UserPoints[$UserData['id']]['build'] = array('count' => 0, 'points' => 0);
+			}
 			
 			$UserPoints[$UserData['id']]['total']['count'] 		= $UserPoints[$UserData['id']]['techno']['count']
 																+ $UserPoints[$UserData['id']]['build']['count']

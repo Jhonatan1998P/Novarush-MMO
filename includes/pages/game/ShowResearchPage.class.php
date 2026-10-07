@@ -196,7 +196,7 @@ class ShowResearchPage extends AbstractGamePage
 					$CPLANET		= $PLANET;
 				
 				$CPLANET[$resource[$resglobal['tech_speed']].'_inter']	= $this->ecoObj->getNetworkLevel($USER, $CPLANET);
-				$BuildEndTime       				+= BuildFunctions::getBuildingTime($USER, $CPLANET, NULL, $ListIDArray[0]);
+				$BuildEndTime       				+= BuildFunctions::getBuildingTime($USER, $CPLANET, $ListIDArray[0], NULL, false, $ListIDArray[1] - 1);
 				$ListIDArray[3]						= $BuildEndTime;
 				$NewCurrentQueue[]					= $ListIDArray;				
 			}
@@ -262,7 +262,7 @@ class ShowResearchPage extends AbstractGamePage
 				
 				$CPLANET[$resource[$resglobal['tech_speed']].'_inter']	= $this->ecoObj->getNetworkLevel($USER, $CPLANET);
 				
-				$BuildEndTime       += BuildFunctions::getBuildingTime($USER, $CPLANET, NULL, $ListIDArray[0]);
+				$BuildEndTime       += BuildFunctions::getBuildingTime($USER, $CPLANET, $ListIDArray[0], NULL, false, $ListIDArray[1] - 1);
 				$ListIDArray[3]		= $BuildEndTime;
 				$NewCurrentQueue[]	= $ListIDArray;				
 			}
@@ -364,7 +364,7 @@ class ShowResearchPage extends AbstractGamePage
 				return false;
 			}
 				
-			$elementTime    			= BuildFunctions::getBuildingTime($USER, $PLANET, $elementId, NULL, !$AddMode, $BuildLevel);
+			$elementTime    			= BuildFunctions::getBuildingTime($USER, $PLANET, $elementId, NULL, !$AddMode, $BuildLevel - 1);
 			
 			$BuildEndTime				= $CurrentQueue[$ActualCount - 1][3] + $elementTime;
 			$CurrentQueue[]				= array($elementId, $BuildLevel, $elementTime, $BuildEndTime, $PLANET['id']);
@@ -490,6 +490,11 @@ class ShowResearchPage extends AbstractGamePage
 				'id'				    => $Element,
 				'level'				    => $USER[$resource[$Element]],
 				'factor'			    => $pricelist[$Element]['factor'],
+				'factors'			    => array(
+					901 => isset($pricelist[$Element]['factor901']) ? $pricelist[$Element]['factor901'] : $pricelist[$Element]['factor'],
+					902 => isset($pricelist[$Element]['factor902']) ? $pricelist[$Element]['factor902'] : $pricelist[$Element]['factor'],
+					903 => isset($pricelist[$Element]['factor903']) ? $pricelist[$Element]['factor903'] : $pricelist[$Element]['factor'],
+				),
 				'maxLevel'			    => $pricelist[$Element]['max'],
 				'costResources'	        => $costResources,
 				'costOverflow'		    => $costOverflow,

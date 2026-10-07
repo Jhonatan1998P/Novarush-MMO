@@ -123,12 +123,12 @@ $resglobal['buy_moon_price']            = Config::get()->resglobal_buy_moon_pric
 $resglobal['market_res']                = Config::get()->resglobal_market_res;                       //Ресурс, который используется при торговле на рынке
 $reslist['not_market_send']             = explode(',', Config::get()->reslist_not_market_send);      //Не выставляется на продажу
 //Флот
-$reslist['reducefleet']                 = explode(',', Config::get()->reslist_reducefleet);          //Еденицы, которые учавствуют при своез флота
-$reslist['tablefleet']                  = explode(',', Config::get()->reslist_tablefleet);           //Флот, который взлетает с орбиты
+$reslist['reducefleet']                 = array_map('trim', explode(',', Config::get()->reslist_reducefleet));          //Еденицы, которые учавствуют при своез флота
+$reslist['tablefleet']                  = array_map('trim', explode(',', Config::get()->reslist_tablefleet));           //Флот, который взлетает с орбиты
 //Классофикация флота на орбите
-$reslist['tablefleet_combat']           = explode(',', Config::get()->reslist_tablefleet_combat);    //Боевой флот
-$reslist['tablefleet_transport']        = explode(',', Config::get()->reslist_tablefleet_transport); //Транспорт
-$reslist['tablefleet_recyclers']        = explode(',', Config::get()->reslist_tablefleet_recyclers); //Переработчики
-$reslist['tablefleet_special']          = explode(',', Config::get()->reslist_tablefleet_special);   //Особые
+$reslist['tablefleet_combat']           = array_map('trim', explode(',', Config::get()->reslist_tablefleet_combat));    //Боевой флот
+$reslist['tablefleet_transport']        = array_map('trim', explode(',', Config::get()->reslist_tablefleet_transport)); //Транспорт
+$reslist['tablefleet_recyclers']        = array_map('trim', explode(',', Config::get()->reslist_tablefleet_recyclers)); //Переработчики
+$reslist['tablefleet_special']          = array_map('trim', explode(',', Config::get()->reslist_tablefleet_special));   //Особые
 //Сектора PvE
 $SectorME                               = explode(',', Config::get()->SectorME);

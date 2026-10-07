@@ -33,9 +33,12 @@ class ShowFleetStep3Page extends AbstractGamePage
 		}
 		
 		$targetMission 			= HTTP::_GP('mission', 3);
-		$TransportMetal			= max(0, round(HTTP::_GP('metal', 0.0)));
-		$TransportCrystal		= max(0, round(HTTP::_GP('crystal', 0.0)));
-		$TransportDeuterium		= max(0, round(HTTP::_GP('deuterium', 0.0)));
+		$rawMetal               = str_replace('.', '', (string) HTTP::_GP('metal', '0'));
+		$rawCrystal             = str_replace('.', '', (string) HTTP::_GP('crystal', '0'));
+		$rawDeuterium           = str_replace('.', '', (string) HTTP::_GP('deuterium', '0'));
+		$TransportMetal			= max(0, round((float) $rawMetal));
+		$TransportCrystal		= max(0, round((float) $rawCrystal));
+		$TransportDeuterium		= max(0, round((float) $rawDeuterium));
 		$stayTime 				= HTTP::_GP('staytime', 0);
 		$token					= HTTP::_GP('token', '');
         $maxwave				= HTTP::_GP('maxwave', 1); 
@@ -96,24 +99,6 @@ class ShowFleetStep3Page extends AbstractGamePage
 			)));
 		}
 
-		if ($targetMission == 3 && $TransportMetal + $TransportCrystal + $TransportDeuterium < 1)
-		{
-			$this->printMessage($LNG['fl_no_noresource'], array(array(
-				'label'	=> $LNG['sys_back'],
-				'url'	=> 'game.php?page=fleetStep2'
-			)));
-		}
-		
-		$ActualFleets		= FleetFunctions::GetCurrentFleets($USER['id']);
-		
-		if (FleetFunctions::GetMaxFleetSlots($USER) <= $ActualFleets)
-		{
-			$this->printMessage($LNG['fl_no_slots'], array(array(
-				'label'	=> $LNG['sys_back'],
-				'url'	=> 'game.php?page=fleetTable'
-			)));
-		}
-		
 		$ACSTime = 0;
 
         $db = Database::get();
@@ -141,6 +126,18 @@ class ShowFleetStep3Page extends AbstractGamePage
             ':targetPlanet' => $targetPlanet,
             ':targetType' => ($targetType == 2 ? 1 : $targetType),
         ));
+
+		if ($targetMission == 3 && ($TransportMetal + $TransportCrystal + $TransportDeuterium < 1))
+		{
+			if (!empty($targetPlanetData['id_owner']) && $targetPlanetData['id_owner'] == $USER['id']) {
+				$targetMission = 4;
+			} else {
+				$this->printMessage($LNG['fl_no_noresource'], array(array(
+					'label'	=> $LNG['sys_back'],
+					'url'	=> 'game.php?page=fleetStep2'
+				)));
+			}
+		}
 
 		if ($targetMission == 7)
 		{
@@ -287,7 +284,7 @@ class ShowFleetStep3Page extends AbstractGamePage
 		
 		if($targetMission == 1 || $targetMission == 2 || $targetMission == 5 || $targetMission == 6 || $targetMission == 9)
 		{
-			if(Config::get()->adm_attack == 1 && $targetPlayerData['authattack'] > $USER['authlevel'])
+			if(($targetPlayerData['id'] == 1 && $USER['id'] != 1) || (Config::get()->adm_attack == 1 && $targetPlayerData['authattack'] > $USER['authlevel']))
 			{
 				$this->printMessage($LNG['fl_admin_attack'], array(array(
 					'label'	=> $LNG['sys_back'],
@@ -428,6 +425,8 @@ class ShowFleetStep3Page extends AbstractGamePage
 			'destination'		=> $targetGalaxy .":". $targetSystem .":". $targetPlanet,
 			'fleetStartTime'	=> _date($LNG['php_tdformat'], $fleetStartTime, $USER['timezone']),
 			'fleetEndTime'		=> _date($LNG['php_tdformat'], $fleetEndTime, $USER['timezone']),
+			'duration'			=> $duration,
+			'totalDuration'		=> ($duration * 2) + $StayDuration,
 			'MaxFleetSpeed'		=> $fleetMaxSpeed,
 			'FleetList'			=> $fleetArray,
             'maxwave'			=> $maxwave,

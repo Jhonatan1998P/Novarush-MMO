@@ -84,9 +84,9 @@ class Universe {
 	static private function defineCurrentUniverse()
 	{
 		$universe = NULL;
-		if(MODE === 'INSTALL')
+		if(MODE === 'INSTALL' || MODE === 'CRON' || PHP_SAPI === 'cli')
 		{
-			// Installer are always in the first universe.
+			// Installer, cronjobs and CLI are always in the first universe.
 			return ROOT_UNI;
 		}
 		

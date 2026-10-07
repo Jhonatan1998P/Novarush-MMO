@@ -102,6 +102,9 @@ class VarsBuildCache implements BuildCache
                     924	=> $varsRow['cost924'],             
 				),
 				'factor'		     => $varsRow['factor'],
+				'factor901'		     => !empty($varsRow['factor901']) ? (float)$varsRow['factor901'] : (float)$varsRow['factor'],
+				'factor902'		     => !empty($varsRow['factor902']) ? (float)$varsRow['factor902'] : (float)$varsRow['factor'],
+				'factor903'		     => !empty($varsRow['factor903']) ? (float)$varsRow['factor903'] : (float)$varsRow['factor'],
 				'max'			     => $varsRow['maxLevel'],
 				'consumption'	     => $varsRow['consumption1'],
 				'consumption2'	     => $varsRow['consumption2'],
@@ -220,7 +223,7 @@ class VarsBuildCache implements BuildCache
                 $varsRow['bonusCostRbuild'] + $varsRow['bonusCostRfleet'] + $varsRow['bonusCostRtech'] + $varsRow['bonusCostRdefense'] + $varsRow['bonusCostRmissile'] + 
                 $varsRow['bonusDoubleAttack'] + $varsRow['bonusDoubleShield'] + $varsRow['bonusDoubleDefensive'] + $varsRow['bonusDoubleAttackBonus'] + $varsRow['bonusDoubleShieldBonus'] +$varsRow['bonusDoubleDefensiveBonus'] +
                 $varsRow['bonusDebris'] + $varsRow['bonusDefRecovery'] +
-                $varsRow['bonusFocusing'] + $varsRow['bonusAntiFocusing'] + $varsRow['bonusAccurateShots'] + $varsRow['bonusChainReaction'] + $varsRow['bonusExpBoost']) != 0)
+                $varsRow['bonusFocusing'] + $varsRow['bonusAntiFocusing'] + $varsRow['bonusAccurateShots'] + $varsRow['bonusChainReaction'] + $varsRow['bonusExpBoost'] + $varsRow['bonusFuelConsum']) != 0)
 			{
 				$reslist['bonus'][]		= $varsRow['elementID'];
 			}
