@@ -228,17 +228,30 @@ class Session
                 ':userAddress'	=> $userIpAddress,
             ));
 
-            $sql = 'UPDATE %%USERS%% SET
-            onlinetime	= :lastActivity,
-            user_lastip = :userAddress
-            WHERE
-            id = :userId;';
+            // El modo espectador NUNCA debe sobreescribir la IP de ningún jugador o bot
+            $isSpectating = !empty($_SESSION['spectator_admin_id']) && (!empty($_SESSION['spectator_target_id']) || (int)$this->data['userId'] !== (int)$_SESSION['spectator_admin_id']);
 
-            $db->update($sql, array(
-               ':userAddress'	=> $userIpAddress,
-               ':lastActivity'	=> TIMESTAMP,
-               ':userId'		=> $this->data['userId'],
-            ));
+            if (!$isSpectating) {
+                $sql = 'UPDATE %%USERS%% SET
+                onlinetime	= :lastActivity,
+                user_lastip = :userAddress
+                WHERE
+                id = :userId;';
+
+                $db->update($sql, array(
+                   ':userAddress'	=> $userIpAddress,
+                   ':lastActivity'	=> TIMESTAMP,
+                   ':userId'		=> $this->data['userId'],
+                ));
+            } else {
+                // Actualizar actividad exclusivamente en la cuenta real del espectador/admin
+                if (!empty($_SESSION['spectator_admin_id'])) {
+                    $db->update('UPDATE %%USERS%% SET onlinetime = :lastActivity WHERE id = :adminId;', array(
+                        ':lastActivity' => TIMESTAMP,
+                        ':adminId'      => (int)$_SESSION['spectator_admin_id'],
+                    ));
+                }
+            }
 
             $this->data['lastActivity']  = TIMESTAMP;
             $this->data['sessionId']	 = session_id();

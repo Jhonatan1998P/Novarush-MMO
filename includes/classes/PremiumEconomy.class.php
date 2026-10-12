@@ -132,10 +132,11 @@ class PremiumEconomy
     public static function debit(&$USER, $currency, $amount, $source, $elementId = 0, $meta = '')
     {
         global $resource;
-        if (!isset($resource[$currency])) {
+        $map = array(921 => 'darkmatter', 922 => 'antimatter', 923 => 'stardust', 924 => 'container');
+        $col = $resource[$currency] ?? ($map[$currency] ?? null);
+        if (!$col) {
             return false;
         }
-        $col = $resource[$currency];
         $amount = (float) ceil($amount);
         if ($amount <= 0) {
             return true;
@@ -159,10 +160,11 @@ class PremiumEconomy
     public static function credit(&$USER, $currency, $amount, $source, $elementId = 0, $meta = '')
     {
         global $resource;
-        if (!isset($resource[$currency])) {
+        $map = array(921 => 'darkmatter', 922 => 'antimatter', 923 => 'stardust', 924 => 'container');
+        $col = $resource[$currency] ?? ($map[$currency] ?? null);
+        if (!$col) {
             return;
         }
-        $col = $resource[$currency];
         $amount = (float) floor($amount);
         if ($amount <= 0) {
             return;
@@ -195,5 +197,15 @@ class PremiumEconomy
                 ':t' => TIMESTAMP
             )
         );
+
+        if (!class_exists('BotTelemetryLogger')) {
+            $botLoggerPath = 'includes/classes/bot/Telemetry/BotTelemetryLogger.class.php';
+            if (file_exists($botLoggerPath)) {
+                require_once $botLoggerPath;
+            }
+        }
+        if (class_exists('BotTelemetryLogger')) {
+            BotTelemetryLogger::onLedgerEntry($uid, $cur, $delta, $after, $source, $el, $meta);
+        }
     }
 }

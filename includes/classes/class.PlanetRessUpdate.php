@@ -432,7 +432,8 @@ class ResourceUpdate
 			return false;
 		}
 
-		$this->PLANET['b_hangar'] 	+= ($this->TIME - $this->PLANET['last_update']);
+		$elapsed = max(0, (int)($this->TIME - $this->PLANET['last_update']));
+		$this->PLANET['b_hangar'] = max(0, (float)$this->PLANET['b_hangar'] + $elapsed);
 		$BuildArray					= array();
 		foreach($BuildQueue as $Item)
 		{
@@ -827,13 +828,6 @@ class ResourceUpdate
                 ':'.$resource[$resS].''				=> $PLANET[''.$resource[$resS].'']
             );
         }
-        
-        foreach($reslist['resstype'][3] as $resU) //проверка всего масива элементов
-		{
-            $params	+= array(
-                ':'.$resource[$resU].''			    => $USER[''.$resource[$resU].'']
-            );
-        }
         //$new_code
         /* $old_code
 		$params	= array(
@@ -923,13 +917,7 @@ class ResourceUpdate
                 p.'.$resource[$resS].'			    = :'.$resource[$resS].'
             WHERE p.id = :planetId AND u.id = :userId;';
         }
-        
-        foreach($reslist['resstype'][3] as $resU) //проверка всего масива элементов
-		{
-                $sql .= 'UPDATE %%PLANETS%% as p,%%USERS%% as u SET
-                u.'.$resource[$resU].'		        = :'.$resource[$resU].'
-            WHERE p.id = :planetId AND u.id = :userId;';
-        }
+        // resstype[3] (divisas premium) se gestionan de forma atomica en PremiumEconomy y no se sobreescriben aqui
         // $new_code
         /* $old_code
 		$sql = 'UPDATE %%PLANETS%% as p,%%USERS%% as u SET

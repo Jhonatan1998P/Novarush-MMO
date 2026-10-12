@@ -1,6 +1,7 @@
 <?php
 
 require_once 'includes/classes/bot/Evaluation/EconomyValuator.class.php';
+require_once 'includes/classes/bot/Forces/BotPremiumStrategist.class.php';
 
 /**
  * NovaRush Bot AI v2 - Production Allocator
@@ -109,7 +110,25 @@ class BotProductionAllocator
                 }
 
                 $cost = BuildFunctions::getElementPrice($this->ctx->user, $pData, $mId, false);
-                $canAfford = BuildFunctions::isElementBuyable($this->ctx->user, $pData, $mId, $cost);
+
+                // Ensure physical resources allocated to fleet and defense are strictly protected from being spent by mines
+                $fleetCreds = isset($this->ctx->budgetManager) ? $this->ctx->budgetManager->getPlanetFleetCredits($pId) : array();
+                $defCreds   = isset($this->ctx->budgetManager) ? $this->ctx->budgetManager->getPlanetDefenseCredits($pId) : array();
+                $reservedM  = (float)($fleetCreds['metal'] ?? 0.0) + (float)($defCreds['metal'] ?? 0.0);
+                $reservedC  = (float)($fleetCreds['crystal'] ?? 0.0) + (float)($defCreds['crystal'] ?? 0.0);
+                $reservedD  = (float)($fleetCreds['deuterium'] ?? 0.0) + (float)($defCreds['deuterium'] ?? 0.0);
+
+                $availPhysM = max(0.0, (float)$pData['metal'] - $reservedM);
+                $availPhysC = max(0.0, (float)$pData['crystal'] - $reservedC);
+                $availPhysD = max(0.0, (float)$pData['deuterium'] - $reservedD);
+
+                $costM = (float)($cost[901] ?? $cost['metal'] ?? 0.0);
+                $costC = (float)($cost[902] ?? $cost['crystal'] ?? 0.0);
+                $costD = (float)($cost[903] ?? $cost['deuterium'] ?? 0.0);
+
+                $canAffordPhysical = ($availPhysM >= $costM && $availPhysC >= $costC && $availPhysD >= $costD);
+                $canAffordBudget = (!isset($this->ctx->budgetManager)) || $this->ctx->budgetManager->canAffordBudget($pId, 'mines', $cost);
+                $canAfford = $canAffordPhysical && $canAffordBudget;
 
                 $costMSE = BotEconomyValuator::arrayToMSE($cost);
                 $costHP  = BotEconomyValuator::toHP($costMSE, $empire->getHourlyProductionMSE());
@@ -239,12 +258,24 @@ class BotProductionAllocator
                 $archMineMult = $this->ctx->personality->getCategoryMultiplier('mines');
                 $finalScore = $baseScore * $archMineMult;
 
-                if ($canAfford) {
+                $needsTrader = false;
+                $tradeInfo = null;
+                if (!$canAfford && class_exists('BotPremiumStrategist')) {
+                    $tradeInfo = BotPremiumStrategist::canTraderResolveDeficit($this->ctx, $pId, 'mines', $cost);
+                    if ($tradeInfo !== false) {
+                        $needsTrader = true;
+                    }
+                }
+
+                if ($canAfford || $needsTrader) {
                     $candidates[] = array(
-                        'planet_id' => $pId,
-                        'element'   => $mId,
-                        'score'     => round($finalScore, 2),
-                        'cost_hp'   => round($costHP, 2),
+                        'planet_id'    => $pId,
+                        'element'      => $mId,
+                        'score'        => round($finalScore, 2),
+                        'cost_hp'      => round($costHP, 2),
+                        'cost'         => $cost,
+                        'needs_trader' => $needsTrader,
+                        'trade_info'   => $tradeInfo,
                     );
                 } else {
                     $unaffordableGoals[] = array(
@@ -264,19 +295,34 @@ class BotProductionAllocator
                 return $b['score'] <=> $a['score'];
             });
 
-            // Enqueue highest viable candidate
+            $queuedPlanets = array();
+
+            // Enqueue highest viable candidate PER PLANET (Multi-Colony Parallel Construction)
             foreach ($candidates as $cand) {
-                $ok = $this->gateway->constructBuilding($cand['planet_id'], $cand['element']);
+                $pId = (int)$cand['planet_id'];
+                if (isset($queuedPlanets[$pId])) {
+                    continue; // This colony already queued its top building in this cycle
+                }
+
+                if (!empty($cand['needs_trader'])) {
+                    $tradeOk = BotPremiumStrategist::tryTraderForCategory($this->ctx, $pId, 'mines', $cand['cost']);
+                    if (!$tradeOk) {
+                        continue;
+                    }
+                }
+
+                $buildReason = "Retorno de inversión industrial (Score: {$cand['score']}, Payback: {$cand['cost_hp']}h HP)";
+                $ok = $this->gateway->constructBuilding($pId, $cand['element'], $buildReason);
                 if ($ok) {
                     $queued++;
+                    $queuedPlanets[$pId] = true;
                     $this->ctx->decisionLog->record(
                         'mine_upgrade',
-                        "Upgraded {$resource[$cand['element']]} on planet #{$cand['planet_id']}",
+                        "Upgraded {$resource[$cand['element']]} on planet #{$pId} (Multi-Colony Parallel Execution)",
                         array_slice($candidates, 0, 5),
-                        "build_{$cand['element']}_planet_{$cand['planet_id']}",
+                        "build_{$cand['element']}_planet_{$pId}",
                         $cand['score']
                     );
-                    break;
                 }
             }
         }
@@ -293,7 +339,8 @@ class BotProductionAllocator
                     'building',
                     $topGoal['element'],
                     $topGoal['cost'],
-                    $topGoal['data']
+                    $topGoal['data'],
+                    'mines'
                 );
                 $this->ctx->decisionLog->record(
                     'savings_lock_engaged',
@@ -349,10 +396,11 @@ class BotProductionAllocator
             131 => 4.5, // Metal Processing Tech (High ROI)
             132 => 4.5, // Crystal Processing Tech (High ROI)
             133 => 4.2, // Deuterium Processing Tech (High ROI)
+            123 => 4.8, // Intergalactic Research Network (IRN - Speeds up all techs)
             113 => 3.8, // Energy Tech (Power & unlocks)
             117 => 3.5, // Impulse Drive (Missile range!)
             106 => 3.2, // Espionage Tech
-            108 => 3.2, // Computer Tech
+            108 => 3.5, // Computer Tech (Fleet Slots)
             109 => 2.8, // Weapons Tech
             110 => 2.8, // Shielding Tech
             111 => 2.8, // Armor Tech
@@ -360,7 +408,7 @@ class BotProductionAllocator
             122 => 2.9, // Plasma Tech
             121 => 2.4, // Ion Tech
             120 => 2.2, // Laser Tech
-            124 => 3.6, // Astrophysics (Extra planets)
+            124 => 4.0, // Astrophysics (Extra planets & expedition slots)
             134 => 2.7, // Fuel Optimization
             115 => 2.2, // Combustion Drive
             199 => 2.0, // Graviton Tech
@@ -375,12 +423,49 @@ class BotProductionAllocator
 
         // Minimum free fields across the empire to gauge Terraformer urgency
         $minFreeFieldsEmpire = 999;
+        $hasFusion = false;
+        $advancedLabs = 0;
         foreach ($planets as $pCheck) {
             $f = CalculateMaxPlanetFields($pCheck['data']) - ((int)$pCheck['data']['field_current'] + count($pCheck['building_queue']));
             if ($f < $minFreeFieldsEmpire) {
                 $minFreeFieldsEmpire = $f;
             }
+            if (!empty($pCheck['data'][$resource[12]]) && (int)$pCheck['data'][$resource[12]] > 0) {
+                $hasFusion = true;
+            }
+            if (!empty($pCheck['data'][$resource[31]]) && (int)$pCheck['data'][$resource[31]] >= 10) {
+                $advancedLabs++;
+            }
         }
+
+        // --- Strategic Multiplier 1: Simultaneous Fleet Slots (Computer Tech #108) ---
+        $maxFleetSlots = FleetFunctions::GetMaxFleetSlots($this->ctx->user);
+        $db = Database::get();
+        $activeFleetsCount = (int)$db->selectSingle("SELECT COUNT(*) as cnt FROM %%FLEETS%% WHERE fleet_owner = :uid;", array(':uid' => (int)$this->ctx->botId), 'cnt');
+        $slotPressure = $maxFleetSlots > 0 ? ($activeFleetsCount / $maxFleetSlots) : 0.0;
+        $slotMultiplier = 1.0 + (pow($slotPressure, 2) * 3.5);
+
+        // --- Strategic Multiplier 2: Astrophysics (#124) (Expeditions & Colony Slots) ---
+        $curAstro = (int)($this->ctx->user[$resource[124]] ?? 0);
+        $nextAstro = $curAstro + 1;
+        $curExpSlots = (int)floor(sqrt($curAstro));
+        $nextExpSlots = (int)floor(sqrt($nextAstro));
+        $curColonies = (int)floor(($curAstro + 1) / 2);
+        $nextColonies = (int)floor(($nextAstro + 1) / 2);
+        $astroMultiplier = 1.2;
+        if ($nextExpSlots > $curExpSlots) {
+            $astroMultiplier += 2.0; // Unlocks a new expedition slot for +300 MO harvesting!
+        }
+        if ($nextColonies > $curColonies) {
+            $astroMultiplier += 1.8; // Unlocks a new colony!
+        }
+
+        // --- Strategic Multiplier 3: Intergalactic Research Network (IRN #123) ---
+        $irnMultiplier = 2.0 + ($advancedLabs * 0.80);
+
+        // --- Strategic Multiplier 4: Energy Efficiency (#113) ---
+        $curEnergyTech = (int)($this->ctx->user[$resource[113]] ?? 0);
+        $energyMultiplier = 1.0 + ($hasFusion ? 1.5 : 0.0) + ($minFreeFieldsEmpire <= 5 && $curEnergyTech < 12 ? 2.5 : 0.0);
 
         foreach ($planets as $pId => $planetEntry) {
             $pData = $planetEntry['data'];
@@ -395,24 +480,32 @@ class BotProductionAllocator
                 }
 
                 $cost = BuildFunctions::getElementPrice($this->ctx->user, $pData, $techId, false);
-                $canAffordTech = BuildFunctions::isElementBuyable($this->ctx->user, $pData, $techId, $cost);
+
+                // Ensure physical resources on this lab planet reserved for fleet and defense are protected
+                $fleetCreds = isset($this->ctx->budgetManager) ? $this->ctx->budgetManager->getPlanetFleetCredits($pId) : array();
+                $defCreds   = isset($this->ctx->budgetManager) ? $this->ctx->budgetManager->getPlanetDefenseCredits($pId) : array();
+                $reservedM  = (float)($fleetCreds['metal'] ?? 0.0) + (float)($defCreds['metal'] ?? 0.0);
+                $reservedC  = (float)($fleetCreds['crystal'] ?? 0.0) + (float)($defCreds['crystal'] ?? 0.0);
+                $reservedD  = (float)($fleetCreds['deuterium'] ?? 0.0) + (float)($defCreds['deuterium'] ?? 0.0);
+
+                $availPhysM = max(0.0, (float)$pData['metal'] - $reservedM);
+                $availPhysC = max(0.0, (float)$pData['crystal'] - $reservedC);
+                $availPhysD = max(0.0, (float)$pData['deuterium'] - $reservedD);
+
+                $costM = (float)($cost[901] ?? $cost['metal'] ?? 0.0);
+                $costC = (float)($cost[902] ?? $cost['crystal'] ?? 0.0);
+                $costD = (float)($cost[903] ?? $cost['deuterium'] ?? 0.0);
+
+                $canAffordPhysical = ($availPhysM >= $costM && $availPhysC >= $costC && $availPhysD >= $costD);
+                $canAffordBudget = (!isset($this->ctx->budgetManager)) || $this->ctx->budgetManager->canAffordBudget($pId, 'research', $cost);
+                $canAffordTech = $canAffordPhysical && $canAffordBudget;
 
                 $costMSE = BotEconomyValuator::arrayToMSE($cost);
                 $costHP  = BotEconomyValuator::toHP($costMSE, $empireHourlyMSE);
                 $diffTechFactor = ($macroTech / 0.20);
                 $score   = ($baseWeight * $diffTechFactor * 20.0) / max(0.1, $costHP);
 
-                // Military tech scaling for Hard/Nightmare difficulty
-                if (in_array($techId, array(109, 110, 111, 117, 118, 122))) {
-                    if (isset($this->ctx->difficulty->name) && $this->ctx->difficulty->name === BotDifficultyProfile::NIGHTMARE) {
-                        $score *= 1.8;
-                    } elseif (isset($this->ctx->difficulty->name) && $this->ctx->difficulty->name === BotDifficultyProfile::HARD) {
-                        $score *= 1.4;
-                    }
-                }
-
                 // --- A. Graviton Tech (199) Highest Priority ---
-                // When 300,000 energy requirement is met, research immediately to unlock NovaRush Modules (81-84) & Titans
                 if ($techId == 199) {
                     $score += 25000.0;
                 }
@@ -424,12 +517,10 @@ class BotProductionAllocator
                 }
 
                 // --- C. Energy Tech (113) Scaling & Terraformer Prerequisite ---
-                $curEnergyTech = isset($this->ctx->user[$resource[113]]) ? (int)$this->ctx->user[$resource[113]] : 0;
                 if ($techId == 113) {
                     if ($pData['energy'] < 500) {
                         $score += 1500.0;
                     }
-                    // If planet fields are filling up and Terraformer needs Energy Tech 12
                     if ($minFreeFieldsEmpire <= 5 && $curEnergyTech < 12) {
                         $score += 5000.0 + (12 - $curEnergyTech) * 500.0;
                     }
@@ -447,14 +538,43 @@ class BotProductionAllocator
                     $score += 1000.0;
                 }
 
-                $archTechMult = $this->ctx->personality->getCategoryMultiplier('research');
-                $finalScore = $score * $archTechMult;
+                // --- F. Apply Strategic Domain Multipliers ---
+                $strategicMult = 1.0;
+                if ($techId == 108) {
+                    $strategicMult = $slotMultiplier;
+                } elseif ($techId == 124) {
+                    $strategicMult = $astroMultiplier;
+                } elseif ($techId == 123) {
+                    $strategicMult = $irnMultiplier;
+                } elseif ($techId == 113) {
+                    $strategicMult = $energyMultiplier;
+                }
 
-                if ($canAffordTech) {
+                // --- G. Apply Pure Personality Multiplier ---
+                $persTechMult = method_exists($this->ctx->personality, 'getTechMultiplier')
+                    ? (float)$this->ctx->personality->getTechMultiplier($techId)
+                    : 1.0;
+
+                $finalScore = $score * $strategicMult * $persTechMult;
+
+                $needsTraderTech = false;
+                $tradeInfoTech = null;
+                if (!$canAffordTech && class_exists('BotPremiumStrategist')) {
+                    $tradeInfoTech = BotPremiumStrategist::canTraderResolveDeficit($this->ctx, $pId, 'research', $cost);
+                    if ($tradeInfoTech !== false) {
+                        $needsTraderTech = true;
+                    }
+                }
+
+                if ($canAffordTech || $needsTraderTech) {
                     $candidates[] = array(
-                        'planet_id' => $pId,
-                        'tech_id'   => $techId,
-                        'score'     => round($finalScore, 2),
+                        'planet_id'    => $pId,
+                        'tech_id'      => $techId,
+                        'score'        => round($finalScore, 2),
+                        'cost'         => $cost,
+                        'lab_level'    => (int)($pData[$resource[31]] ?? 0),
+                        'needs_trader' => $needsTraderTech,
+                        'trade_info'   => $tradeInfoTech,
                     );
                 } else {
                     $unaffordableTechGoals[] = array(
@@ -462,6 +582,7 @@ class BotProductionAllocator
                         'tech_id'   => $techId,
                         'score'     => round($finalScore, 2),
                         'cost'      => $cost,
+                        'lab_level' => (int)($pData[$resource[31]] ?? 0),
                         'data'      => $pData,
                     );
                 }
@@ -470,11 +591,19 @@ class BotProductionAllocator
 
         if (!empty($candidates)) {
             usort($candidates, function($a, $b) {
-                return $b['score'] <=> $a['score'];
+                return ($b['score'] <=> $a['score']) ?: ($b['lab_level'] <=> $a['lab_level']);
             });
 
             foreach ($candidates as $cand) {
-                $ok = $this->gateway->researchTech($cand['planet_id'], $cand['tech_id']);
+                if (!empty($cand['needs_trader'])) {
+                    $tradeOk = BotPremiumStrategist::tryTraderForCategory($this->ctx, $cand['planet_id'], 'research', $cand['cost']);
+                    if (!$tradeOk) {
+                        continue;
+                    }
+                }
+
+                $techReason = "Prioridad de investigación científica imperial (Score: {$cand['score']})";
+                $ok = $this->gateway->researchTech($cand['planet_id'], $cand['tech_id'], $techReason);
                 if ($ok) {
                     $this->ctx->decisionLog->record(
                         'research_enqueued',
@@ -500,7 +629,8 @@ class BotProductionAllocator
                     'research',
                     $topTech['tech_id'],
                     $topTech['cost'],
-                    $topTech['data']
+                    $topTech['data'],
+                    'research'
                 );
                 $this->ctx->decisionLog->record(
                     'savings_lock_engaged',

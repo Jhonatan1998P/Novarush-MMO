@@ -55,13 +55,7 @@ class ShowFleetStep2Page extends AbstractGamePage
             ':targetPlanet' => $targetPlanet
         ));
 
-        if($targetType == 2 && $targetPlanetData['der_metal'] == 0 && $targetPlanetData['der_crystal'] == 0)
-		{
-			$this->printMessage($LNG['fl_error_empty_derbis'], array(array(
-				'label'	=> $LNG['sys_back'],
-				'url'	=> 'game.php?page=fleetTable'
-			)));
-		}
+        // Permitir reciclar campos de escombros vacíos (reciclaje previo / sincronizado con ataques)
 			
 		$MisInfo		     		= array();		
 		$MisInfo['galaxy']     		= $targetGalaxy;		

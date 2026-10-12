@@ -27,7 +27,7 @@
         {
             "name": "1.1 Turno de BotKernel ejecuta sin excepciones fatales ni fallos de bloqueo",
             "status": "PASS",
-            "details": "Turno completado: 0 decisiones registradas"
+            "details": "Turno completado: 1 decisiones registradas"
         },
         {
             "name": "1.2 Lock consultivo de MySQL liberado correctamente (sin bloqueos hu\u00e9rfanos\/deadlocks)",
@@ -35,9 +35,9 @@
             "details": "Lock adquirido y liberado inmediatamente"
         },
         {
-            "name": "2.1 Bloqueo administrativo restringe flotas de otros bots (bot_id != 1007)",
+            "name": "2.1 Todos los bots tienen libre movimiento de flotas y ataques como LaParca",
             "status": "PASS",
-            "details": "Bot 1001 bloqueado: SI | Bot 1007 permitido: SI"
+            "details": "Bot 1001 permitido: SI | Bot 1007 permitido: SI"
         },
         {
             "name": "3.1 Registro y despacho de tareas diferidas (MIPs escalonados \/ recalls) en uni1_bot_tasks",

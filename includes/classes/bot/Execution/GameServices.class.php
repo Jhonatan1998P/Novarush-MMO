@@ -3,6 +3,7 @@
 require_once 'includes/classes/class.FleetFunctions.php';
 require_once 'includes/classes/class.BuildFunctions.php';
 require_once 'includes/classes/class.PlanetRessUpdate.php';
+require_once 'includes/classes/bot/Kernel/BotClock.class.php';
 
 /**
  * NovaRush Bot AI v2 - Game Services Wrapper
@@ -35,10 +36,6 @@ class BotGameServices
         $endTime,
         $consumption = 0
     ) {
-        // BLOQUEO ADMINISTRATIVO: Solo LaParca (bot_id 1007) esta autorizado a mover flota
-        if ((int)$startOwnerId !== 1007) {
-            return false;
-        }
 
         return FleetFunctions::sendFleet(
             $fleetArray,
@@ -93,14 +90,10 @@ class BotGameServices
         $targetType,
         $primaryTarget = 0
     ) {
-        // BLOQUEO ADMINISTRATIVO: Solo LaParca (bot_id 1007) esta autorizado a disparar misiles
-        if ((int)$startOwnerId !== 1007) {
-            return false;
-        }
 
         $fleetArray = array(503 => (int)$count);
         $duration = FleetFunctions::GetMIPDuration($startSystem, $targetSystem);
-        $startTime = TIMESTAMP + $duration;
+        $startTime = BotClock::get() + $duration;
         $stayTime  = $startTime;
         $endTime   = $startTime;
         $resources = array(901 => 0, 902 => 0, 903 => 0);
@@ -181,7 +174,7 @@ class BotGameServices
         $planet['deuterium'] -= isset($costResources[903]) ? $costResources[903] : 0;
 
         $elementTime  = BuildFunctions::getBuildingTime($user, $planet, $elementId, $costResources);
-        $buildEndTime = ($actualCount == 0) ? (TIMESTAMP + $elementTime) : ($currentQueue[$actualCount - 1][3] + $elementTime);
+        $buildEndTime = ($actualCount == 0) ? (BotClock::get() + $elementTime) : ($currentQueue[$actualCount - 1][3] + $elementTime);
 
         $currentQueue[] = array($elementId, $buildLevel, $elementTime, $buildEndTime, 'build');
 
@@ -261,6 +254,14 @@ class BotGameServices
 
         if ($count <= 0) return false;
 
+        $buildArray = !empty($planet['b_hangar_id']) ? @unserialize($planet['b_hangar_id']) : array();
+        if (!is_array($buildArray)) {
+            $buildArray = array();
+        }
+        if (count($buildArray) >= 8) {
+            return false;
+        }
+
         $costResources = BuildFunctions::getElementPrice($user, $planet, $elementId, false, $count);
         if (!BuildFunctions::isElementBuyable($user, $planet, $elementId, $costResources)) {
             return false;
@@ -271,10 +272,6 @@ class BotGameServices
         $planet['crystal']   -= isset($costResources[902]) ? $costResources[902] : 0;
         $planet['deuterium'] -= isset($costResources[903]) ? $costResources[903] : 0;
 
-        $buildArray = !empty($planet['b_hangar_id']) ? @unserialize($planet['b_hangar_id']) : array();
-        if (!is_array($buildArray)) {
-            $buildArray = array();
-        }
         $buildArray[] = array($elementId, $count);
 
         $db = Database::get();
@@ -344,7 +341,7 @@ class BotGameServices
         $planet['deuterium'] -= isset($costResources[903]) ? $costResources[903] : 0;
 
         $elementTime  = BuildFunctions::getBuildingTime($user, $planet, $elementId, $costResources);
-        $buildEndTime = TIMESTAMP + $elementTime;
+        $buildEndTime = BotClock::get() + $elementTime;
 
         $currentQueue[] = array($elementId, $buildLevel, $elementTime, $buildEndTime, $planet['id']);
 
@@ -374,5 +371,83 @@ class BotGameServices
         $user['b_tech']        = $buildEndTime;
 
         return true;
+    }
+
+    /**
+     * Scrap units and refund resources according to canonical rules
+     */
+    public static function scrapUnits(array &$user, array &$planet, $shipId, $count)
+    {
+        global $resource, $pricelist;
+
+        $shipId = (int)$shipId;
+        $count  = (int)$count;
+        if ($shipId <= 0 || $count <= 0) {
+            return false;
+        }
+
+        $config = Config::get();
+        $allowedShipIDs = array_map('intval', array_filter(array_map('trim', explode(',', $config->trade_allowed_ships))));
+        if (!in_array($shipId, $allowedShipIDs, true)) {
+            return false;
+        }
+
+        $shipKey = isset($resource[$shipId]) ? $resource[$shipId] : '';
+        if (empty($shipKey) || !isset($planet[$shipKey]) || (int)$planet[$shipKey] < $count) {
+            return false;
+        }
+
+        $tradeCharge = 1.0 - ((float)$config->trade_charge / 100.0);
+        $costMeta = isset($pricelist[$shipId]['cost']) ? $pricelist[$shipId]['cost'] : array();
+
+        $refundM  = (float)$count * (isset($costMeta[901]) ? (float)$costMeta[901] : 0.0) * $tradeCharge;
+        $refundC  = (float)$count * (isset($costMeta[902]) ? (float)$costMeta[902] : 0.0) * $tradeCharge;
+        $refundD  = (float)$count * (isset($costMeta[903]) ? (float)$costMeta[903] : 0.0) * $tradeCharge;
+        $refundDM = (float)$count * (isset($costMeta[921]) ? (float)$costMeta[921] : 0.0) * $tradeCharge;
+
+        $planet['metal']     += $refundM;
+        $planet['crystal']   += $refundC;
+        $planet['deuterium'] += $refundD;
+        $planet[$shipKey]    -= $count;
+
+        $db = Database::get();
+        $sql = "UPDATE %%PLANETS%% SET 
+                metal = :metal,
+                crystal = :crystal,
+                deuterium = :deuterium,
+                {$shipKey} = {$shipKey} - :count
+                WHERE id = :planetId;";
+
+        $res = $db->update($sql, array(
+            ':metal'    => $planet['metal'],
+            ':crystal'  => $planet['crystal'],
+            ':deuterium'=> $planet['deuterium'],
+            ':count'    => $count,
+            ':planetId' => $planet['id'],
+        ));
+
+        if ($res === false || $db->rowCount() <= 0) {
+            return false;
+        }
+
+        if ($refundDM > 0 && isset($user['darkmatter'])) {
+            $user['darkmatter'] += $refundDM;
+            $db->update("UPDATE %%USERS%% SET darkmatter = :dm WHERE id = :userId;", array(
+                ':dm'     => $user['darkmatter'],
+                ':userId' => $user['id'],
+            ));
+        }
+
+        return array(
+            901         => $refundM,
+            902         => $refundC,
+            903         => $refundD,
+            921         => $refundDM,
+            'metal'     => $refundM,
+            'crystal'   => $refundC,
+            'deuterium' => $refundD,
+            'count'     => $count,
+            'ship_id'   => $shipId,
+        );
     }
 }

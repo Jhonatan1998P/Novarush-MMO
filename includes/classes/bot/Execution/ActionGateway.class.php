@@ -2,6 +2,7 @@
 
 require_once 'includes/classes/bot/Execution/GameServices.class.php';
 require_once 'includes/classes/bot/Kernel/LockManager.class.php';
+require_once 'includes/classes/bot/Kernel/BotClock.class.php';
 
 /**
  * NovaRush Bot AI v2 - Action Gateway
@@ -24,48 +25,60 @@ class BotActionGateway
     /**
      * Enqueue a building on a planet through the real engine with Phase 2 atomic transaction
      */
-    public function constructBuilding($planetId, $elementId)
+    public function constructBuilding($planetId, $elementId, $reason = '')
     {
         $db = Database::get();
-        $db->beginTransaction();
+        $isOuterTx = $db->inTransaction();
+        if (!$isOuterTx) {
+            $db->beginTransaction();
+        }
         try {
             $planet = BotLockManager::lockPlanetRow($planetId);
             if (empty($planet) || (int)$planet['id_owner'] !== (int)$this->ctx->botId) {
-                $db->rollBack();
+                if (!$isOuterTx) $db->rollBack();
                 return false;
             }
 
             // Canonical resource update
             $updater = new ResourceUpdate();
-            list($u, $p) = $updater->CalcResource($this->ctx->user, $planet, true, TIMESTAMP);
+            list($u, $p) = $updater->CalcResource($this->ctx->user, $planet, true, BotClock::get());
 
             if (!BuildFunctions::isTechnologieAccessible($u, $p, $elementId, array())) {
-                $db->rollBack();
+                if (!$isOuterTx) $db->rollBack();
                 return false;
             }
 
             $costResources = BuildFunctions::getElementPrice($u, $p, $elementId, false);
             if (!BuildFunctions::isElementBuyable($u, $p, $elementId, $costResources)) {
-                $db->rollBack();
+                if (!$isOuterTx) $db->rollBack();
                 return false;
             }
 
             $ok = BotGameServices::enqueueBuilding($u, $p, $elementId);
             if (!$ok) {
-                $db->rollBack();
+                if (!$isOuterTx) $db->rollBack();
                 return false;
             }
 
-            $db->commit();
+            if (!$isOuterTx) $db->commit();
             $this->ctx->user = $u;
 
             if (isset($this->ctx->budgetManager)) {
                 $this->ctx->budgetManager->deductFromBudget($planetId, 'mines', $costResources);
             }
 
+            if (isset($this->ctx->telemetry)) {
+                global $resource;
+                $pName  = $planet['name'] ?? "Planeta #{$planetId}";
+                $coords = isset($planet['galaxy']) ? "[{$planet['galaxy']}:{$planet['system']}:{$planet['planet']}]" : '';
+                $lvlCol = $resource[$elementId] ?? '';
+                $curLvl = (!empty($lvlCol) && isset($planet[$lvlCol])) ? (int)$planet[$lvlCol] : 0;
+                $this->ctx->telemetry->logBuilding($pName, $coords, $elementId, $curLvl + 1, $costResources, $reason);
+            }
+
             return true;
         } catch (Throwable $e) {
-            if ($db->inTransaction()) {
+            if (!$isOuterTx && $db->inTransaction()) {
                 $db->rollBack();
             }
             return false;
@@ -75,45 +88,48 @@ class BotActionGateway
     /**
      * Enqueue ships or defense on a planet through the real engine with Phase 2 atomic transaction
      */
-    public function constructUnits($planetId, $elementId, $count)
+    public function constructUnits($planetId, $elementId, $count, $reason = '')
     {
         $db = Database::get();
-        $db->beginTransaction();
+        $isOuterTx = $db->inTransaction();
+        if (!$isOuterTx) {
+            $db->beginTransaction();
+        }
         try {
             $planet = BotLockManager::lockPlanetRow($planetId);
             if (empty($planet) || (int)$planet['id_owner'] !== (int)$this->ctx->botId) {
-                $db->rollBack();
+                if (!$isOuterTx) $db->rollBack();
                 return false;
             }
 
             $updater = new ResourceUpdate();
-            list($u, $p) = $updater->CalcResource($this->ctx->user, $planet, true, TIMESTAMP);
+            list($u, $p) = $updater->CalcResource($this->ctx->user, $planet, true, BotClock::get());
 
             if (!BuildFunctions::isTechnologieAccessible($u, $p, $elementId, array())) {
-                $db->rollBack();
+                if (!$isOuterTx) $db->rollBack();
                 return false;
             }
 
             $maxConstructible = BuildFunctions::getMaxConstructibleElements($u, $p, $elementId);
             $realCount = min((int)$count, $maxConstructible);
             if ($realCount <= 0) {
-                $db->rollBack();
+                if (!$isOuterTx) $db->rollBack();
                 return false;
             }
 
             $costResources = BuildFunctions::getElementPrice($u, $p, $elementId, false, $realCount);
             if (!BuildFunctions::isElementBuyable($u, $p, $elementId, $costResources)) {
-                $db->rollBack();
+                if (!$isOuterTx) $db->rollBack();
                 return false;
             }
 
             $ok = BotGameServices::enqueueShipyard($u, $p, $elementId, $realCount);
             if (!$ok) {
-                $db->rollBack();
+                if (!$isOuterTx) $db->rollBack();
                 return false;
             }
 
-            $db->commit();
+            if (!$isOuterTx) $db->commit();
             $this->ctx->user = $u;
 
             if (isset($this->ctx->budgetManager)) {
@@ -121,9 +137,67 @@ class BotActionGateway
                 $this->ctx->budgetManager->deductFromBudget($planetId, $cat, $costResources);
             }
 
-            return true;
+            if (isset($this->ctx->telemetry)) {
+                $pName  = $planet['name'] ?? "Planeta #{$planetId}";
+                $coords = isset($planet['galaxy']) ? "[{$planet['galaxy']}:{$planet['system']}:{$planet['planet']}]" : '';
+                if ($elementId >= 400) {
+                    $this->ctx->telemetry->logDefense($pName, $coords, $elementId, $realCount, $costResources, $reason);
+                } else {
+                    $this->ctx->telemetry->logFleet($pName, $coords, $elementId, $realCount, $costResources, $reason);
+                }
+            }
+
+            return (int)$realCount;
         } catch (Throwable $e) {
-            if ($db->inTransaction()) {
+            if (!$isOuterTx && $db->inTransaction()) {
+                $db->rollBack();
+            }
+            return false;
+        }
+    }
+
+    /**
+     * Atomically scrap ships on a planet through the real engine with Phase 1 atomic transaction
+     */
+    public function scrapUnits($planetId, $shipId, $count)
+    {
+        $db = Database::get();
+        $isOuterTx = $db->inTransaction();
+        if (!$isOuterTx) {
+            $db->beginTransaction();
+        }
+        try {
+            $planet = BotLockManager::lockPlanetRow($planetId);
+            if (empty($planet) || (int)$planet['id_owner'] !== (int)$this->ctx->botId) {
+                if (!$isOuterTx) $db->rollBack();
+                return false;
+            }
+
+            $updater = new ResourceUpdate();
+            list($u, $p) = $updater->CalcResource($this->ctx->user, $planet, true, BotClock::get());
+
+            $refund = BotGameServices::scrapUnits($u, $p, $shipId, $count);
+            if (!$refund) {
+                if (!$isOuterTx) $db->rollBack();
+                return false;
+            }
+
+            if (!$isOuterTx) $db->commit();
+            $this->ctx->user = $u;
+
+            if (isset($this->ctx->budgetManager)) {
+                $this->ctx->budgetManager->creditScrapRefund($planetId, $refund);
+            }
+
+            if (isset($this->ctx->telemetry)) {
+                $pName  = $planet['name'] ?? "Planeta #{$planetId}";
+                $coords = isset($planet['galaxy']) ? "[{$planet['galaxy']}:{$planet['system']}:{$planet['planet']}]" : '';
+                $this->ctx->telemetry->logScrap($pName, $coords, $shipId, $count, $refund);
+            }
+
+            return $refund;
+        } catch (Throwable $e) {
+            if (!$isOuterTx && $db->inTransaction()) {
                 $db->rollBack();
             }
             return false;
@@ -133,52 +207,136 @@ class BotActionGateway
     /**
      * Enqueue a technology research through the real engine with Phase 2 atomic transaction
      */
-    public function researchTech($planetId, $techId)
+    public function researchTech($planetId, $techId, $reason = '')
     {
         $db = Database::get();
-        $db->beginTransaction();
+        $isOuterTx = $db->inTransaction();
+        if (!$isOuterTx) {
+            $db->beginTransaction();
+        }
         try {
             $planet = BotLockManager::lockPlanetRow($planetId);
             $user   = BotLockManager::lockUserRow($this->ctx->botId);
             if (empty($planet) || (int)$planet['id_owner'] !== (int)$this->ctx->botId || empty($user)) {
-                $db->rollBack();
+                if (!$isOuterTx) $db->rollBack();
                 return false;
             }
 
             $updater = new ResourceUpdate();
-            list($u, $p) = $updater->CalcResource($user, $planet, true, TIMESTAMP);
+            list($u, $p) = $updater->CalcResource($user, $planet, true, BotClock::get());
 
             if (!BuildFunctions::isTechnologieAccessible($u, $p, $techId, array())) {
-                $db->rollBack();
+                if (!$isOuterTx) $db->rollBack();
                 return false;
             }
 
             $costResources = BuildFunctions::getElementPrice($u, $p, $techId, false);
             if (!BuildFunctions::isElementBuyable($u, $p, $techId, $costResources)) {
-                $db->rollBack();
+                if (!$isOuterTx) $db->rollBack();
                 return false;
             }
 
             $ok = BotGameServices::enqueueResearch($u, $p, $techId);
             if (!$ok) {
-                $db->rollBack();
+                if (!$isOuterTx) $db->rollBack();
                 return false;
             }
 
-            $db->commit();
+            if (!$isOuterTx) $db->commit();
             $this->ctx->user = $u;
 
             if (isset($this->ctx->budgetManager)) {
                 $this->ctx->budgetManager->deductFromBudget($planetId, 'research', $costResources);
             }
 
+            if (isset($this->ctx->telemetry)) {
+                global $resource;
+                $pName  = $planet['name'] ?? "Planeta #{$planetId}";
+                $coords = isset($planet['galaxy']) ? "[{$planet['galaxy']}:{$planet['system']}:{$planet['planet']}]" : '';
+                $techCol = $resource[$techId] ?? '';
+                $curLvl = (!empty($techCol) && isset($u[$techCol])) ? (int)$u[$techCol] : 0;
+                $this->ctx->telemetry->logResearch($techId, $curLvl + 1, $pName, $coords, $costResources, $reason);
+            }
+
             return true;
         } catch (Throwable $e) {
-            if ($db->inTransaction()) {
+            if (!$isOuterTx && $db->inTransaction()) {
                 $db->rollBack();
             }
             return false;
         }
+    }
+
+    /**
+     * Get maximum expedition slots: S_exp = max(1, floor(sqrt(Tech 124))) if Tech 124 > 0, else 0.
+     */
+    public static function getExpeditionSlots(array $user)
+    {
+        global $resource;
+        $techId = isset($resource[124]) ? $resource[124] : 'astrophysics';
+        $tech124 = isset($user[$techId]) ? (int)$user[$techId] : (isset($user[124]) ? (int)$user[124] : 0);
+        return ($tech124 > 0) ? max(1, (int)floor(sqrt($tech124))) : 0;
+    }
+
+    /**
+     * Get shielded military slots: S_militar = max(1, S_total - S_exp).
+     */
+    public static function getMilitarySlots(array $user)
+    {
+        $maxSlots = FleetFunctions::GetMaxFleetSlots($user);
+        $expSlots = self::getExpeditionSlots($user);
+        return max(1, $maxSlots - $expSlots);
+    }
+
+    /**
+     * Get active expedition fleets (missions 15 and 18)
+     */
+    public static function getActiveExpFleets($botId)
+    {
+        return (int)FleetFunctions::GetCurrentFleets($botId, 15, true)
+             + (int)FleetFunctions::GetCurrentFleets($botId, 18, true);
+    }
+
+    /**
+     * Get active military / non-expedition fleets
+     */
+    public static function getActiveNonExpFleets($botId)
+    {
+        $totalFleets = (int)FleetFunctions::GetCurrentFleets($botId);
+        $activeExp   = self::getActiveExpFleets($botId);
+        return max(0, $totalFleets - $activeExp);
+    }
+
+    /**
+     * Get available expedition slots for new expeditions
+     */
+    public static function getAvailableExpeditionSlots($botId, array $user)
+    {
+        $maxSlots     = FleetFunctions::GetMaxFleetSlots($user);
+        $actualFleets = FleetFunctions::GetCurrentFleets($botId);
+        if ($actualFleets >= $maxSlots) {
+            return 0;
+        }
+
+        $sExp      = self::getExpeditionSlots($user);
+        $activeExp = self::getActiveExpFleets($botId);
+        return max(0, min($maxSlots - $actualFleets, $sExp - $activeExp));
+    }
+
+    /**
+     * Get available military slots for new military / logistics / staging missions
+     */
+    public static function getAvailableMilitarySlots($botId, array $user)
+    {
+        $maxSlots     = FleetFunctions::GetMaxFleetSlots($user);
+        $actualFleets = FleetFunctions::GetCurrentFleets($botId);
+        if ($actualFleets >= $maxSlots) {
+            return 0;
+        }
+
+        $sMilitary    = self::getMilitarySlots($user);
+        $activeNonExp = self::getActiveNonExpFleets($botId);
+        return max(0, min($maxSlots - $actualFleets, $sMilitary - $activeNonExp));
     }
 
     /**
@@ -196,20 +354,83 @@ class BotActionGateway
         $targetType,
         array $cargoResources = array(),
         $speedFactor = 10,
-        &$outStartTime = null
+        &$outStartTime = null,
+        $stayDuration = 0
     ) {
-        // BLOQUEO ADMINISTRATIVO: Solo LaParca (bot_id 1007) esta autorizado a mover flota
-        if ((int)$this->ctx->botId !== 1007) {
-            return false;
-        }
-
         global $resource;
 
-        // 1. Enforce Fleet Slots rule parity
+        // 1. Enforce Fleet Slots & Dedicated Expedition Slots rule parity
         $maxSlots     = FleetFunctions::GetMaxFleetSlots($this->ctx->user);
         $actualFleets = FleetFunctions::GetCurrentFleets($this->ctx->botId);
+        $sExp         = self::getExpeditionSlots($this->ctx->user);
+        $activeExp    = self::getActiveExpFleets($this->ctx->botId);
+        $activeNonExp = max(0, $actualFleets - $activeExp);
+        $sMilitary    = self::getMilitarySlots($this->ctx->user);
+
+        // Emergency Slot Preemption for Survival Fleetsave (Mission 4):
+        if ($mission == 4 && ($maxSlots <= $actualFleets || $activeNonExp >= $sMilitary)) {
+            $db = Database::get();
+            $preempt = $db->selectSingle(
+                "SELECT fleet_id, fleet_start_id, fleet_array, fleet_resource_metal, fleet_resource_crystal, fleet_resource_deuter 
+                 FROM %%FLEETS%% 
+                 WHERE fleet_owner = :bid AND fleet_mission = 3 
+                 ORDER BY fleet_id DESC 
+                 LIMIT 1;",
+                array(':bid' => (int)$this->ctx->botId)
+            );
+            if (!empty($preempt)) {
+                $shipUpdates = array();
+                $shipEntries = explode(';', trim($preempt['fleet_array'], ';'));
+                foreach ($shipEntries as $se) {
+                    if (empty($se)) continue;
+                    $parts = explode(',', $se);
+                    if (count($parts) === 2) {
+                        $sId = (int)$parts[0];
+                        $sQty = (int)$parts[1];
+                        if (isset($resource[$sId])) {
+                            $shipUpdates[] = $resource[$sId] . " = " . $resource[$sId] . " + " . $sQty;
+                        }
+                    }
+                }
+                $shipSql = !empty($shipUpdates) ? ", " . implode(', ', $shipUpdates) : "";
+                $db->update("UPDATE %%PLANETS%% SET 
+                    metal = metal + :m, 
+                    crystal = crystal + :c, 
+                    deuterium = deuterium + :d 
+                    {$shipSql} 
+                    WHERE id = :pid;", array(
+                    ':m'   => (float)$preempt['fleet_resource_metal'],
+                    ':c'   => (float)$preempt['fleet_resource_crystal'],
+                    ':d'   => (float)$preempt['fleet_resource_deuter'],
+                    ':pid' => (int)$preempt['fleet_start_id'],
+                ));
+                $db->delete("DELETE FROM %%FLEETS%% WHERE fleet_id = :fid;", array(':fid' => (int)$preempt['fleet_id']));
+
+                $actualFleets = FleetFunctions::GetCurrentFleets($this->ctx->botId);
+                $activeExp    = self::getActiveExpFleets($this->ctx->botId);
+                $activeNonExp = max(0, $actualFleets - $activeExp);
+            }
+        }
+
         if ($maxSlots <= $actualFleets) {
-            return false;
+            // Mission 4 has emergency survival exception if preemption wasn't possible
+            if ($mission != 4 || $actualFleets > ($maxSlots + 1)) {
+                return false;
+            }
+        }
+
+        if ($mission == 15 || $mission == 18) {
+            // Expedition mission: strictly capped by sExp and overall maxSlots
+            if ($sExp <= 0 || $activeExp >= $sExp) {
+                return false;
+            }
+        } else {
+            // Military / Logistics / Deployment / Spy missions:
+            // Dedicated expedition slots sExp are locked exclusively for expeditions.
+            // Non-expedition fleets can only use S_militar = max(1, S_total - S_exp).
+            if ($activeNonExp >= $sMilitary && $mission != 4) {
+                return false;
+            }
         }
 
         $startPlanet = BotLockManager::lockPlanetRow($startPlanetId);
@@ -235,16 +456,21 @@ class BotActionGateway
         $gameSpeed    = FleetFunctions::GetGameSpeedFactor();
 
         $flightDuration = FleetFunctions::GetMissionDuration($speedFactor, $fleetSpeed, $distance, $gameSpeed, $this->ctx->user);
-        $consumption    = FleetFunctions::GetFleetConsumption($fleetArray, $flightDuration, $distance, $this->ctx->user, $speedFactor);
+        $consumption    = FleetFunctions::GetFleetConsumption($fleetArray, $flightDuration, $distance, $this->ctx->user, $gameSpeed);
 
         // Check deuterium for consumption
         if ($startPlanet['deuterium'] < $consumption) {
             return false;
         }
 
-        $startTime = TIMESTAMP + $flightDuration;
-        $stayTime  = $startTime;
-        $endTime   = $startTime + $flightDuration;
+        $startTime = BotClock::get() + $flightDuration;
+        if ($mission == 15 || $mission == 18) {
+            $effectiveStay = ($stayDuration > 0) ? (int)$stayDuration : 3600;
+        } else {
+            $effectiveStay = (int)$stayDuration;
+        }
+        $stayTime  = $startTime + $effectiveStay;
+        $endTime   = $stayTime + $flightDuration;
         $outStartTime = $startTime;
 
         // 4. Validate and clamp cargo capacity (Storage rule parity)
@@ -310,6 +536,24 @@ class BotActionGateway
                 ));
             }
 
+            if (isset($this->ctx->telemetry)) {
+                $sName   = $startPlanet['name'] ?? "Planeta #{$startPlanetId}";
+                $sCoords = "[{$startPlanet['galaxy']}:{$startPlanet['system']}:{$startPlanet['planet']}]";
+                $tName   = ($targetOwnerId == $this->ctx->botId) ? "Colonia Propia" : "Objetivo";
+                $tCoords = "[{$targetGalaxy}:{$targetSystem}:{$targetPlanet}]";
+                $this->ctx->telemetry->logFleetMission(
+                    $sName,
+                    $sCoords,
+                    $tName,
+                    $tCoords,
+                    $mission,
+                    $fleetArray,
+                    array(901 => $mCargo, 902 => $cCargo, 903 => $dCargo),
+                    $consumption,
+                    "Despacho operativo de flota naval"
+                );
+            }
+
             return (int)$fleetId;
         }
 
@@ -338,11 +582,6 @@ class BotActionGateway
         $count,
         $primaryTarget = 0
     ) {
-        // BLOQUEO ADMINISTRATIVO: Solo LaParca (bot_id 1007) esta autorizado a disparar misiles
-        if ((int)$this->ctx->botId !== 1007) {
-            return false;
-        }
-
         global $resource;
 
         $startPlanet = BotLockManager::lockPlanetRow($startPlanetId);

@@ -651,18 +651,16 @@ class WarEventBossEngine
         $winnerNames = array();
 
         foreach ($uniqueWinners as $userId) {
-            $user = $db->selectSingle("SELECT username FROM %%USERS%% WHERE id = :id;", array(':id' => $userId));
+            $user = $db->selectSingle("SELECT * FROM %%USERS%% WHERE id = :id;", array(':id' => $userId));
             if (!empty($user)) {
                 $winnerNames[] = $user['username'];
-                $updateUserSql = "UPDATE %%USERS%% SET 
-                                  container = container + :c, 
-                                  antimatter = antimatter + :am 
-                                  WHERE id = :id;";
-                $db->update($updateUserSql, array(
-                    ':c'  => $containers,
-                    ':am' => $antimatter,
-                    ':id' => $userId
-                ));
+                require_once 'includes/classes/PremiumEconomy.class.php';
+                if ($containers > 0) {
+                    PremiumEconomy::credit($user, 924, $containers, 'event_boss_reward', (int)$event['id'], "boss=" . ($event['boss_name'] ?? 'fortress'));
+                }
+                if ($antimatter > 0) {
+                    PremiumEconomy::credit($user, 922, $antimatter, 'event_boss_reward', (int)$event['id'], "boss=" . ($event['boss_name'] ?? 'fortress'));
+                }
 
                 // Send PM to each winner
                 $pmSubject = "🏆 ¡VICTORIA: RECOMPENSA DE LA FORTALEZA ANCESTRAL RECIBIDA!";

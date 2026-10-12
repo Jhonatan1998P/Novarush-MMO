@@ -44,8 +44,7 @@ class ShowResearchPage extends AbstractGamePage
 		$NeededDm               = 10 + ((800*($USER['b_tech']-TIMESTAMP))/3600);
 		if($NeededDm < 10)
 			$NeededDm=10;
-		if ($USER['darkmatter'] >= $NeededDm){
-			$USER['darkmatter']				-= $NeededDm;
+		if (PremiumEconomy::debit($USER, 921, $NeededDm, 'fast_research', $Element, "hRest=" . round(($USER['b_tech'] - TIMESTAMP) / 3600, 4))) {
             $sql = "UPDATE %%USERS%% SET ".$fast." = ".$fast." + 1 WHERE id = :userId;";
 		
             $USER['b_tech_id']			= 0;

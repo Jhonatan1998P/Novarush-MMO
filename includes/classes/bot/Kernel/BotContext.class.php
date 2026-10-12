@@ -3,6 +3,7 @@
 require_once 'includes/classes/bot/Config/DifficultyProfile.class.php';
 require_once 'includes/classes/bot/Config/Personality.class.php';
 require_once 'includes/classes/bot/Telemetry/DecisionLog.class.php';
+require_once 'includes/classes/bot/Telemetry/BotTelemetryLogger.class.php';
 
 /**
  * NovaRush Bot AI v2 - Execution Context
@@ -20,6 +21,7 @@ class BotContext
     public $economicModifier;
     public $dailySeed;
     public $decisionLog;
+    public $telemetry;
     public $budgetManager;
     public $botRow;
 
@@ -41,6 +43,7 @@ class BotContext
 
         $this->dailySeed        = md5($this->botId . ':' . date('Y-m-d'));
         $this->decisionLog      = new BotDecisionLog($this->botId, $this->dailySeed);
+        $this->telemetry        = BotTelemetryLogger::getForBot($userRow['username'] ?? $this->botId);
 
         // Ensure user factor array is loaded
         if (!isset($this->user['factor'])) {

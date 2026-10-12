@@ -14,6 +14,8 @@
  */
 
 require_once 'includes/classes/bot/Kernel/BotKernel.class.php';
+require_once 'includes/classes/bot/Forces/BotAchievementManager.class.php';
+require_once 'includes/classes/bot/BotNameHelper.class.php';
 
 class BotEngine
 {
@@ -68,11 +70,14 @@ class BotEngine
             last_logistics int(11) NOT NULL DEFAULT 0,
             last_build int(11) NOT NULL DEFAULT 0,
             last_recruit int(11) NOT NULL DEFAULT 0,
+            last_fleet_recruit int(11) NOT NULL DEFAULT 0,
+            last_defense_recruit int(11) NOT NULL DEFAULT 0,
             is_active tinyint(1) NOT NULL DEFAULT 1,
             created_at int(11) NOT NULL DEFAULT 0,
             doctrine_heavy int(10) unsigned NOT NULL DEFAULT 0,
             doctrine_medium int(10) unsigned NOT NULL DEFAULT 0,
             doctrine_light int(10) unsigned NOT NULL DEFAULT 0,
+            doctrine_fodder int(10) unsigned NOT NULL DEFAULT 0,
             recruit_interval int(10) unsigned NOT NULL DEFAULT 900,
             target_galaxy int(11) DEFAULT 0,
             target_system int(11) DEFAULT 0,
@@ -186,12 +191,15 @@ class BotEngine
             $pdo->exec(str_replace('%%BOT_DECISIONS%%', DB_PREFIX . 'bot_decisions', $sql6));
             $pdo->exec(str_replace('%%BOT_TARGET_BLACKLIST%%', DB_PREFIX . 'bot_target_blacklist', $sql7));
 
-            // Migraciones de columnas V3.1 para presupuestos y modo ahorro
+            // Migraciones de columnas V3.1 para presupuestos, modo ahorro y doctrinas militares
             try {
                 $pdo->exec("ALTER TABLE " . DB_PREFIX . "bots 
                     ADD COLUMN IF NOT EXISTS budget_credits LONGTEXT NULL,
                     ADD COLUMN IF NOT EXISTS savings_lock LONGTEXT NULL,
-                    ADD COLUMN IF NOT EXISTS last_budget_time INT(11) NOT NULL DEFAULT 0;");
+                    ADD COLUMN IF NOT EXISTS last_budget_time INT(11) NOT NULL DEFAULT 0,
+                    ADD COLUMN IF NOT EXISTS last_fleet_recruit INT(11) NOT NULL DEFAULT 0,
+                    ADD COLUMN IF NOT EXISTS last_defense_recruit INT(11) NOT NULL DEFAULT 0,
+                    ADD COLUMN IF NOT EXISTS doctrine_fodder INT(10) UNSIGNED NOT NULL DEFAULT 0;");
             } catch (Throwable $eCol) {
                 // Ya existen o no soportado IF NOT EXISTS en versión antigua
             }
@@ -284,6 +292,9 @@ class BotEngine
             ':home2'        => $user['id_planet']
         ));
 
+        // Sincronizar logros legítimos iniciales
+        BotAchievementManager::recalculateBot((int)$user['id']);
+
         self::log($user['id'], 'system', "Bot registrado: {$user['username']} con personalidad {$personality}");
         return true;
     }
@@ -299,23 +310,9 @@ class BotEngine
 
         $config = Config::get(1);
 
-        // Si no se proporcionó nombre, seleccionamos uno de botnames.txt
+        // Si no se proporcionó nombre, seleccionamos uno de jugadores reales (no repetitivo)
         if (empty($name)) {
-            $botNamesPath = ROOT_PATH . 'botnames.txt';
-            if (file_exists($botNamesPath)) {
-                $lines = file($botNamesPath, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
-                for ($attempt = 0; $attempt < 30; $attempt++) {
-                    $candidate = trim($lines[array_rand($lines)]);
-                    $exists = $db->selectSingle("SELECT id FROM %%USERS%% WHERE username = :name;", array(':name' => $candidate));
-                    if (empty($exists)) {
-                        $name = $candidate;
-                        break;
-                    }
-                }
-            }
-            if (empty($name)) {
-                $name = 'Bot_' . mt_rand(1000, 9999);
-            }
+            $name = BotNameHelper::getRandomPlayerName();
         }
 
         // Si no se especificó sistema o planeta, buscar posición libre
@@ -339,6 +336,9 @@ class BotEngine
         $rawPass = 'BotPass_' . mt_rand(100000, 999999);
         $cryptPass = PlayerUtil::cryptPassword($rawPass);
 
+        // Nombre de planeta principal respetando 8 a 12 caracteres
+        $homePlanetName = BotNameHelper::getRandomPlanetName();
+
         // Crear jugador en 2Moons
         list($userId, $homePlanetId) = PlayerUtil::createPlayer(
             1,
@@ -349,7 +349,7 @@ class BotEngine
             $galaxy,
             $system,
             $planet,
-            'Fortaleza ' . $name,
+            $homePlanetName,
             AUTH_USR
         );
 
@@ -361,13 +361,11 @@ class BotEngine
         );
         $diff = isset($diffMap[$tier]) ? $diffMap[$tier] : 'normal';
 
-        $heavyOptions  = array(225, 216, 214);
-        $mediumOptions = array(213, 211, 215);
-        $lightOptions  = array(206, 207);
-
-        $chosenHeavy  = $heavyOptions[array_rand($heavyOptions)];
-        $chosenMedium = $mediumOptions[array_rand($mediumOptions)];
-        $chosenLight  = $lightOptions[array_rand($lightOptions)];
+        // Doctrinas se inicializan en 0 y se deciden dinámicamente al desbloquear >= 2 unidades por categoría
+        $chosenHeavy  = 0;
+        $chosenMedium = 0;
+        $chosenLight  = 0;
+        $chosenFodder = 0;
 
         if ($personality === 'raider') {
             $recruitInterval = mt_rand(600, 900); // 10 a 15 min
@@ -378,8 +376,8 @@ class BotEngine
         }
 
         // Registrar en uni1_bots
-        $db->insert("INSERT INTO " . DB_PREFIX . "bots (bot_id, personality, difficulty, home_planet_id, last_activity, is_active, created_at, doctrine_heavy, doctrine_medium, doctrine_light, recruit_interval)
-                     VALUES (:botId, :pers, :diff, :home, :now, 1, :now, :heavy, :medium, :light, :interval);", array(
+        $db->insert("INSERT INTO " . DB_PREFIX . "bots (bot_id, personality, difficulty, home_planet_id, last_activity, is_active, created_at, doctrine_heavy, doctrine_medium, doctrine_light, doctrine_fodder, recruit_interval)
+                     VALUES (:botId, :pers, :diff, :home, :now, 1, :now, :heavy, :medium, :light, :fodder, :interval);", array(
             ':botId'    => $userId,
             ':pers'     => $personality,
             ':diff'     => $diff,
@@ -388,6 +386,7 @@ class BotEngine
             ':heavy'    => $chosenHeavy,
             ':medium'   => $chosenMedium,
             ':light'    => $chosenLight,
+            ':fodder'   => $chosenFodder,
             ':interval' => $recruitInterval
         ));
 
@@ -396,6 +395,9 @@ class BotEngine
 
         // Crear 2 colonias adicionales para que el bot pueda utilizar de inmediato reclutamiento paralelo y logística
         self::createExtraColonies($userId, $galaxy, $system, 2);
+
+        // Sincronizar logros legítimos para el bot recién creado
+        BotAchievementManager::recalculateBot((int)$userId);
 
         self::log($userId, 'create', "Bot creado: {$name} [Nivel: {$tier}, Personalidad: {$personality}] en {$galaxy}:{$system}:{$planet}");
 
@@ -488,6 +490,14 @@ class BotEngine
     protected static function createExtraColonies($userId, $galaxy, $baseSystem, $count = 2)
     {
         $db = Database::get();
+        $usedColonyNames = array();
+
+        // Obtener nombres ya usados por el bot para garantizar diversidad
+        $existing = $db->select("SELECT name FROM %%PLANETS%% WHERE id_owner = :userId;", array(':userId' => $userId));
+        foreach ($existing as $row) {
+            $usedColonyNames[] = $row['name'];
+        }
+
         for ($i = 1; $i <= $count; $i++) {
             $targetSystem = max(1, $baseSystem + ($i * mt_rand(1, 4)));
             $targetPlanet = mt_rand(4, 10);
@@ -495,7 +505,10 @@ class BotEngine
             for ($attempt = 0; $attempt < 20; $attempt++) {
                 if (PlayerUtil::isPositionFree(1, $galaxy, $targetSystem, $targetPlanet)) {
                     try {
-                        $colonyId = PlayerUtil::createPlanet($galaxy, $targetSystem, $targetPlanet, 1, $userId, 'Colonia ' . $i, false, AUTH_USR);
+                        $colonyName = BotNameHelper::getRandomPlanetName($usedColonyNames);
+                        $usedColonyNames[] = $colonyName;
+
+                        $colonyId = PlayerUtil::createPlanet($galaxy, $targetSystem, $targetPlanet, 1, $userId, $colonyName, false, AUTH_USR);
                         // Asignar minas e infraestructura básica a la colonia para que pueda producir y reclutar
                         $db->update("UPDATE %%PLANETS%% SET 
                             metal_mine = 18, 

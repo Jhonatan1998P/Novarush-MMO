@@ -114,9 +114,9 @@ $capM = (float)$pData['metal_max'] * $ratios['mines'];
 
 assert_test(
     'FASE 1',
-    'Techo estático de almacén y desvío de excedentes al Fondo Común de Oportunidad',
-    ($updatedCredits['planets'][$firstPlanetId]['mines']['metal'] <= ($capM + 1.0) && $updatedCredits['opportunity_fund']['metal'] > 0),
-    "Crédito limitado a {$capM} y oportunidad contiene {$updatedCredits['opportunity_fund']['metal']}"
+    'Techo estático de almacén por categoría sin desvío de fuga a opportunity_fund',
+    ($updatedCredits['planets'][$firstPlanetId]['mines']['metal'] <= ($capM + 1.0) && $updatedCredits['opportunity_fund']['metal'] == 0.0),
+    "Crédito limitado a {$capM} y oportunidad permanece aislado en {$updatedCredits['opportunity_fund']['metal']}"
 );
 
 // ========================================================================

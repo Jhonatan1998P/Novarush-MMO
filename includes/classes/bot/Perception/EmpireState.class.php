@@ -1,6 +1,7 @@
 <?php
 
 require_once 'includes/classes/bot/Evaluation/EconomyValuator.class.php';
+require_once 'includes/classes/bot/Kernel/BotClock.class.php';
 
 /**
  * NovaRush Bot AI v2 - Empire State
@@ -43,7 +44,7 @@ class BotEmpireState
         foreach ($rows as $planet) {
             // Update resource accumulation to current timestamp
             $planetRess = new ResourceUpdate();
-            list($this->user, $planetUpdated) = $planetRess->CalcResource($this->user, $planet, true, TIMESTAMP);
+            list($this->user, $planetUpdated) = $planetRess->CalcResource($this->user, $planet, true, BotClock::get());
 
             $pId = (int)$planetUpdated['id'];
             $pType = (int)$planetUpdated['planet_type'];

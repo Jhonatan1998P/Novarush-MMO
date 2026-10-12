@@ -88,7 +88,7 @@ class ShowShipyardPage extends AbstractGamePage
 			$scriptData[] = array(
 				'element'	=> $BuildArray[0], 
 				'amount'	=> $BuildArray[1], 
-				'timeque'	=> max($QueueTime - $PLANET['b_hangar'],0),
+				'timeque'	=> max($QueueTime - max(0, (float)$PLANET['b_hangar']), 0),
 				
 			);
 		}

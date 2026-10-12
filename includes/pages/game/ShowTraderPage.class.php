@@ -167,7 +167,9 @@ class ShowTraderPage extends AbstractGamePage
 		
 		if ($tradeSum > 0)
 		{
-			$USER[$resource[Config::get()->ressources_trader]]	-= Config::get()->cost_trader;
+			$traderRes = (int) Config::get()->ressources_trader;
+			$traderCost = (float) Config::get()->cost_trader;
+			PremiumEconomy::debit($USER, $traderRes, $traderCost, 'trader_call', $resourceID, "tradeSum={$tradeSum}");
 		}
 		
 		$this->printMessage($LNG['tr_exchange_done'], array(array(

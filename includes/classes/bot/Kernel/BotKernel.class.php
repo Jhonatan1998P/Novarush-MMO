@@ -1,5 +1,6 @@
 <?php
 
+require_once 'includes/classes/bot/Kernel/BotClock.class.php';
 require_once 'includes/classes/bot/Kernel/BotContext.class.php';
 require_once 'includes/classes/bot/Kernel/LockManager.class.php';
 require_once 'includes/classes/bot/Kernel/BotScheduler.class.php';
@@ -15,6 +16,10 @@ require_once 'includes/classes/bot/Military/TargetFinder.class.php';
 require_once 'includes/classes/bot/Military/IntelPolicy.class.php';
 require_once 'includes/classes/bot/Military/StrikePlanner.class.php';
 require_once 'includes/classes/bot/Military/RecyclePlanner.class.php';
+require_once 'includes/classes/bot/Forces/BotAchievementManager.class.php';
+require_once 'includes/classes/bot/Forces/BotExpeditionPlanner.class.php';
+require_once 'includes/classes/bot/Forces/BotPremiumStrategist.class.php';
+require_once 'includes/classes/bot/Forces/BotCivicStrategist.class.php';
 
 /**
  * NovaRush Bot AI v2 - Bot Kernel
@@ -25,11 +30,11 @@ class BotKernel
 {
     /**
      * Bloqueo administrativo de movimientos de flota para bots
-     * Solo el Bot LaParca (bot_id 1007) esta autorizado a mover flotas y misiles.
+     * Restricción levantada: todos los bots tienen autorización completa para mover flotas y ataques como LaParca.
      */
     public static function isFleetMovementBlocked($botId)
     {
-        return ((int)$botId !== 1007);
+        return false;
     }
 
     /**
@@ -76,7 +81,11 @@ class BotKernel
             $ctx = new BotContext($botRow, $userRow);
             $isFleetBlocked = self::isFleetMovementBlocked($botId);
 
-            // 3. Process any due scheduled tasks
+            // 2.1 Initialize Budget Manager early for scheduled tasks
+            $budgetManager = new BotBudgetManager($ctx);
+            $ctx->budgetManager = $budgetManager;
+
+            // 3. Process any due scheduled tasks (may credit arrived logistics)
             self::processScheduledTasks($ctx);
 
             // 4. Build Perception Model
@@ -85,13 +94,19 @@ class BotKernel
                 $ctx->user = $world->empire->getUser();
             }
 
-            // 4.1 Initialize Budget Manager & Incrementally accumulate credits (Phase 1)
-            $budgetManager = new BotBudgetManager($ctx);
+            // 4.1 Incrementally accumulate credits (Phase 1)
             $budgetManager->updateCredits($world->empire);
-            $ctx->budgetManager = $budgetManager;
 
             // 5. Initialize Action Gateway
             $gateway = new BotActionGateway($ctx);
+
+            // 5.1 Premium Economy Strategy & Closed-Loop Supply Chain (Phase 2: Fair Mining, Stardust, Containers, Officers)
+            $premiumStrategist = new BotPremiumStrategist($ctx, $gateway);
+            $premiumStrategist->managePremiumEconomy($world);
+
+            // 5.2 Civic Strategy (Phase 3: Race, Government, Ethics, 7-Day Tactical Parties, Ideologies)
+            $civicStrategist = new BotCivicStrategist($ctx, $gateway);
+            $civicStrategist->manageCivics($world);
 
             // 6. Tactical Threat Response (Fleetsave / Hold)
             $dodged = 0;
@@ -103,6 +118,9 @@ class BotKernel
             // 6.1 Process Phase 3 Savings Lock & Storage / Anti-Farm Watchdogs
             $savingsResult = $budgetManager->processSavingsLock($world->empire, $gateway);
 
+            // 6.5 On-Demand Merchant Batch Orchestration (Flota > Defensa > Investigación > Construcción, max 5 planetas, 50/35/15 MSE)
+            $traderDemandsExecuted = $premiumStrategist->orchestrateDemandTraderBatch($world);
+
             // 7. Economic Allocation (Infrastructure & Mines & Tech)
             $allocator = new BotProductionAllocator($ctx, $gateway);
             $builtMines = $allocator->allocate($world->empire);
@@ -110,7 +128,14 @@ class BotKernel
 
             // 8. Military Force Planning (Shipyard Queues)
             $forcePlanner = new BotForcePlanner($ctx, $gateway);
-            $recruitedUnits = $forcePlanner->planForces($world->empire);
+            $recruitedUnits = $forcePlanner->planForces($world->empire, false, $world);
+
+            // 8.5 Autonomous & Safe Expeditions (Phase 1: BotExpeditionPlanner)
+            $expeditions = 0;
+            if (!$isFleetBlocked) {
+                $expeditionPlanner = new BotExpeditionPlanner($ctx, $gateway);
+                $expeditions = $expeditionPlanner->planExpeditions($world);
+            }
 
             // 9. Staging & Logistics (FOB Forward Operating Base)
             $rallied = 0;
@@ -173,8 +198,24 @@ class BotKernel
                 $ctx->decisionLog->record('fleet_lock', 'Movimientos de flota bloqueados por orden administrativa.', array(), 'locked', 0.0);
             }
 
+            // 10.1 Sincronización orgánica de logros reales (Dirty checking, Zero-overhead)
+            $achManager = new BotAchievementManager($ctx);
+            $updatedAchievements = $achManager->sync($world->empire);
+
             // 11. Flush Decision Telemetry
             $ctx->decisionLog->flush();
+
+            $fleetRecruited = 0;
+            $defenseRecruited = 0;
+            if (is_array($recruitedUnits)) {
+                foreach ($recruitedUnits as $uId => $cnt) {
+                    if ((int)$uId >= 400) {
+                        $defenseRecruited += (int)$cnt;
+                    } else {
+                        $fleetRecruited += (int)$cnt;
+                    }
+                }
+            }
 
             // 12. Update Bot Timestamps
             $db->update("UPDATE " . DB_PREFIX . "bots SET 
@@ -183,15 +224,19 @@ class BotKernel
                 last_attack = IF(:attacked > 0, :now, last_attack),
                 last_logistics = IF(:convoys > 0, :now, last_logistics),
                 last_build = IF(:built > 0, :now, last_build),
-                last_recruit = IF(:recruited > 0, :now, last_recruit)
+                last_recruit = IF(:recruited > 0, :now, last_recruit),
+                last_fleet_recruit = IF(:fleet_recruited > 0, :now, last_fleet_recruit),
+                last_defense_recruit = IF(:def_recruited > 0, :now, last_defense_recruit)
                 WHERE bot_id = :bot_id;", array(
-                ':now'       => TIMESTAMP,
-                ':spied'     => $spied,
-                ':attacked'  => $attacked,
-                ':convoys'   => $convoys,
-                ':built'     => $builtMines,
-                ':recruited' => count($recruitedUnits),
-                ':bot_id'    => $botId,
+                ':now'             => BotClock::get(),
+                ':spied'           => $spied,
+                ':attacked'        => $attacked,
+                ':convoys'         => $convoys,
+                ':built'           => $builtMines,
+                ':recruited'       => count($recruitedUnits),
+                ':fleet_recruited' => $fleetRecruited,
+                ':def_recruited'   => $defenseRecruited,
+                ':bot_id'          => $botId,
             ));
 
             BotLockManager::releaseBotLock($botId);
@@ -211,6 +256,8 @@ class BotKernel
                 'spied'       => $spied,
                 'attacked'    => $attacked,
                 'recycled'    => $recycled,
+                'expeditions' => $expeditions,
+                'achievements_updated' => count($updatedAchievements),
                 'decisions'   => $ctx->decisionLog->getRecordedThisTurn(),
             );
 
@@ -234,6 +281,9 @@ class BotKernel
             if ($taskType === 'fleetsave_recall') {
                 if (is_array($payload) && isset($payload['fleet_id'])) {
                     BotGameServices::recallFleet($ctx->user, $payload['fleet_id']);
+                    if (isset($ctx->budgetManager) && !empty($payload['origin_id'])) {
+                        $ctx->budgetManager->syncFleetsaveReturn((int)$payload['origin_id'], $payload);
+                    }
                 }
             } elseif ($taskType === 'staggered_mip_salvo') {
                 if (is_array($payload) && isset($payload['start_planet_id']) && !self::isFleetMovementBlocked($ctx->botId)) {
@@ -250,11 +300,11 @@ class BotKernel
                         (int)($payload['primary_target'] ?? 401)
                     );
                 }
-            } elseif ($taskType === 'staggered_fleet_assault') {
+            } elseif ($taskType === 'staggered_fleet_assault' || $taskType === 'staggered_farm_wave') {
                 if (is_array($payload) && isset($payload['fleet'], $payload['fob_id']) && !self::isFleetMovementBlocked($ctx->botId)) {
                     $gateway = new BotActionGateway($ctx);
                     $speed = isset($payload['speed']) ? (int)$payload['speed'] : 10;
-                    $gateway->launchFleet(
+                    $ok = $gateway->launchFleet(
                         $payload['fleet'],
                         1, // Attack
                         (int)$payload['fob_id'],
@@ -267,8 +317,19 @@ class BotKernel
                         array(),
                         $speed
                     );
+                    if ($ok && !empty($payload['target_owner_id'])) {
+                        require_once 'includes/classes/bot/Military/TargetBlacklist.class.php';
+                        BotTargetBlacklist::recordAttackVictory(
+                            $ctx->botId,
+                            (int)$payload['target_owner_id'],
+                            (int)$payload['target_planet_id'],
+                            (int)$payload['target_galaxy'],
+                            (int)$payload['target_system'],
+                            (int)$payload['target_planet']
+                        );
+                    }
                 }
-            } elseif ($taskType === 'staggered_recycler_dispatch') {
+            } elseif ($taskType === 'staggered_recycler_dispatch' || $taskType === 'staggered_defense_recycle') {
                 if (is_array($payload) && isset($payload['fleet'], $payload['fob_id']) && !self::isFleetMovementBlocked($ctx->botId)) {
                     $gateway = new BotActionGateway($ctx);
                     $speed = isset($payload['speed']) ? (int)$payload['speed'] : 10;
@@ -286,6 +347,15 @@ class BotKernel
                         $speed
                     );
                 }
+            } elseif ($taskType === 'staggered_fleetsave') {
+                if (is_array($payload) && isset($payload['endangered_planet_id']) && !self::isFleetMovementBlocked($ctx->botId)) {
+                    $gateway = new BotActionGateway($ctx);
+                    $fleetsaver = new BotFleetsaveCalculator($ctx, $gateway);
+                    $empire = new BotEmpireState($ctx);
+                    $threatArrival = isset($payload['threat_arrival_time']) ? (int)$payload['threat_arrival_time'] : (TIMESTAMP + 120);
+                    $customShips = isset($payload['custom_ships']) ? $payload['custom_ships'] : null;
+                    $fleetsaver->executeFleetsave($empire, (int)$payload['endangered_planet_id'], $threatArrival, $customShips, true);
+                }
             } elseif ($taskType === 'logistics_arrival_spend') {
                 if (is_array($payload) && !empty($payload['planet_id'])) {
                     $pId       = (int)$payload['planet_id'];
@@ -293,6 +363,22 @@ class BotKernel
                     $elementId = isset($payload['element_id']) ? (int)$payload['element_id'] : 0;
                     $count     = isset($payload['count']) ? (int)$payload['count'] : 1;
 
+                    // 1. Credit arrived resources into the specific budget category
+                    if (!empty($payload['resources'])) {
+                        if (!isset($ctx->budgetManager)) {
+                            $ctx->budgetManager = new BotBudgetManager($ctx);
+                        }
+                        $category = !empty($payload['category']) ? $payload['category'] : (
+                            $type === 'building' ? 'mines' : (
+                                $type === 'research' ? 'research' : (
+                                    ($type === 'defense' || ($elementId >= 400 && $elementId < 600 && $elementId != 503)) ? 'defense' : 'fleet'
+                                )
+                            )
+                        );
+                        $ctx->budgetManager->creditPlanetCategory($pId, $category, $payload['resources']);
+                    }
+
+                    // 2. Immediate zero-exposure construction if element was specified
                     $gateway = new BotActionGateway($ctx);
                     if ($type === 'building' && $elementId > 0) {
                         $gateway->constructBuilding($pId, $elementId);

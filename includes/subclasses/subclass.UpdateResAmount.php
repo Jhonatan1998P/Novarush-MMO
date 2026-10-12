@@ -41,6 +41,13 @@ foreach($reslist['resstype'][1] as $resP)
         
 foreach($reslist['resstype'][3] as $resU)
 {
-    if(isset($costResources[$resU])) {$USER[$resource[$resU]]	-= $costResources[$resU]* $amount; }
+    if(isset($costResources[$resU]) && $costResources[$resU] > 0) {
+        $source = !empty($mode) ? $mode . '_buy' : 'subclass_buy';
+        $elementId = isset($Element) ? (int)$Element : 0;
+        $totalCost = $costResources[$resU] * $amount;
+        if (!PremiumEconomy::debit($USER, $resU, $totalCost, $source, $elementId, "amt={$amount}")) {
+            $this->printMessage("".$LNG['bd_notres']."", true, array($href, 2));
+        }
+    }
 }
 //$new_code

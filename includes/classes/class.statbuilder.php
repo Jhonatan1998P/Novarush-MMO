@@ -35,6 +35,34 @@ if (empty($GLOBALS['resource']) || empty($GLOBALS['reslist']) || empty($GLOBALS[
 class statbuilder
 {
 	private $costPoints = array();
+	private $excludedUsers = array();
+
+	public static function isExcludedFromRanking($userId, $authlevel = 0, $username = '')
+	{
+		$id = (int)$userId;
+		if ($id === 1 || $id === 998 || $id === 999) {
+			return true;
+		}
+		if ((int)$authlevel > 0) {
+			return true;
+		}
+		if (!empty($username)) {
+			$u = strtolower((string)$username);
+			if ($u === 'admin' || strpos($u, 'dummy') !== false || strpos($u, 'test') !== false || strpos($u, 'omega') !== false) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	public function isUserExcluded($userId, $authlevel = 0, $username = '')
+	{
+		$id = (int)$userId;
+		if (isset($this->excludedUsers[$id])) {
+			return true;
+		}
+		return self::isExcludedFromRanking($id, $authlevel, $username);
+	}
 
 	private function initCostPoints()
 	{
@@ -88,6 +116,13 @@ class statbuilder
 		}
 
 		$this->initCostPoints();
+
+		$excludedList = Database::get()->select("SELECT id FROM %%USERS%% WHERE id IN (1, 998, 999) OR authlevel > 0 OR LOWER(username) LIKE '%dummy%' OR LOWER(username) LIKE '%test%' OR LOWER(username) LIKE '%omega%';");
+		if (is_array($excludedList)) {
+			foreach ($excludedList as $ex) {
+				$this->excludedUsers[(int)$ex['id']] = true;
+			}
+		}
 	}
 
 	private function SomeStatsInfos()
@@ -170,6 +205,9 @@ class statbuilder
 	
 	private function setRecords($userID, $elementID, $amount)
 	{
+		if ($this->isUserExcluded($userID)) {
+			return;
+		}
 		$this->recordData[$elementID][$amount][]	= $userID;
 	}
 	
@@ -363,7 +401,7 @@ class statbuilder
 
 		foreach($TotalData['Planets'] as $PlanetData)
 		{		
-			if((in_array(Config::get()->stat, array(1, 2)) && $PlanetData['authlevel'] >= Config::get()->stat_level) || !empty($PlanetData['bana'])) continue;
+			if($this->isUserExcluded($PlanetData['id_owner'], $PlanetData['authlevel'], $PlanetData['username']) || !empty($PlanetData['bana'])) continue;
 			
  			if(!isset($UserPoints[$PlanetData['id_owner']])) {
 				$UserPoints[$PlanetData['id_owner']]['build']['count'] = $UserPoints[$PlanetData['id_owner']]['build']['points'] = 0;
@@ -380,23 +418,16 @@ class statbuilder
 
 		foreach($TotalData['Users'] as $UserData)
 		{
+			if ($this->isUserExcluded($UserData['id'], $UserData['authlevel'], $UserData['username']) || !empty($UserData['bana']))
+			{
+				continue;
+			}
+
 		    $i++;
 			if(!isset($UniData[$UserData['universe']]))
 				$UniData[$UserData['universe']] = 0;
 			
 			$UniData[$UserData['universe']]++;
-				
-			if (in_array((int)$UserData['id'], array(998, 999)))
-			{
-				$FinalSQL  .= "(".$UserData['id'].",".$UserData['ally_id'].",1,".$UserData['universe'].",0,0,0,0,0,0,0,0,0,0,0,0,0,0,0), ";
-				continue;
-			}
-				
-			if ((in_array(Config::get()->stat, array(1, 2)) && $UserData['authlevel'] >= Config::get()->stat_level) || !empty($UserData['bana']))
-			{	
-				$FinalSQL  .= "(".$UserData['id'].",".$UserData['ally_id'].",1,".$UserData['universe'].",0,0,0,0,0,0,0,0,0,0,0,0,0,0,0), ";
-				continue;
-			}
 
 			if(isset($TotalData['Fleets'][$UserData['id']])) {
 				foreach($TotalData['Fleets'][$UserData['id']] as $ID => $Amount)

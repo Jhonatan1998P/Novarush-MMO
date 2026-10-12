@@ -19,6 +19,7 @@ require_once 'includes/vars/General.php';
 require_once 'includes/classes/class.BuildFunctions.php';
 require_once 'includes/classes/class.PlanetRessUpdate.php';
 require_once 'includes/classes/class.FlyingFleetHandler.php';
+require_once 'includes/classes/bot/Kernel/BotClock.class.php';
 
 $db		= Database::get();
 $loops	= 0;
@@ -28,7 +29,7 @@ while($loops < 10)
 	$token	= getRandomString();
 
 	$fleetResult	= $db->update("UPDATE %%FLEETS_EVENT%% SET `lock` = :token WHERE `lock` IS NULL AND `time` <= :time;", array(
-		':time'		=> TIMESTAMP,
+		':time'		=> BotClock::get(),
 		':token'	=> $token
 	));
 

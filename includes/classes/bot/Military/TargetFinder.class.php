@@ -53,6 +53,9 @@ class BotTargetFinder
             $empireHourlyProdMSE = $world->empire->getHourlyProductionMSE();
         }
 
+        // Half-life synced to difficulty profile (1.0h strict global)
+        $halfLife = isset($this->ctx->difficulty->intelMaxAgeHours) ? (float)$this->ctx->difficulty->intelMaxAgeHours : 1.0;
+
         // 1. Gather all colonies
         $allColonies = array();
         if ($empireOrBase instanceof BotEmpireState) {
@@ -198,7 +201,7 @@ class BotTargetFinder
             // Fetch intelligence if world model is provided
             $intel = null;
             if ($world !== null && isset($world->intel)) {
-                $intel = $world->intel->getIntel($p['galaxy'], $p['system'], (int)$p['planet'], 1, 4.0);
+                $intel = $world->intel->getIntel($p['galaxy'], $p['system'], (int)$p['planet'], 1, $halfLife);
             }
 
             $category = 'recon';
@@ -253,10 +256,14 @@ class BotTargetFinder
                     if ($dLevel > 0) $prodD = 10.0 * $dLevel * pow(1.1, $dLevel);
                 }
 
-                $storageCap = 500000000.0;
-                $projM = min($storageCap, (float)($intel['metal'] ?? 0) + ($prodM * $deltaHours));
-                $projC = min($storageCap, (float)($intel['crystal'] ?? 0) + ($prodC * $deltaHours));
-                $projD = min($storageCap, (float)($intel['deuterium'] ?? 0) + ($prodD * $deltaHours));
+                // Real scouted loot without artificial 500M capping
+                $scoutedM = (float)($intel['metal'] ?? 0);
+                $scoutedC = (float)($intel['crystal'] ?? 0);
+                $scoutedD = (float)($intel['deuterium'] ?? 0);
+
+                $projM = max(0.0, $scoutedM + ($prodM * $deltaHours));
+                $projC = max(0.0, $scoutedC + ($prodC * $deltaHours));
+                $projD = max(0.0, $scoutedD + ($prodD * $deltaHours));
 
                 $lootMetal = $projM * 0.50;
                 $lootCry   = $projC * 0.50;
@@ -271,102 +278,106 @@ class BotTargetFinder
                     }
                 }
 
-                // Penalize heavily if active recently (avoid ninjas / baits)
+                // Penalize if active recently (avoid ninjas / baits)
+                // For mega-loot targets (> 5B MSE), preserve high raid value without complete discard
                 if ($isRecentlyActive) {
-                    $lootMSE *= 0.15; // 85% penalty due to risk of ninja/evacuation
+                    if ($lootMSE > 5000000000.0) {
+                        $lootMSE *= 0.60; // 40% caution discount, preserves mega-target incentive
+                    } else {
+                        $lootMSE *= 0.35; // Standard cautious discount
+                    }
                 }
 
                 // --- RELATIVE CLASSIFICATION ARCHITECTURE ---
                 $defenseScouted = !empty($intel['defense_scouted']);
 
-                // 1. EVALUATION: fleet_crash (Enemy fleet on ground with 2-stage Monte Carlo ROI >= 30%)
-                $isFleetCrashViable = false;
-                $fcWinProb = 0.90;
-                $fcNetProfit = 0.0;
-                $fcRoi = 0.0;
-
-                if ($fleetMSE > 0 && !empty($intel['fleet'])) {
-                    $combatFleet = array();
-                    if (!empty($nearestColony['data'])) {
+                // Identify the bot's military bastion / FOB fleet and total combined empire fleet
+                $combatFleet = array();
+                $empireCombatFleet = array();
+                $maxBastionFleetMSE = 0.0;
+                if ($world !== null && isset($world->empire)) {
+                    foreach ($world->empire->getAllBodies() as $b) {
+                        if (empty($b['data'])) continue;
+                        $bFleetMSE = 0.0;
+                        $localFleet = array();
                         foreach ($reslist['fleet'] as $sId) {
                             if ($sId == 210 || $sId == 212 || in_array($sId, array(208, 209, 219))) continue;
-                            $cnt = isset($nearestColony['data'][$resource[$sId]]) ? (int)$nearestColony['data'][$resource[$sId]] : 0;
-                            if ($cnt > 0) $combatFleet[$sId] = $cnt;
-                        }
-                    }
-                    if (empty($combatFleet) && $world !== null && isset($world->empire)) {
-                        foreach ($world->empire->getAllBodies() as $b) {
-                            if (!empty($b['data'])) {
-                                foreach ($reslist['fleet'] as $sId) {
-                                    if ($sId == 210 || $sId == 212 || in_array($sId, array(208, 209, 219))) continue;
-                                    $cnt = isset($b['data'][$resource[$sId]]) ? (int)$b['data'][$resource[$sId]] : 0;
-                                    if ($cnt > 0) $combatFleet[$sId] = ($combatFleet[$sId] ?? 0) + $cnt;
-                                }
+                            $cnt = isset($b['data'][$resource[$sId]]) ? (int)$b['data'][$resource[$sId]] : 0;
+                            if ($cnt > 0) {
+                                $localFleet[$sId] = $cnt;
+                                $bFleetMSE += BotEconomyValuator::getElementPriceMSE($sId, $cnt);
+                                $empireCombatFleet[$sId] = isset($empireCombatFleet[$sId]) ? $empireCombatFleet[$sId] + $cnt : $cnt;
                             }
                         }
+                        if ($bFleetMSE > $maxBastionFleetMSE) {
+                            $maxBastionFleetMSE = $bFleetMSE;
+                            $combatFleet = $localFleet;
+                        }
                     }
-
-                    if (!empty($combatFleet)) {
-                        $targetDefenders = (isset($intel['defense']) && is_array($intel['defense']) ? $intel['defense'] : array())
-                                         + (isset($intel['fleet']) && is_array($intel['fleet']) ? $intel['fleet'] : array());
-
-                        $targetFactors = BotCombatOracle::resolveDefenderFactors((int)$p['owner_id'], is_array($intel) ? $intel : array());
-
-                        // Stage 1: Fast Surrogate Filter (Analytic)
-                        $surrogate = BotSurrogateCombatModel::estimate(
-                            $combatFleet,
-                            $targetDefenders,
-                            $this->ctx->user['factor'] ?? array(),
-                            $targetFactors
-                        );
-
-                        if ($surrogate['win_prob'] >= 0.50) {
-                            // Stage 2: Fast Monte Carlo (2 iterations) for high-efficiency verification
-                            $sim = BotCombatOracle::evaluate(
-                                $combatFleet,
-                                $targetDefenders,
-                                array('id' => $this->ctx->botId, 'factor' => $this->ctx->user['factor'] ?? array()),
-                                array('id' => (int)$p['owner_id'], 'factor' => $targetFactors),
-                                2
-                            );
-
-                            $fcWinProb = isset($sim['win_probability']) ? (float)$sim['win_probability'] : 0.0;
-                            if ($fcWinProb >= 0.50) {
-                                $deployedMSE = 0.0;
-                                foreach ($combatFleet as $sId => $cnt) {
-                                    $deployedMSE += BotEconomyValuator::getElementPriceMSE($sId, $cnt);
-                                }
-                                $attLossPct = isset($sim['att_loss_pct']) ? (float)$sim['att_loss_pct'] : 0.20;
-                                $attLossMSE = isset($sim['att_loss_mse']) ? (float)$sim['att_loss_mse'] : ($deployedMSE * $attLossPct);
-                                $defLossPct = isset($sim['def_loss_pct']) ? (float)$sim['def_loss_pct'] : 0.90;
-
-                                // Recycler capacity check on nearest colony
-                                global $resource;
-                                $recs219 = isset($nearestColony['data'][$resource[219]]) ? (int)$nearestColony['data'][$resource[219]] : 0;
-                                $recs209 = isset($nearestColony['data'][$resource[209]]) ? (int)$nearestColony['data'][$resource[209]] : 0;
-                                $availableRecCap = ($recs219 * 500000.0) + ($recs209 * 20000.0);
-
-                                $projectedDebris = ($fleetMSE * $defLossPct * $fleetCdrFactor) + ($defenseMSE * $defLossPct * $defsCdrFactor);
-                                $realizableDebris = ($availableRecCap > 0) ? min($projectedDebris, $availableRecCap) : 0.0;
-
-                                $fuelMSE = ($realDist * 15.0);
-                                $netReplacementCost = ($attLossMSE * (1.0 - $fleetCdrFactor)) + $fuelMSE;
-                                $grossRevenue = $lootMSE + $realizableDebris;
-                                $fcNetProfit = $grossRevenue - $netReplacementCost;
-                                $fcRoi = $fcNetProfit / max(1.0, ($attLossMSE + $fuelMSE));
-
-                                if ($fcNetProfit > 0 && $fcRoi >= 0.30) {
-                                    $isFleetCrashViable = true;
-                                }
-                            }
+                }
+                if (empty($combatFleet) && !empty($nearestColony['data'])) {
+                    foreach ($reslist['fleet'] as $sId) {
+                        if ($sId == 210 || $sId == 212 || in_array($sId, array(208, 209, 219))) continue;
+                        $cnt = isset($nearestColony['data'][$resource[$sId]]) ? (int)$nearestColony['data'][$resource[$sId]] : 0;
+                        if ($cnt > 0) {
+                            $combatFleet[$sId] = $cnt;
+                            $empireCombatFleet[$sId] = isset($empireCombatFleet[$sId]) ? $empireCombatFleet[$sId] + $cnt : $cnt;
                         }
                     }
                 }
 
-                // 2. EVALUATION: siege (MIPs across empire sufficient to destroy >= 50% defense structure)
-                $canDemolish50Pct = false;
-                $totalMipsInRange = 0;
+                // Recycler capacity available across empire
+                global $resource;
+                $recs219 = isset($nearestColony['data'][$resource[219]]) ? (int)$nearestColony['data'][$resource[219]] : 0;
+                $recs209 = isset($nearestColony['data'][$resource[209]]) ? (int)$nearestColony['data'][$resource[209]] : 0;
+                $availableRecCap = ($recs219 * 200000000.0) + ($recs209 * 20000.0);
+                if ($world !== null && isset($world->empire)) {
+                    foreach ($world->empire->getAllBodies() as $b) {
+                        if (!empty($b['data']) && ($b['id'] ?? 0) != ($nearestColony['id'] ?? 0)) {
+                            $e219 = isset($b['data'][$resource[219]]) ? (int)$b['data'][$resource[219]] : 0;
+                            $e209 = isset($b['data'][$resource[209]]) ? (int)$b['data'][$resource[209]] : 0;
+                            $availableRecCap += ($e219 * 200000000.0) + ($e209 * 20000.0);
+                        }
+                    }
+                }
 
+                $targetDefenders = (isset($intel['defense']) && is_array($intel['defense']) ? $intel['defense'] : array())
+                                 + (isset($intel['fleet']) && is_array($intel['fleet']) ? $intel['fleet'] : array());
+                $targetFactors   = BotCombatOracle::resolveDefenderFactors((int)$p['owner_id'], is_array($intel) ? $intel : array());
+
+                // --- 0. UNIVERSAL EMPIRE VIABILITY GATE ---
+                // Si el objetivo tiene fuerzas defensoras (flota o defensa), el imperio en su conjunto
+                // debe tener >= 70% de probabilidad de victoria antes de clasificarlo como campaña (Asedio o Fleet Crash).
+                if (!empty($targetDefenders) && !empty($empireCombatFleet)) {
+                    $simEmpire = BotCombatOracle::evaluate(
+                        $empireCombatFleet,
+                        $targetDefenders,
+                        array('id' => $this->ctx->botId, 'factor' => $this->ctx->user['factor'] ?? array()),
+                        array('id' => (int)$p['owner_id'], 'factor' => $targetFactors),
+                        2
+                    );
+                    $empireWinProb = isset($simEmpire['win_probability']) ? (float)$simEmpire['win_probability'] : 0.0;
+                    if ($empireWinProb < 0.70) {
+                        BotTargetBlacklist::addCooldown(
+                            $this->ctx->botId,
+                            (int)$p['owner_id'],
+                            $pId,
+                            (int)$p['galaxy'],
+                            (int)$p['system'],
+                            (int)$p['planet'],
+                            86400,
+                            "Poder militar insuficiente en todo el imperio (" . round($empireWinProb * 100, 1) . "% prob victoria < 70%)"
+                        );
+                        continue; // SALIDA INMEDIATA: Descartar objetivo por completo
+                    }
+                }
+
+                $fuelMSE = ($realDist * 15.0);
+
+                // --- 1. EVALUATION: SIEGE (Prioridad #1) ---
+                // Condición: Defensas conocidas >= 1, MIPs en rango demuelen >= 25% de la estructura defensiva
+                $isSiegeViable = false;
+                $totalMipsInRange = 0;
                 if ($defenseScouted && $defenseMSE > 0 && $world !== null && isset($world->empire)) {
                     $impulse = isset($this->ctx->user[$resource[117]]) ? (int)$this->ctx->user[$resource[117]] : 0;
                     $range   = FleetFunctions::getMissileRange($impulse);
@@ -408,31 +419,94 @@ class BotTargetFinder
                     $militaryTechAtk = isset($this->ctx->user['military_tech']) ? (int)$this->ctx->user['military_tech'] : 0;
                     $ipmDamagePool = $effectiveMips * 12000.0 * (1.0 + $militaryTechAtk * 0.1);
 
-                    if ($totalDefStructurePoints > 0 && $ipmDamagePool >= (0.50 * $totalDefStructurePoints)) {
-                        $canDemolish50Pct = true;
+                    // Si los misiles en rango pueden demoler al menos el 25% de la estructura de las defensas
+                    if ($totalDefStructurePoints > 0 && $effectiveMips > 0 && $ipmDamagePool >= (0.25 * $totalDefStructurePoints)) {
+                        $isSiegeViable = true;
                     }
                 }
 
-                // 3. EVALUATION: farming (Dynamic risk scaling: min 5% empire hourly prod, scales when def > 50% loot)
-                $defRatio = ($lootMSE > 0) ? ($defenseMSE / $lootMSE) : 999.0;
-                if ($defRatio <= 0.50) {
-                    $minLootFactor = 0.05;
-                } else {
-                    // Formula acordada: 0.05 + (1 + 2 * (defensa / botin - 0.40))
-                    $minLootFactor = 0.05 + (1.0 + 2.0 * ($defRatio - 0.40));
-                }
-                $requiredMinLootMSE = $empireHourlyProdMSE * $minLootFactor;
-                $isFarmingViable = ($defenseScouted && $lootMSE >= $requiredMinLootMSE);
+                // --- 2. EVALUATION: FLEET_CRASH (Prioridad #2) ---
+                // Solo si no fue siege. Flota enemiga en tierra, simulación Monte Carlo con FOB, ROI escombros >= 30% (sin almacenes).
+                $isFleetCrashViable = false;
+                $fcWinProb = 0.50;
+                $fcRoi = 0.0;
+                $fcNetProfit = 0.0;
+                if (!$isSiegeViable && $fleetMSE > 0 && !empty($intel['fleet']) && !empty($combatFleet)) {
+                    $sim = BotCombatOracle::evaluate(
+                        $combatFleet,
+                        $targetDefenders,
+                            array('id' => $this->ctx->botId, 'factor' => $this->ctx->user['factor'] ?? array()),
+                            array('id' => (int)$p['owner_id'], 'factor' => $targetFactors),
+                            2
+                        );
 
-                // --- CLASSIFICATION ASSIGNMENT ---
-                if ($fleetMSE > 0 && $isFleetCrashViable) {
-                    if ($defenseMSE > 50000000 && $defenseMSE > ($fleetMSE * 0.5) && $canDemolish50Pct) {
-                        $category = 'siege';
-                    } else {
-                        $category = 'fleet_crash';
+                        $fcWinProb = isset($sim['win_probability']) ? (float)$sim['win_probability'] : 0.50;
+                        $deployedMSE = 0.0;
+                        foreach ($combatFleet as $sId => $cnt) {
+                            $deployedMSE += BotEconomyValuator::getElementPriceMSE($sId, $cnt);
+                        }
+                        $attLossPct = isset($sim['att_loss_pct']) ? (float)$sim['att_loss_pct'] : 0.20;
+                        $attLossMSE = isset($sim['att_loss_mse']) ? (float)$sim['att_loss_mse'] : ($deployedMSE * $attLossPct);
+                        $defLossPct = isset($sim['def_loss_pct']) ? (float)$sim['def_loss_pct'] : 0.90;
+
+                        $projectedDebris = ($fleetMSE * $defLossPct * $fleetCdrFactor) + ($defenseMSE * $defLossPct * $defsCdrFactor);
+                        $realizableDebris = ($availableRecCap > 0) ? min($projectedDebris, $availableRecCap) : 0.0;
+
+                        // Exclusivo: Ganancia = Escombros reciclables (NO almacén)
+                        $totalCosts = max(1.0, ($attLossMSE * (1.0 - $fleetCdrFactor)) + $fuelMSE);
+                        $fcNetProfit = $realizableDebris - $totalCosts;
+                        $fcRoi = $fcNetProfit / $totalCosts;
+
+                        if ($fcNetProfit > 0 && $fcRoi >= 0.30) {
+                            $isFleetCrashViable = true;
+                        }
                     }
-                } elseif ($canDemolish50Pct && $defenseScouted) {
+
+                // --- 3. EVALUATION: FARMING (Prioridad #3) ---
+                // Solo si no fue siege ni fleet_crash. Simulación Monte Carlo con FOB, Win >= 70% + ROI >= 10% (con almacén + escombros).
+                $isFarmingViable = false;
+                $farmWinProb = 0.0;
+                $farmRoi = 0.0;
+                $farmNetProfit = 0.0;
+                if (!$isSiegeViable && !$isFleetCrashViable && $defenseScouted && !empty($combatFleet)) {
+                    $sim = BotCombatOracle::evaluate(
+                        $combatFleet,
+                        $targetDefenders,
+                        array('id' => $this->ctx->botId, 'factor' => $this->ctx->user['factor'] ?? array()),
+                        array('id' => (int)$p['owner_id'], 'factor' => $targetFactors),
+                        2
+                    );
+
+                    $farmWinProb = isset($sim['win_probability']) ? (float)$sim['win_probability'] : 0.0;
+                    if ($farmWinProb >= 0.70) {
+                        $deployedMSE = 0.0;
+                        foreach ($combatFleet as $sId => $cnt) {
+                            $deployedMSE += BotEconomyValuator::getElementPriceMSE($sId, $cnt);
+                        }
+                        $attLossPct = isset($sim['att_loss_pct']) ? (float)$sim['att_loss_pct'] : 0.02;
+                        $attLossMSE = isset($sim['att_loss_mse']) ? (float)$sim['att_loss_mse'] : ($deployedMSE * $attLossPct);
+                        $defLossPct = isset($sim['def_loss_pct']) ? (float)$sim['def_loss_pct'] : 0.90;
+
+                        $projectedDebris = ($fleetMSE * $defLossPct * $fleetCdrFactor) + ($defenseMSE * $defLossPct * $defsCdrFactor);
+                        $realizableDebris = ($availableRecCap > 0) ? min($projectedDebris, $availableRecCap) : 0.0;
+
+                        // Almacén (50% loot) + Escombros
+                        $grossRevenue = $lootMSE + $realizableDebris;
+                        $totalCosts = max(1.0, ($attLossMSE * (1.0 - $fleetCdrFactor)) + $fuelMSE);
+                        $farmNetProfit = $grossRevenue - $totalCosts;
+                        $farmRoi = $farmNetProfit / $totalCosts;
+
+                        if ($farmNetProfit > 0 && $farmRoi >= 0.10) {
+                            $isFarmingViable = true;
+                        }
+                    }
+                }
+
+                // --- ASIGNACIÓN DE CATEGORÍA ---
+                if ($isSiegeViable) {
                     $category = 'siege';
+                } elseif ($isFleetCrashViable) {
+                    $category = 'fleet_crash';
                 } elseif ($isFarmingViable) {
                     $category = 'farming';
                 } elseif ($lootMSE >= ($empireHourlyProdMSE * 0.05) && !$defenseScouted) {
@@ -441,54 +515,57 @@ class BotTargetFinder
                     $category = 'low_value';
                 }
 
+                // Descarte por poco rentable: Entra a lista negra SOLO este planeta por 1 hora
+                if ($category === 'low_value') {
+                    BotTargetBlacklist::addCooldown($this->ctx->botId, (int)$p['owner_id'], $pId, (int)$p['galaxy'], (int)$p['system'], (int)$p['planet'], 3600, 'low_value');
+                    continue; // Continúa con el siguiente objetivo del radar
+                }
+
                 // Anti-Bait Guard: Discard active player with moon having phalanx
                 if ($isRecentlyActive && !empty($p['id_luna']) && $category !== 'low_value') {
                     // Juicy planet with active player + moon is a textbook bait!
                     continue;
                 }
 
-                // --- SECTION 2.1: EV NETO POR HORA FORMULA ---
-                // EV(t) = P(win) * (loot(t) + debris(t) + valEstrategico(t)) - (1 - P(win)) * valorFlotaArriesgada - combustible(t) - MSE_misiles(t)
+                // --- CALCULO DE EV Y PUNTUACIÓN POR HORA ---
                 $pWin = 0.90;
                 $strategicVal = 0.0;
                 $riskFleetMSE = ($defenseMSE + $fleetMSE) * 1.3;
-                $fuelMSE = ($realDist * 15.0);
                 $missilesMSE = 0.0;
 
                 if ($category === 'fleet_crash') {
                     $pWin = $isRecentlyActive ? max(0.50, $fcWinProb * 0.8) : $fcWinProb;
                     $strategicVal = $debrisValMSE * 0.25;
                     $riskFleetMSE = ($defenseMSE + $fleetMSE) * 1.3;
-                    $fuelMSE = ($realDist * 15.0);
-                    $missilesMSE = 0.0;
+                    $netEV = $fcNetProfit;
                 } elseif ($category === 'farming') {
-                    $pWin = $isRecentlyActive ? 0.80 : 0.99;
+                    $pWin = $isRecentlyActive ? 0.70 : max(0.70, $farmWinProb);
                     $strategicVal = 0.0;
                     $riskFleetMSE = max(50000.0, $defenseMSE * 0.5);
-                    $fuelMSE = ($realDist * 5.0);
-                    $missilesMSE = 0.0;
+                    $netEV = $farmNetProfit;
                 } elseif ($category === 'siege') {
                     $pWin = 0.85;
                     $strategicVal = 500000.0;
                     $riskFleetMSE = ($defenseMSE + $fleetMSE) * 1.0;
-                    $fuelMSE = ($realDist * 15.0);
-                    $missilesMSE = $totalMipsInRange * BotEconomyValuator::getElementPriceMSE(503);
+                    $singleMipDamage = 12000.0 * (1.0 + $militaryTechAtk * 0.1);
+                    $neededMips = min($effectiveMips, ceil($totalDefStructurePoints / max(1.0, $singleMipDamage)));
+                    $missilesMSE = max(1, $neededMips) * BotEconomyValuator::getElementPriceMSE(503);
+                    $netEV = ($pWin * ($lootMSE + $debrisValMSE + $strategicVal)) - ((1.0 - $pWin) * $riskFleetMSE) - $fuelMSE - $missilesMSE;
+                } else {
+                    $netEV = ($lootMSE * 0.5) - $fuelMSE;
                 }
 
                 $prodMseHourly = BotEconomyValuator::toMSE($prodM, $prodC, $prodD);
 
-                // Compute Net EV
-                $netEV = ($pWin * ($lootMSE + $debrisValMSE + $strategicVal)) - ((1.0 - $pWin) * $riskFleetMSE) - $fuelMSE - $missilesMSE;
-
-                // Anti-Turtle Guard: Discard unprofitable turtles (EV <= 0)
+                // Anti-Turtle Guard: Discard unprofitable targets
                 if ($netEV <= 0 && in_array($category, array('siege', 'farming', 'fleet_crash'))) {
+                    BotTargetBlacklist::addCooldown($this->ctx->botId, (int)$p['owner_id'], $pId, (int)$p['galaxy'], (int)$p['system'], (int)$p['planet'], 3600, 'low_value');
                     continue;
                 }
 
-                // Valor(t) = EV(t) / horasIdaVuelta(t) (Sección 0 & 2.1 Principio Rector)
+                // Valor(t) = EV(t) / horasIdaVuelta(t)
                 $valorHora = $netEV / $roundtripHours;
 
-                // Score strictly based on Valor = EV_neto / horas_ida_vuelta
                 if (in_array($category, array('fleet_crash', 'siege', 'farming'))) {
                     $score = max(50.0, $valorHora);
                 } elseif ($category === 'recon_heavy') {

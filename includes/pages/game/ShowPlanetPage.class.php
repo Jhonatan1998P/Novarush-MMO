@@ -145,7 +145,10 @@ class ShowPlanetPage extends AbstractGamePage
 					':Universe'       	=> Universe::current()
 				));
 			}
-			$USER['darkmatter'] -= $cost_tp;
+			if (!PremiumEconomy::debit($USER, 921, $cost_tp, 'planet_teleport', (int)$PLANET['id'], "coords={$galaxyr}:{$systemr}:{$planetsr}")) {
+				$this->printMessage($LNG['pla_notenogu'], true, array('game.php?page=planet', 2));
+				return;
+			}
 				
 			$this->printMessage($LNG['pla_tel_ok'], true, array('game.php?page=planet', 2));
 		}	
@@ -166,7 +169,7 @@ class ShowPlanetPage extends AbstractGamePage
 		
 		if($totalFields < 0){
 			$this->printMessage($LNG['pla_error'], true, array('game.php?page=planet', 3));
-		}elseif($USER['darkmatter'] < $cost){
+		}elseif(!PremiumEconomy::debit($USER, 921, $cost, 'planet_fields', (int)$PLANET['id'], "fields={$totalFields}")){
 			$this->printMessage($LNG['pla_notenogu'], true, array('game.php?page=planet', 2));
 		}else{
 			$db = Database::get();
@@ -180,7 +183,6 @@ class ShowPlanetPage extends AbstractGamePage
 				':field_purchased'  		=> $totalFields,
 				':planetOwner' 	=> $PLANET['id']
 			));
-			$USER['darkmatter'] -= $cost;
 
 			$this->printMessage($LNG['pla_added'], true, array('game.php?page=planet', 2));
 		}
@@ -201,7 +203,7 @@ class ShowPlanetPage extends AbstractGamePage
 		
 		if($totalDiameter < 0){
 			$this->printMessage($LNG['pla_error'], true, array('game.php?page=planet', 3));
-		}elseif($USER['darkmatter'] < $cost){
+		}elseif(!PremiumEconomy::debit($USER, 921, $cost, 'planet_diameter', (int)$PLANET['id'], "diameters={$totalDiameter}")){
 			$this->printMessage($LNG['pla_notenogu'], true, array('game.php?page=planet', 2));
 		}else{
 			$db = Database::get();
@@ -215,7 +217,6 @@ class ShowPlanetPage extends AbstractGamePage
 				':diameter_purchased'  		=> $totalDiameter,
 				':planetOwner' 	=> $PLANET['id']
 			));
-			$USER['darkmatter'] -= $cost;
 
 			$this->printMessage($LNG['pla_added'], true, array('game.php?page=planet', 2));
 		}
@@ -224,13 +225,15 @@ class ShowPlanetPage extends AbstractGamePage
     function GenerateName() 
 	{
 		global $LNG, $PLANET;
+		require_once 'includes/classes/bot/BotNameHelper.class.php';
 
-		$Names		= file('botnames.txt');
-		$NamesCount	= count($Names);
-		$Rand		= mt_rand(0, $NamesCount);
-		$UserName 	= trim($Names[$Rand]);
+		if (!empty($PLANET['planet_type']) && (int)$PLANET['planet_type'] === 3) {
+			$generated = BotNameHelper::getRandomMoonName();
+		} else {
+			$generated = BotNameHelper::getRandomPlanetName();
+		}
 		
-		$this->sendJSON(array('message' => $UserName));
+		$this->sendJSON(array('message' => $generated));
 	}
 	
 	function show()

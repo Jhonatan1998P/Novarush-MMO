@@ -1,6 +1,7 @@
 <?php
 
 require_once 'includes/classes/bot/Evaluation/EconomyValuator.class.php';
+require_once 'includes/classes/bot/Kernel/BotClock.class.php';
 
 /**
  * NovaRush Bot AI v2 - Force Planner
@@ -54,38 +55,39 @@ class BotForcePlanner
     }
 
     /**
-     * Gets or deterministically/randomly assigns the bot's permanent specialization doctrine.
-     * Heavy category: Galeón (225), Luna Negra (216), Estrella de la Muerte (214)
-     * Medium category: Destructor (213), Bombardero (211), Acorazado (215)
-     * Light category: Crucero (206), Nave de Batalla (207)
-     * Window interval: 10 to 30 min (600 to 1800 seconds)
+     * Gets or calibrates the bot's recruit interval and returns doctrinal metadata.
+     * Window interval: 10 to 30 min (600 to 1800 seconds).
      */
     public function getOrAssignFleetDoctrine()
     {
         $heavy    = isset($this->ctx->botRow['doctrine_heavy']) ? (int)$this->ctx->botRow['doctrine_heavy'] : 0;
         $medium   = isset($this->ctx->botRow['doctrine_medium']) ? (int)$this->ctx->botRow['doctrine_medium'] : 0;
         $light    = isset($this->ctx->botRow['doctrine_light']) ? (int)$this->ctx->botRow['doctrine_light'] : 0;
+        $fodder   = isset($this->ctx->botRow['doctrine_fodder']) ? (int)$this->ctx->botRow['doctrine_fodder'] : 0;
         $interval = isset($this->ctx->botRow['recruit_interval']) ? (int)$this->ctx->botRow['recruit_interval'] : 0;
 
-        $heavyOptions  = array(225, 216, 214); // Galeon, Luna Negra, Estrella de la Muerte
-        $mediumOptions = array(213, 211, 215); // Destructor, Bombardero, Acorazado
-        $lightOptions  = array(206, 207);      // Crucero, Nave de Batalla
+        $heavyOptions   = array(225, 214, 216); // Galeon, Estrella de la Muerte, Luna Negra
+        $mediumOptions  = array(213, 226, 211); // Destructor, Megadestructor, Bombardero
+        $supportOptions = array(206, 207, 215); // Crucero, Nave de Batalla, Acorazado
+        $fodderOptions  = array(204, 205);      // Caza Ligero, Caza Pesado
 
         $updates = array();
 
-        if (!in_array($heavy, $heavyOptions)) {
-            $heavy = $heavyOptions[array_rand($heavyOptions)];
-            $updates['doctrine_heavy'] = $heavy;
+        if ($heavy > 0 && !in_array($heavy, $heavyOptions)) {
+            $heavy = 0;
+            $updates['doctrine_heavy'] = 0;
         }
-
-        if (!in_array($medium, $mediumOptions)) {
-            $medium = $mediumOptions[array_rand($mediumOptions)];
-            $updates['doctrine_medium'] = $medium;
+        if ($medium > 0 && !in_array($medium, $mediumOptions)) {
+            $medium = 0;
+            $updates['doctrine_medium'] = 0;
         }
-
-        if (!in_array($light, $lightOptions)) {
-            $light = $lightOptions[array_rand($lightOptions)];
-            $updates['doctrine_light'] = $light;
+        if ($light > 0 && !in_array($light, $supportOptions)) {
+            $light = 0;
+            $updates['doctrine_light'] = 0;
+        }
+        if ($fodder > 0 && !in_array($fodder, $fodderOptions)) {
+            $fodder = 0;
+            $updates['doctrine_fodder'] = 0;
         }
 
         if ($interval < 600 || $interval > 1800) {
@@ -108,8 +110,137 @@ class BotForcePlanner
             'heavy'    => $heavy,
             'medium'   => $medium,
             'light'    => $light,
+            'support'  => $light,
+            'fodder'   => $fodder,
             'interval' => $interval
         );
+    }
+
+    /**
+     * Resuelve de forma dinámica y progresiva la unidad a reclutar para una de las 4 categorías:
+     * - 'fodder'  (25%): Caza Ligero (204) o Caza Pesado (205) -> doctrine_fodder
+     * - 'support' (30%): Crucero (206), Nave de Batalla (207), Acorazado (215) -> doctrine_light
+     * - 'medium'  (25%): Destructor (213), Megadestructor (226), Bombardero (211) -> doctrine_medium
+     * - 'heavy'   (20%): Galeón (225), Estrella de la Muerte (214), Luna Negra (216) -> doctrine_heavy
+     *
+     * Reglas del sistema:
+     * 1. Si ya se eligió una unidad para siempre en BD (> 0):
+     *    - Si está accesible en el planeta actual, se recluta esa unidad.
+     *    - Si aún no está accesible en esta colonia, se usa la mejor unidad accesible de esa categoría,
+     *      o fallback a la mejor unidad de combate.
+     * 2. Si aún no está elegida para siempre (0):
+     *    - 0 unidades de la categoría investigadas: Fallback a la mejor unidad disponible en combate.
+     *    - 1 unidad de la categoría investigada (ej. solo Cruceros): Se recluta pero NO se tira el dado
+     *      definitivo todavía hasta desbloquear las otras de la categoría.
+     *    - >= 2 unidades de la categoría investigadas: ¡Se tira el dado para decidir la unidad final elegida
+     *      para siempre por el bot! Se guarda en uni1_bots y se recluta esa unidad (o la mejor accesible).
+     */
+    public function resolveCategoryUnit($category, array $pData)
+    {
+        $categoryMap = array(
+            'fodder'  => array('col' => 'doctrine_fodder', 'options' => array(204, 205)),
+            'support' => array('col' => 'doctrine_light',  'options' => array(206, 207, 215)),
+            'medium'  => array('col' => 'doctrine_medium', 'options' => array(213, 226, 211)),
+            'heavy'   => array('col' => 'doctrine_heavy',  'options' => array(225, 214, 216)),
+        );
+
+        if (!isset($categoryMap[$category])) {
+            return 204;
+        }
+
+        $col     = $categoryMap[$category]['col'];
+        $options = $categoryMap[$category]['options'];
+
+        $assigned = isset($this->ctx->botRow[$col]) ? (int)$this->ctx->botRow[$col] : 0;
+        if (!in_array($assigned, $options)) {
+            $assigned = 0;
+        }
+
+        // 1. Unidad ya elegida permanentemente
+        if ($assigned > 0) {
+            if (BuildFunctions::isTechnologieAccessible($this->ctx->user, $pData, $assigned, array())) {
+                return $assigned;
+            }
+            foreach ($options as $optId) {
+                if (BuildFunctions::isTechnologieAccessible($this->ctx->user, $pData, $optId, array())) {
+                    return $optId;
+                }
+            }
+            return $this->getBestFallbackCombatShip($pData, $category);
+        }
+
+        // 2. Unidad no elegida aún (assigned === 0): evaluar unidades investigadas en este planeta
+        $accessible = array();
+        foreach ($options as $optId) {
+            if (BuildFunctions::isTechnologieAccessible($this->ctx->user, $pData, $optId, array())) {
+                $accessible[] = $optId;
+            }
+        }
+
+        // Caso 2a: Ninguna unidad de la categoría investigada
+        if (empty($accessible)) {
+            return $this->getBestFallbackCombatShip($pData, $category);
+        }
+
+        // Caso 2b: Solo 1 unidad investigada en esta categoría (esquema progresivo sin fijar aún)
+        if (count($accessible) === 1) {
+            return $accessible[0];
+        }
+
+        // Caso 2c: >= 2 unidades desbloqueadas -> Tirar el dado para siempre
+        $chosen = $options[array_rand($options)];
+        $this->ctx->updateBotRow(array($col => $chosen));
+        $this->ctx->botRow[$col] = $chosen;
+
+        if (BuildFunctions::isTechnologieAccessible($this->ctx->user, $pData, $chosen, array())) {
+            return $chosen;
+        }
+
+        return $accessible[0];
+    }
+
+    /**
+     * Fallback cuando no se tienen investigadas las unidades de la categoría:
+     * - Para Fodder: mayor puntos de escudo y casco en menor coste MSE: (Shield + Hull) / Coste_MSE
+     * - Para Apoyo, Medios y Pesados: mayor puntos de daño en menor coste MSE: Attack / Coste_MSE
+     */
+    public function getBestFallbackCombatShip(array $pData, $category = 'support')
+    {
+        global $CombatCaps;
+
+        $combatShipList = array(204, 205, 206, 207, 215, 211, 213, 226, 225, 214, 216);
+
+        $bestShipId = 204;
+        $bestScore  = -1.0;
+
+        foreach ($combatShipList as $shipId) {
+            if (!BuildFunctions::isTechnologieAccessible($this->ctx->user, $pData, $shipId, array())) {
+                continue;
+            }
+
+            $caps = isset($CombatCaps[$shipId]) ? $CombatCaps[$shipId] : array();
+            $att  = isset($caps['attack']) ? (float)$caps['attack'] : 10.0;
+            $shd  = isset($caps['shield']) ? (float)$caps['shield'] : 10.0;
+            $hull = isset($caps['defend']) ? (float)$caps['defend'] / 10.0 : 10.0;
+
+            $costMSE = BotEconomyValuator::getElementPriceMSE($shipId);
+            if ($costMSE <= 0.0) {
+                $costMSE = 1.0;
+            }
+
+            if ($category === 'fodder') {
+                $score = ($shd + $hull) / $costMSE;
+            } else {
+                $score = $att / $costMSE;
+            }
+
+            if ($score > $bestScore) {
+                $bestScore  = $score;
+                $bestShipId = $shipId;
+            }
+        }
+
+        return $bestShipId;
     }
 
     private function refreshPlanetData($pId, array $pData)
@@ -122,30 +253,396 @@ class BotForcePlanner
     }
 
     /**
-     * Plan and queue military recruitment across the empire
+     * Calcula los segundos restantes en la cola de hangar sumando duraciones y restando b_hangar
+     */
+    public function calculateQueueRemainingSeconds(array $planet)
+    {
+        if (empty($planet['b_hangar_id'])) {
+            return 0;
+        }
+        $queue = @unserialize($planet['b_hangar_id']);
+        if (!is_array($queue) || empty($queue)) {
+            return 0;
+        }
+
+        $totalSeconds = 0;
+        foreach ($queue as $item) {
+            $unitId = (int)$item[0];
+            $count  = (int)$item[1];
+            $unitTime = BuildFunctions::getBuildingTime($this->ctx->user, $planet, $unitId);
+            $totalSeconds += ($unitTime * $count);
+        }
+
+        $elapsed = isset($planet['b_hangar']) ? (int)$planet['b_hangar'] : 0;
+        return max(0, $totalSeconds - $elapsed);
+    }
+
+    /**
+     * Anti-duplicación de slots en cola: comprueba si la unidad ya está en b_hangar_id
+     */
+    public function isUnitInQueue(array $planet, $unitId)
+    {
+        if (empty($planet['b_hangar_id'])) {
+            return false;
+        }
+        $queue = @unserialize($planet['b_hangar_id']);
+        if (!is_array($queue)) {
+            return false;
+        }
+        foreach ($queue as $item) {
+            if ((int)$item[0] === (int)$unitId) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Calcula el valor MSE total de las defensas existentes en un planeta
+     */
+    public function calculateExistingDefenseMSE(array $planet)
+    {
+        global $reslist, $resource;
+        $totalMSE = 0.0;
+        $defList = isset($reslist['defense']) && is_array($reslist['defense']) ? $reslist['defense'] : array();
+        foreach ($defList as $defId) {
+            $key = isset($resource[$defId]) ? $resource[$defId] : '';
+            if (!empty($key) && isset($planet[$key]) && (int)$planet[$key] > 0) {
+                $count = (int)$planet[$key];
+                $costMSE = BotEconomyValuator::getElementPriceMSE($defId);
+                $totalMSE += ($count * $costMSE);
+            }
+        }
+        return $totalMSE;
+    }
+
+    /**
+     * Fórmula tri-recurso min(M/costM, C/costC, D/costD) con reserva opcional de ahorro por categoría
+     */
+    public function calculateTriResourceMaxUnits(array $pData, array $categoryCredits, $unitId, $lockedDeficitRes = 0, $lockedDeficitAmount = 0.0)
+    {
+        global $pricelist;
+        $costM = isset($pricelist[$unitId]['cost'][901]) ? (float)$pricelist[$unitId]['cost'][901] : 0.0;
+        $costC = isset($pricelist[$unitId]['cost'][902]) ? (float)$pricelist[$unitId]['cost'][902] : 0.0;
+        $costD = isset($pricelist[$unitId]['cost'][903]) ? (float)$pricelist[$unitId]['cost'][903] : 0.0;
+
+        $availM = min((float)$pData['metal'], (float)($categoryCredits['metal'] ?? 0.0));
+        $availC = min((float)$pData['crystal'], (float)($categoryCredits['crystal'] ?? 0.0));
+        $availD = min((float)$pData['deuterium'], (float)($categoryCredits['deuterium'] ?? 0.0));
+
+        // Si esta categoría tiene un ahorro activo, reservar únicamente el déficit correspondiente
+        if ($lockedDeficitRes === 901 && $costM > 0) {
+            $availM = max(0.0, $availM - $lockedDeficitAmount);
+        } elseif ($lockedDeficitRes === 902 && $costC > 0) {
+            $availC = max(0.0, $availC - $lockedDeficitAmount);
+        } elseif ($lockedDeficitRes === 903 && $costD > 0) {
+            $availD = max(0.0, $availD - $lockedDeficitAmount);
+        }
+
+        $canBuildTri = PHP_INT_MAX;
+        if ($costM > 0) {
+            $canBuildTri = min($canBuildTri, (int)floor($availM / $costM));
+        }
+        if ($costC > 0) {
+            $canBuildTri = min($canBuildTri, (int)floor($availC / $costC));
+        }
+        if ($costD > 0) {
+            $canBuildTri = min($canBuildTri, (int)floor($availD / $costD));
+        }
+
+        if ($canBuildTri === PHP_INT_MAX) {
+            $canBuildTri = 0;
+        }
+
+        return max(0, $canBuildTri);
+    }
+
+    /**
+     * Calcula el presupuesto de gasto autorizado para este ciclo (Válvula de Flujo Continuo con Vaciado de Excedentes 5%-10%)
+     * Fórmula: SpendCap = IngresoFresco(deltaT) + (drainRate * ExcedenteAcumulado)
+     *
+     * @param int $pId
+     * @param array $pData
+     * @param string $category 'fleet'|'defense'
+     * @param array $totalCredits
+     * @param int $lastRecruitTime
+     * @param bool $isEmergency
+     * @return array [metal, crystal, deuterium]
+     */
+    public function calculateCycleSpendBudget($pId, array $pData, $category, array $totalCredits, $lastRecruitTime = 0, $isEmergency = false)
+    {
+        $now = BotClock::get();
+        $elapsed = ($lastRecruitTime > 0) ? max(45, $now - $lastRecruitTime) : 180;
+        $elapsed = min(3600, $elapsed);
+
+        $ratios = (isset($this->ctx->personality) && method_exists($this->ctx->personality, 'getBudgetRatios'))
+            ? $this->ctx->personality->getBudgetRatios()
+            : array('fleet' => 0.35, 'defense' => 0.15, 'mines' => 0.30, 'research' => 0.20);
+
+        $r_k = (float)($ratios[$category] ?? 0.25);
+
+        $prodM = max(0.0, (float)($pData['metal_perhour'] ?? 0.0));
+        $prodC = max(0.0, (float)($pData['crystal_perhour'] ?? 0.0));
+        $prodD = max(0.0, (float)($pData['deuterium_perhour'] ?? 0.0));
+
+        // 1. Ingreso fresco producido en el intervalo
+        $freshM = ($prodM * $elapsed / 3600.0) * $r_k;
+        $freshC = ($prodC * $elapsed / 3600.0) * $r_k;
+        $freshD = ($prodD * $elapsed / 3600.0) * $r_k;
+
+        $totM = max(0.0, (float)($totalCredits['metal'] ?? 0.0));
+        $totC = max(0.0, (float)($totalCredits['crystal'] ?? 0.0));
+        $totD = max(0.0, (float)($totalCredits['deuterium'] ?? 0.0));
+
+        // 2. Excedente acumulado por encima del ingreso fresco
+        $surplusM = max(0.0, $totM - $freshM);
+        $surplusC = max(0.0, $totC - $freshC);
+        $surplusD = max(0.0, $totD - $freshD);
+
+        // 3. Tasa de drenaje: 8% en condiciones normales (ventana 5%-10%), 100% en emergencia/asedio
+        $drainRate = $isEmergency ? 1.00 : 0.08;
+
+        $authM = min($totM, $freshM + ($drainRate * $surplusM));
+        $authC = min($totC, $freshC + ($drainRate * $surplusC));
+        $authD = min($totD, $freshD + ($drainRate * $surplusD));
+
+        return array(
+            'metal'     => round($authM, 2),
+            'crystal'   => round($authC, 2),
+            'deuterium' => round($authD, 2),
+        );
+    }
+
+    /**
+     * Determina el tamaño de lote constructible respetando cola, presupuesto de ciclo (SpendCap) y blindajes
+     */
+    public function getConstructibleBatch(array $pData, array $categoryCredits, $unitId, $queuedJobs, $maxAllowedSlots, $queueRemainingSec, $maxHangarDuration, $batchTimeTarget, $lockedDefRes = 0, $isEmergency = false, $lockedDefAmount = 0.0)
+    {
+        if ($this->isUnitInQueue($pData, $unitId)) {
+            return 0;
+        }
+
+        if ($queuedJobs >= $maxAllowedSlots) {
+            return 0;
+        }
+
+        if (!$isEmergency && $queueRemainingSec >= $maxHangarDuration) {
+            return 0;
+        }
+
+        if (!BuildFunctions::isTechnologieAccessible($this->ctx->user, $pData, $unitId, array())) {
+            return 0;
+        }
+
+        $triMax = $this->calculateTriResourceMaxUnits($pData, $categoryCredits, $unitId, $lockedDefRes, $lockedDefAmount);
+        $maxConstructible = BuildFunctions::getMaxConstructibleElements($this->ctx->user, $pData, $unitId);
+        $count = min($triMax, $maxConstructible);
+        if ($count <= 0) {
+            return 0;
+        }
+
+        $unitTime = max(0.001, (float)BuildFunctions::getBuildingTime($this->ctx->user, $pData, $unitId));
+        $availQueueSec = max(0, $maxHangarDuration - $queueRemainingSec);
+        $maxByQueueCap = (int)floor($availQueueSec / $unitTime);
+
+        // El lote está dimensionado por el cupo financiero doctrinal del ciclo (SpendCap).
+        // Se acota únicamente por el margen de seguridad de cola en hangar.
+        $finalBatch = $count;
+        if (!$isEmergency) {
+            if ($availQueueSec <= 0) {
+                return 0;
+            }
+            $finalBatch = min($finalBatch, max(1, $maxByQueueCap));
+        }
+
+        return max(0, $finalBatch);
+    }
+
+    /**
+     * Modernización Progresiva de Flota Civil con Buffer de Seguridad
+     * - Cadena 202 -> 203 -> 217
+     * - Cadena 209 -> 219
+     */
+    public function upgradeCivilianFleets($planetId, array &$pData)
+    {
+        global $resource;
+        $upgraded = array();
+
+        $queuedJobs = !empty($pData['b_hangar_id']) ? count(@unserialize($pData['b_hangar_id'])) : 0;
+        $maxRegularSlots = isset($this->ctx->difficulty->maxRegularSlots) ? (int)$this->ctx->difficulty->maxRegularSlots : 6;
+        $maxHangarDuration = isset($this->ctx->difficulty->maxHangarQueueDuration) ? (int)$this->ctx->difficulty->maxHangarQueueDuration : 2700;
+        $batchTimeTarget = isset($this->ctx->difficulty->batchTimeTarget) ? (int)$this->ctx->difficulty->batchTimeTarget : 900;
+        $queueRemainingSec = $this->calculateQueueRemainingSeconds($pData);
+
+        if ($queuedJobs >= $maxRegularSlots || $queueRemainingSec >= $maxHangarDuration) {
+            return $upgraded;
+        }
+
+        // 1. Cadena 202 -> 203 -> 217
+        $canBuild217 = BuildFunctions::isTechnologieAccessible($this->ctx->user, $pData, 217, array());
+        if ($canBuild217 && !$this->isUnitInQueue($pData, 217) && $queuedJobs < $maxRegularSlots) {
+            // Verificación estricta de Deuterio: 217 requiere 1,500 Deut por unidad; 202 y 203 dan 0 Deut al desguazarse
+            $deutStock = (float)$pData['deuterium'];
+            $max217ByDeut = (int)floor($deutStock / 1500.0);
+
+            if ($max217ByDeut > 0) {
+                $unitTime217 = max(0.001, (float)BuildFunctions::getBuildingTime($this->ctx->user, $pData, 217));
+                $maxByBatchTime = max(1, (int)floor($batchTimeTarget / $unitTime217));
+                $availQueueSec = max(0, $maxHangarDuration - $queueRemainingSec);
+                $maxByQueueCap = max(1, (int)floor($availQueueSec / $unitTime217));
+                $batchLimit217 = min($maxByBatchTime, $maxByQueueCap);
+
+                // Mantener Buffer Operativo Mínimo: 100x 202 en tierra
+                $cur202 = isset($pData[$resource[202]]) ? (int)$pData[$resource[202]] : 0;
+                $avail202 = max(0, $cur202 - 100);
+                // 18x 202 financian Metal (36k) y Cristal (36k) de 1x 217
+                $batches202 = min((int)floor($avail202 / 18), $max217ByDeut, $batchLimit217);
+
+                if ($batches202 > 0) {
+                    $scrap202 = $batches202 * 18;
+                    $ref = $this->gateway->scrapUnits($planetId, 202, $scrap202);
+                    if ($ref) {
+                        $this->gateway->constructUnits($planetId, 217, $batches202);
+                        $upgraded[217] = isset($upgraded[217]) ? $upgraded[217] + $batches202 : $batches202;
+                        $pData = $this->refreshPlanetData($planetId, $pData);
+                        $max217ByDeut -= $batches202;
+                        $queuedJobs++;
+                        $queueRemainingSec = $this->calculateQueueRemainingSeconds($pData);
+                    }
+                }
+
+                // Mantener Buffer Operativo Mínimo: 20x 203 en tierra (solo si 217 no fue ya encolado para evitar duplicar slot)
+                if ($max217ByDeut > 0 && !$this->isUnitInQueue($pData, 217) && $queuedJobs < $maxRegularSlots && $queueRemainingSec < $maxHangarDuration) {
+                    $cur203 = isset($pData[$resource[203]]) ? (int)$pData[$resource[203]] : 0;
+                    $avail203 = max(0, $cur203 - 20);
+                    // 6x 203 financian Metal (36k) y Cristal (36k) de 1x 217
+                    $batches203 = min((int)floor($avail203 / 6), $max217ByDeut, $batchLimit217);
+
+                    if ($batches203 > 0) {
+                        $scrap203 = $batches203 * 6;
+                        $ref = $this->gateway->scrapUnits($planetId, 203, $scrap203);
+                        if ($ref) {
+                            $this->gateway->constructUnits($planetId, 217, $batches203);
+                            $upgraded[217] = isset($upgraded[217]) ? $upgraded[217] + $batches203 : $batches203;
+                            $pData = $this->refreshPlanetData($planetId, $pData);
+                            $queuedJobs++;
+                            $queueRemainingSec = $this->calculateQueueRemainingSeconds($pData);
+                        }
+                    }
+                }
+            }
+        } elseif (BuildFunctions::isTechnologieAccessible($this->ctx->user, $pData, 203, array()) && !$this->isUnitInQueue($pData, 203) && $queuedJobs < $maxRegularSlots && $queueRemainingSec < $maxHangarDuration) {
+            // Sub-cadena 202 -> 203 si 217 no es accesible aún
+            $cur202 = isset($pData[$resource[202]]) ? (int)$pData[$resource[202]] : 0;
+            $avail202 = max(0, $cur202 - 100);
+            $unitTime203 = max(0.001, (float)BuildFunctions::getBuildingTime($this->ctx->user, $pData, 203));
+            $maxBatch203 = min(max(1, (int)floor($batchTimeTarget / $unitTime203)), max(1, (int)floor(max(0, $maxHangarDuration - $queueRemainingSec) / $unitTime203)));
+            $batches203 = min((int)floor($avail202 / 3), $maxBatch203);
+            if ($batches203 > 0) {
+                $scrap202 = $batches203 * 3;
+                $ref = $this->gateway->scrapUnits($planetId, 202, $scrap202);
+                if ($ref) {
+                    $this->gateway->constructUnits($planetId, 203, $batches203);
+                    $upgraded[203] = isset($upgraded[203]) ? $upgraded[203] + $batches203 : $batches203;
+                    $pData = $this->refreshPlanetData($planetId, $pData);
+                    $queuedJobs++;
+                    $queueRemainingSec = $this->calculateQueueRemainingSeconds($pData);
+                }
+            }
+        }
+
+        // 2. Cadena 209 -> 219 (100x 209 = 1x 219)
+        if (BuildFunctions::isTechnologieAccessible($this->ctx->user, $pData, 219, array()) && !$this->isUnitInQueue($pData, 219) && $queuedJobs < $maxRegularSlots && $queueRemainingSec < $maxHangarDuration) {
+            $cur209 = isset($pData[$resource[209]]) ? (int)$pData[$resource[209]] : 0;
+            $avail209 = max(0, $cur209 - 20); // Buffer de 20x 209
+            $unitTime219 = max(0.001, (float)BuildFunctions::getBuildingTime($this->ctx->user, $pData, 219));
+            $maxBatch219 = min(max(1, (int)floor($batchTimeTarget / $unitTime219)), max(1, (int)floor(max(0, $maxHangarDuration - $queueRemainingSec) / $unitTime219)));
+
+            // Solo desguazar en múltiplos de 100 para unidades enteras de 219, o si el presupuesto cubre la diferencia
+            $batches219 = min((int)floor($avail209 / 100), $maxBatch219);
+            if ($batches219 > 0) {
+                $scrap209 = $batches219 * 100;
+                $ref = $this->gateway->scrapUnits($planetId, 209, $scrap209);
+                if ($ref) {
+                    $this->gateway->constructUnits($planetId, 219, $batches219);
+                    $upgraded[219] = isset($upgraded[219]) ? $upgraded[219] + $batches219 : $batches219;
+                    $pData = $this->refreshPlanetData($planetId, $pData);
+                }
+            } elseif ($avail209 >= 20 && $maxBatch219 >= 1) {
+                // Presupuesto cubre la diferencia para 1x 219: 1x 219 = 1M Metal, 600k Cristal, 200k Deut
+                $scrap209 = min(100, $avail209);
+                $yieldM = $scrap209 * 10000.0;
+                $yieldC = $scrap209 * 6000.0;
+                $yieldD = $scrap209 * 2000.0;
+                $diffM = max(0.0, 1000000.0 - $yieldM);
+                $diffC = max(0.0, 600000.0 - $yieldC);
+                $diffD = max(0.0, 200000.0 - $yieldD);
+
+                $fleetCreds = isset($this->ctx->budgetManager) ? $this->ctx->budgetManager->getPlanetFleetCredits($planetId) : null;
+                $hasBudget = ($fleetCreds === null || ($fleetCreds['metal'] >= $diffM && $fleetCreds['crystal'] >= $diffC && $fleetCreds['deuterium'] >= $diffD));
+                $hasStock  = ((float)$pData['metal'] >= $diffM && (float)$pData['crystal'] >= $diffC && (float)$pData['deuterium'] >= $diffD);
+
+                if ($hasBudget && $hasStock) {
+                    $ref = $this->gateway->scrapUnits($planetId, 209, $scrap209);
+                    if ($ref) {
+                        $this->gateway->constructUnits($planetId, 219, 1);
+                        $upgraded[219] = 1;
+                        $pData = $this->refreshPlanetData($planetId, $pData);
+                    }
+                }
+            }
+        }
+
+        return $upgraded;
+    }
+
+    /**
+     * Plan and queue military recruitment across the empire with decoupled fleet and defense cycles
      *
      * @param BotEmpireState $empire
      * @param bool $forceRun Bypass timing check (useful for manual runs / tests)
+     * @param BotWorldModel|null $world Optional perception model
      * @return array [unitId => count recruited]
      */
-    public function planForces(BotEmpireState $empire, $forceRun = false)
+    public function planForces(BotEmpireState $empire, $forceRun = false, $world = null)
     {
         global $resource, $pricelist, $reslist, $CombatCaps;
 
         $doctrine = $this->getOrAssignFleetDoctrine();
 
-        $lastRecruit = isset($this->ctx->botRow['last_recruit']) ? (int)$this->ctx->botRow['last_recruit'] : 0;
-        $timeSinceRecruit = TIMESTAMP - $lastRecruit;
+        $lastFleetRecruit = isset($this->ctx->botRow['last_fleet_recruit']) ? (int)$this->ctx->botRow['last_fleet_recruit'] : 0;
+        $lastDefRecruit   = isset($this->ctx->botRow['last_defense_recruit']) ? (int)$this->ctx->botRow['last_defense_recruit'] : 0;
+        if ($lastFleetRecruit === 0 && isset($this->ctx->botRow['last_recruit'])) {
+            $lastFleetRecruit = (int)$this->ctx->botRow['last_recruit'];
+        }
+        if ($lastDefRecruit === 0 && isset($this->ctx->botRow['last_recruit'])) {
+            $lastDefRecruit = (int)$this->ctx->botRow['last_recruit'];
+        }
 
         $isSiegeActive = (!empty($this->ctx->botRow['target_type']) && $this->ctx->botRow['target_type'] === 'siege');
 
-        // Ventana de ahorro: si aún no ha transcurrido el intervalo (10 a 30 min), la IA acumula recursos
-        // EXCEPCIÓN VITAL: Durante asedios activos, la IA NO duerme; produce misiles y refuerzos en cada ciclo
-        if (!$forceRun && !$isSiegeActive && $lastRecruit > 0 && $timeSinceRecruit < $doctrine['interval']) {
-            return array();
+        // Threat check for bypass
+        $threatIncoming = false;
+        if ($world && isset($world->threats) && method_exists($world->threats, 'getActiveThreats')) {
+            $threats = $world->threats->getActiveThreats();
+            $threatIncoming = !empty($threats);
+        } else {
+            require_once 'includes/classes/bot/Perception/ThreatBoard.class.php';
+            $tb = new BotThreatBoard($this->ctx->botId, isset($this->ctx->user['spy_tech']) ? (int)$this->ctx->user['spy_tech'] : 0);
+            $threats = $tb->getActiveThreats();
+            $threatIncoming = !empty($threats);
         }
 
+        $milInterval = isset($this->ctx->difficulty->militaryCycleInterval) ? (int)$this->ctx->difficulty->militaryCycleInterval : 900;
+        $defInterval = isset($this->ctx->difficulty->defenseCycleInterval) ? (int)$this->ctx->difficulty->defenseCycleInterval : 1800;
+
+        $canRunFleet   = ($forceRun || $isSiegeActive || $threatIncoming || ($lastFleetRecruit === 0) || ((BotClock::get() - $lastFleetRecruit) >= $milInterval));
+        $canRunDefense = ($forceRun || $isSiegeActive || $threatIncoming || ($lastDefRecruit === 0) || ((BotClock::get() - $lastDefRecruit) >= $defInterval));
+
         $recruited = array();
+        $fleetRecruitedTotal = 0;
+        $defRecruitedTotal = 0;
+
         $allBodies = $empire->getAllBodies();
         if (!is_array($allBodies)) {
             return $recruited;
@@ -154,441 +651,467 @@ class BotForcePlanner
         foreach ($allBodies as $pId => $body) {
             $pData = $body['data'];
 
-            $queuedJobs = !empty($body['hangar_queue']) ? count($body['hangar_queue']) : 0;
-            $maxQueueJobs = 5;
+            $queuedJobs = !empty($pData['b_hangar_id']) ? count(@unserialize($pData['b_hangar_id'])) : 0;
+            $maxQueueJobs = 8;
 
-            // Skip if hangar queue has 5 or more jobs active
-            if ($queuedJobs >= $maxQueueJobs) {
-                continue;
-            }
+            // Dificultad y configuración de colas
+            $maxHangarDuration = isset($this->ctx->difficulty->maxHangarQueueDuration) ? (int)$this->ctx->difficulty->maxHangarQueueDuration : 2700;
+            $batchTimeTarget = isset($this->ctx->difficulty->batchTimeTarget) ? (int)$this->ctx->difficulty->batchTimeTarget : 900;
 
-            // --- 1. Energy Stabilization: Solar Satellites (212) ---
+            $maxRegularSlots = isset($this->ctx->difficulty->maxRegularSlots) ? (int)$this->ctx->difficulty->maxRegularSlots : 6;
+
+            $queueRemainingSec = $this->calculateQueueRemainingSeconds($pData);
+
+            // --- 1. Energy Stabilization: Solar Satellites (212) - Bypass inmediato (0s) ---
             $energy = (float)$pData['energy'];
-            if ($energy < 0 && $queuedJobs < $maxQueueJobs && BuildFunctions::isTechnologieAccessible($this->ctx->user, $pData, 212, array())) {
+            if ($energy < 0 && $queuedJobs < $maxQueueJobs && BuildFunctions::isTechnologieAccessible($this->ctx->user, $pData, 212, array()) && !$this->isUnitInQueue($pData, 212)) {
                 $energyPerSat = max(1.0, (($pData['temp_max'] + 160) / 6.0));
                 $satsNeeded   = min(50, (int)ceil(abs($energy) / $energyPerSat));
                 $maxSats      = BuildFunctions::getMaxConstructibleElements($this->ctx->user, $pData, 212);
                 $batchSats    = min($satsNeeded, $maxSats);
 
-                if ($batchSats > 0 && $this->gateway->constructUnits($pId, 212, $batchSats)) {
-                    $recruited[212] = isset($recruited[212]) ? $recruited[212] + $batchSats : $batchSats;
+                $enqueuedSats = ($batchSats > 0) ? (int)$this->gateway->constructUnits($pId, 212, $batchSats) : 0;
+                if ($enqueuedSats > 0) {
+                    $recruited[212] = isset($recruited[212]) ? $recruited[212] + $enqueuedSats : $enqueuedSats;
+                    $fleetRecruitedTotal += $enqueuedSats;
                     $queuedJobs++;
                     $this->ctx->decisionLog->record(
                         'solar_satellite_build',
-                        "Built {$batchSats}x Solar Satellites on body #{$pId} to resolve energy deficit ({$energy})",
-                        array('deficit' => $energy, 'batch' => $batchSats),
+                        "Construidos {$enqueuedSats}x Satélites Solares en planeta #{$pId} para resolver déficit energético ({$energy})",
+                        array('deficit' => $energy, 'batch' => $enqueuedSats),
                         "sat_{$pId}",
                         1000.0
                     );
-                        $pData = $this->refreshPlanetData($pId, $pData);
+                    $pData = $this->refreshPlanetData($pId, $pData);
+                    $queueRemainingSec = $this->calculateQueueRemainingSeconds($pData);
                 }
             }
 
-            // --- 2. Calculate Dynamic Production Budget by Difficulty & Personality Window (10-30 min) ---
-            $metalPerHour  = isset($pData['metal_perhour']) ? (float)$pData['metal_perhour'] : 0.0;
-            $intervalHours = max(0.166, (float)$doctrine['interval'] / 3600.0);
+            // Si ambos ciclos militares están en cooldown y no hay bypass, pasar al siguiente planeta
+            if (!$canRunFleet && !$canRunDefense) {
+                continue;
+            }
 
-            // Difficulty & Personality Macro Budget
-            $macro = (isset($this->ctx->difficulty) && method_exists($this->ctx->difficulty, 'getAdjustedBudget'))
-                ? $this->ctx->difficulty->getAdjustedBudget($this->ctx->personality)
-                : array('fleet' => 0.35, 'defense' => 0.15, 'mines' => 0.30, 'research' => 0.20);
+            // --- Modernización Progresiva de Flota Civil (Cadena 202->203->217 y 209->219) ---
+            if ($canRunFleet) {
+                $upgradedCiv = $this->upgradeCivilianFleets($pId, $pData);
+                if (!empty($upgradedCiv)) {
+                    foreach ($upgradedCiv as $civId => $civCount) {
+                        $recruited[$civId] = isset($recruited[$civId]) ? $recruited[$civId] + $civCount : $civCount;
+                        $fleetRecruitedTotal += $civCount;
+                    }
+                    $queuedJobs = !empty($pData['b_hangar_id']) ? count(@unserialize($pData['b_hangar_id'])) : 0;
+                    $queueRemainingSec = $this->calculateQueueRemainingSeconds($pData);
+                }
+            }
 
-            $militaryShare = max(0.05, $macro['fleet'] + $macro['defense']);
-            $cycleBudget   = max(250000.0, ($metalPerHour * $intervalHours) * $militaryShare);
-            $liquidMetal   = (float)$pData['metal'];
-            $actualBudget  = max($cycleBudget, min($liquidMetal * 0.75, $cycleBudget * 1.5));
+            // Presupuestos tri-recurso con Válvula de Flujo Continuo y Vaciado de Excedentes (5%-10%)
+            $rawFleetCredits = isset($this->ctx->budgetManager) 
+                ? $this->ctx->budgetManager->getPlanetFleetCredits($pId) 
+                : array('metal' => (float)$pData['metal'], 'crystal' => (float)$pData['crystal'], 'deuterium' => (float)$pData['deuterium']);
+            $rawDefCredits = isset($this->ctx->budgetManager) 
+                ? $this->ctx->budgetManager->getPlanetDefenseCredits($pId) 
+                : array('metal' => (float)$pData['metal'], 'crystal' => (float)$pData['crystal'], 'deuterium' => (float)$pData['deuterium']);
 
-            $ratioFleet    = $macro['fleet'] / $militaryShare;
-            $ratioDef      = $macro['defense'] / $militaryShare;
+            $isEmergency = ($threatIncoming || $isSiegeActive);
 
-            $totalDefAlloc = $actualBudget * $ratioDef;
-            $mislBudget    = $totalDefAlloc * ($isSiegeActive ? 0.75 : 0.25);
-            $defBudget     = $totalDefAlloc - $mislBudget;
-            $fleetBudget   = $actualBudget * $ratioFleet;
+            $fleetCredits = $this->calculateCycleSpendBudget($pId, $pData, 'fleet', $rawFleetCredits, $lastFleetRecruit, $isEmergency);
+            $defCredits   = $this->calculateCycleSpendBudget($pId, $pData, 'defense', $rawDefCredits, $lastDefRecruit, $isEmergency);
 
-            // --- 3. Missile & Silo Management ---
+            $fleetLock = (isset($this->ctx->budgetManager) && method_exists($this->ctx->budgetManager, 'getSavingsLockForCategory'))
+                ? $this->ctx->budgetManager->getSavingsLockForCategory($pId, 'fleet') : null;
+            $lockedDefResFleet = ($fleetLock && !empty($fleetLock['deficit_resource'])) ? (int)$fleetLock['deficit_resource'] : 0;
+            $lockedDefAmountFleet = ($fleetLock && isset($fleetLock['cost'][$lockedDefResFleet])) ? (float)$fleetLock['cost'][$lockedDefResFleet] : 0.0;
+
+            $defLock = (isset($this->ctx->budgetManager) && method_exists($this->ctx->budgetManager, 'getSavingsLockForCategory'))
+                ? $this->ctx->budgetManager->getSavingsLockForCategory($pId, 'defense') : null;
+            $lockedDefResDef = ($defLock && !empty($defLock['deficit_resource'])) ? (int)$defLock['deficit_resource'] : 0;
+            $lockedDefAmountDef = ($defLock && isset($defLock['cost'][$lockedDefResDef])) ? (float)$defLock['cost'][$lockedDefResDef] : 0.0;
+
+            // --- 2. Missile & Silo Management (Exclusivo en el ciclo de reclutamiento de defensa) ---
+            // Regla: Único lugar del código autorizado para reclutar misiles (502 / 503).
+            // Siempre recluta y repone hasta el máximo que permita el nivel de silo.
+            // Ratio objetivo: 60% Interceptores (502) / 40% Interplanetarios (503).
+            // Apenas vea déficit, repone la cantidad suficiente para restablecer el ratio 60/40.
+            // Al llegar a tope (o tras reponer el déficit), se pasa el presupuesto restante a defensas.
             $siloLevel = isset($pData[$resource[44]]) ? (int)$pData[$resource[44]] : 0;
-            if ($siloLevel >= 2 && $queuedJobs < $maxQueueJobs) {
-                $configSiloFactor = max(Config::get()->silo_factor, 1);
-                $maxSpaces = $siloLevel * 10 * $configSiloFactor;
-
+            if ($canRunDefense && $queuedJobs < $maxQueueJobs && $siloLevel >= 2) {
+                $rocketsCapacity = BuildFunctions::getMaxConstructibleRockets($this->ctx->user, $pData);
+                $freeSpaces = isset($rocketsCapacity[502]) ? (int)$rocketsCapacity[502] : 0;
                 $cur502 = isset($pData[$resource[502]]) ? (int)$pData[$resource[502]] : 0;
                 $cur503 = isset($pData[$resource[503]]) ? (int)$pData[$resource[503]] : 0;
-                $usedSpaces = ($cur502 * 1) + ($cur503 * 2);
-                $freeSpaces = max(0, $maxSpaces - $usedSpaces);
-
-                // Quota: prioritize MIPs (503) aggressively during sieges
-                $mipRatio = $isSiegeActive ? 0.85 : 0.45;
-                $targetSpaces503 = (int)floor($maxSpaces * $mipRatio);
-                $targetCount503  = (int)floor($targetSpaces503 / 2);
-                $targetSpaces502 = $maxSpaces - $targetSpaces503;
-                $targetCount502  = $targetSpaces502;
-
                 $impulse = isset($this->ctx->user[$resource[117]]) ? (int)$this->ctx->user[$resource[117]] : 0;
 
-                // Priority: During sieges, build offensive MIPs (503) FIRST before defensive ABMs
-                if ($isSiegeActive) {
-                    // A. Interplanetary Missiles (503) Priority
-                    if ($queuedJobs < $maxQueueJobs && $siloLevel >= 4 && $impulse >= 1 && $cur503 < $targetCount503 && BuildFunctions::isTechnologieAccessible($this->ctx->user, $pData, 503, array())) {
-                        $needed503    = $targetCount503 - $cur503;
-                        $costMetal503 = $this->getCostMetal(503);
-                        $budget503    = floor(($mislBudget * 0.85) / $costMetal503);
-                        $maxCan503    = BuildFunctions::getMaxConstructibleElements($this->ctx->user, $pData, 503);
-                        $maxBySpace   = (int)floor($freeSpaces / 2);
-                        $batch503     = min($needed503, min($budget503, min($maxCan503, $maxBySpace)));
+                // Capacidad máxima total de misiles dada por el silo
+                $totalSiloMax = $cur502 + $cur503 + $freeSpaces;
 
-                        if ($batch503 > 0 && $this->gateway->constructUnits($pId, 503, $batch503)) {
-                            $recruited[503] = isset($recruited[503]) ? $recruited[503] + $batch503 : $batch503;
-                            $queuedJobs++;
-                            $freeSpaces -= ($batch503 * 2);
-                            $this->ctx->decisionLog->record(
-                                'mip_missile_build',
-                                "Recruited {$batch503}x Interplanetary Missiles (503) on body #{$pId}",
-                                array('batch' => $batch503),
-                                "mip_{$pId}",
-                                900.0
-                            );
-                            $pData = $this->refreshPlanetData($pId, $pData);
-                        }
-                    }
+                $canBuild502 = BuildFunctions::isTechnologieAccessible($this->ctx->user, $pData, 502, array());
+                $canBuild503 = ($siloLevel >= 4 && $impulse >= 1 && BuildFunctions::isTechnologieAccessible($this->ctx->user, $pData, 503, array()));
 
-                    // B. Interceptor Missiles (502) Secondary
-                    if ($queuedJobs < $maxQueueJobs && $cur502 < $targetCount502 && $freeSpaces >= 1 && BuildFunctions::isTechnologieAccessible($this->ctx->user, $pData, 502, array())) {
-                        $needed502    = $targetCount502 - $cur502;
-                        $costMetal502 = $this->getCostMetal(502);
-                        $budget502    = floor(($mislBudget * 0.15) / $costMetal502);
-                        $maxCan502    = BuildFunctions::getMaxConstructibleElements($this->ctx->user, $pData, 502);
-                        $batch502     = min($needed502, min($budget502, min($maxCan502, $freeSpaces)));
-
-                        if ($batch502 > 0 && $this->gateway->constructUnits($pId, 502, $batch502)) {
-                            $recruited[502] = isset($recruited[502]) ? $recruited[502] + $batch502 : $batch502;
-                            $queuedJobs++;
-                            $freeSpaces -= $batch502;
-                            $this->ctx->decisionLog->record(
-                                'antimissile_build',
-                                "Recruited {$batch502}x Interceptor Missiles (502) on body #{$pId}",
-                                array('batch' => $batch502),
-                                "interceptor_{$pId}",
-                                1200.0
-                            );
-                            $pData = $this->refreshPlanetData($pId, $pData);
-                        }
-                    }
+                if ($canBuild502 && $canBuild503) {
+                    $target502 = (int)floor($totalSiloMax * 0.60);
+                    $target503 = (int)floor($totalSiloMax * 0.40);
+                } elseif ($canBuild502) {
+                    $target502 = $totalSiloMax;
+                    $target503 = 0;
                 } else {
-                    // Standard Peace/Defensive Stance: Interceptors First
-                    if ($cur502 < $targetCount502 && BuildFunctions::isTechnologieAccessible($this->ctx->user, $pData, 502, array())) {
-                        $needed502    = $targetCount502 - $cur502;
-                        $costMetal502 = $this->getCostMetal(502);
-                        $budget502    = floor(($mislBudget * 0.60) / $costMetal502);
-                        $maxCan502    = BuildFunctions::getMaxConstructibleElements($this->ctx->user, $pData, 502);
-                        $maxBySpace   = $freeSpaces;
-                        $batch502     = min($needed502, min($budget502, min($maxCan502, $maxBySpace)));
+                    $target502 = 0;
+                    $target503 = 0;
+                }
 
-                        if ($batch502 > 0 && $this->gateway->constructUnits($pId, 502, $batch502)) {
-                            $recruited[502] = isset($recruited[502]) ? $recruited[502] + $batch502 : $batch502;
-                            $queuedJobs++;
-                            $freeSpaces -= $batch502;
-                            $this->ctx->decisionLog->record(
-                                'antimissile_build',
-                                "Recruited {$batch502}x Interceptor Missiles (502) on body #{$pId}",
-                                array('batch' => $batch502),
-                                "interceptor_{$pId}",
-                                1200.0
-                            );
-                            $pData = $this->refreshPlanetData($pId, $pData);
-                        }
+                $deficit502 = max(0, $target502 - $cur502);
+                $deficit503 = max(0, $target503 - $cur503);
+
+                // Reponer ABM (502) si hay déficit
+                if ($deficit502 > 0 && $freeSpaces > 0 && $queuedJobs < $maxQueueJobs && !$this->isUnitInQueue($pData, 502)) {
+                    $batch502 = $this->getConstructibleBatch($pData, $defCredits, 502, $queuedJobs, $maxQueueJobs, $queueRemainingSec, $maxHangarDuration, $batchTimeTarget, $lockedDefResDef, true, $lockedDefAmountDef);
+                    $batch502 = min($batch502, $deficit502, $freeSpaces);
+                    $enqueued502 = ($batch502 > 0) ? (int)$this->gateway->constructUnits($pId, 502, $batch502) : 0;
+                    if ($enqueued502 > 0) {
+                        $recruited[502] = isset($recruited[502]) ? $recruited[502] + $enqueued502 : $enqueued502;
+                        $defRecruitedTotal += $enqueued502;
+                        $queuedJobs++;
+                        $freeSpaces -= $enqueued502;
+                        $cur502 += $enqueued502;
+
+                        $costM502 = (float)(isset($pricelist[502]['cost'][901]) ? $pricelist[502]['cost'][901] * $enqueued502 : 0);
+                        $costC502 = (float)(isset($pricelist[502]['cost'][902]) ? $pricelist[502]['cost'][902] * $enqueued502 : 0);
+                        $costD502 = (float)(isset($pricelist[502]['cost'][903]) ? $pricelist[502]['cost'][903] * $enqueued502 : 0);
+                        $defCredits['metal']     = max(0.0, $defCredits['metal'] - $costM502);
+                        $defCredits['crystal']   = max(0.0, $defCredits['crystal'] - $costC502);
+                        $defCredits['deuterium'] = max(0.0, $defCredits['deuterium'] - $costD502);
+
+                        $pData = $this->refreshPlanetData($pId, $pData);
+                        $queueRemainingSec = $this->calculateQueueRemainingSeconds($pData);
                     }
+                }
 
-                    if ($queuedJobs < $maxQueueJobs && $siloLevel >= 4 && $impulse >= 1 && $cur503 < $targetCount503 && BuildFunctions::isTechnologieAccessible($this->ctx->user, $pData, 503, array())) {
-                        $needed503    = $targetCount503 - $cur503;
-                        $costMetal503 = $this->getCostMetal(503);
-                        $budget503    = floor(($mislBudget * 0.40) / $costMetal503);
-                        $maxCan503    = BuildFunctions::getMaxConstructibleElements($this->ctx->user, $pData, 503);
-                        $maxBySpace   = (int)floor($freeSpaces / 2);
-                        $batch503     = min($needed503, min($budget503, min($maxCan503, $maxBySpace)));
+                // Reponer MIP (503) si hay déficit
+                if ($deficit503 > 0 && $freeSpaces > 0 && $canBuild503 && $queuedJobs < $maxRegularSlots && !$this->isUnitInQueue($pData, 503)) {
+                    $batch503 = $this->getConstructibleBatch($pData, $defCredits, 503, $queuedJobs, $maxRegularSlots, $queueRemainingSec, $maxHangarDuration, $batchTimeTarget, $lockedDefResDef, false, $lockedDefAmountDef);
+                    $batch503 = min($batch503, $deficit503, $freeSpaces);
+                    $enqueued503 = ($batch503 > 0) ? (int)$this->gateway->constructUnits($pId, 503, $batch503) : 0;
+                    if ($enqueued503 > 0) {
+                        $recruited[503] = isset($recruited[503]) ? $recruited[503] + $enqueued503 : $enqueued503;
+                        $defRecruitedTotal += $enqueued503;
+                        $queuedJobs++;
+                        $freeSpaces -= $enqueued503;
+                        $cur503 += $enqueued503;
 
-                        if ($batch503 > 0 && $this->gateway->constructUnits($pId, 503, $batch503)) {
-                            $recruited[503] = isset($recruited[503]) ? $recruited[503] + $batch503 : $batch503;
-                            $queuedJobs++;
-                            $freeSpaces -= ($batch503 * 2);
-                            $this->ctx->decisionLog->record(
-                                'mip_missile_build',
-                                "Recruited {$batch503}x Interplanetary Missiles (503) on body #{$pId}",
-                                array('batch' => $batch503),
-                                "mip_{$pId}",
-                                900.0
-                            );
-                            $pData = $this->refreshPlanetData($pId, $pData);
-                        }
+                        $costM503 = (float)(isset($pricelist[503]['cost'][901]) ? $pricelist[503]['cost'][901] * $enqueued503 : 0);
+                        $costC503 = (float)(isset($pricelist[503]['cost'][902]) ? $pricelist[503]['cost'][902] * $enqueued503 : 0);
+                        $costD503 = (float)(isset($pricelist[503]['cost'][903]) ? $pricelist[503]['cost'][903] * $enqueued503 : 0);
+                        $defCredits['metal']     = max(0.0, $defCredits['metal'] - $costM503);
+                        $defCredits['crystal']   = max(0.0, $defCredits['crystal'] - $costC503);
+                        $defCredits['deuterium'] = max(0.0, $defCredits['deuterium'] - $costD503);
+
+                        $pData = $this->refreshPlanetData($pId, $pData);
+                        $queueRemainingSec = $this->calculateQueueRemainingSeconds($pData);
                     }
                 }
             }
 
-            // --- 4. Planetary Defense Management ---
-            if ($queuedJobs < $maxQueueJobs) {
-                // Priority: Shield Domes if missing
+            // --- 3. Planetary Defense Management ---
+            // Al estar a tope los misiles o atendido el déficit, el presupuesto se vuelca a defensas:
+            // - Prioridad 0: Cúpulas (407, 408) si faltan.
+            // - 40% del presupuesto para el Top 3 de armas de alto daño (plasma/graviton con fuego rápido).
+            // - 60% (+ sobrante del 40%) para la mejor carne de cañón con ataque tipo iónico.
+            if ($canRunDefense) {
+                // Prioridad 1: Cúpulas (407, 408) si faltan
                 if (!empty($reslist['domes'])) {
                     foreach ($reslist['domes'] as $domeId) {
-                        if ($queuedJobs >= $maxQueueJobs) break;
-                        if (!BuildFunctions::isTechnologieAccessible($this->ctx->user, $pData, $domeId, array())) continue;
+                        if ($queuedJobs >= $maxRegularSlots) break;
                         $curDome = isset($pData[$resource[$domeId]]) ? (int)$pData[$resource[$domeId]] : 0;
-                        if ($curDome == 0 && BuildFunctions::getMaxConstructibleElements($this->ctx->user, $pData, $domeId) > 0) {
-                            if ($this->gateway->constructUnits($pId, $domeId, 1)) {
-                                $recruited[$domeId] = isset($recruited[$domeId]) ? $recruited[$domeId] + 1 : 1;
+                        if ($curDome == 0 && !$this->isUnitInQueue($pData, $domeId) && BuildFunctions::isTechnologieAccessible($this->ctx->user, $pData, $domeId, array())) {
+                            $batchDome = $this->getConstructibleBatch($pData, $defCredits, $domeId, $queuedJobs, $maxRegularSlots, $queueRemainingSec, $maxHangarDuration, $batchTimeTarget, $lockedDefResDef, false, $lockedDefAmountDef);
+                            $enqueuedDome = ($batchDome >= 1) ? (int)$this->gateway->constructUnits($pId, $domeId, 1) : 0;
+                            if ($enqueuedDome >= 1) {
+                                $recruited[$domeId] = isset($recruited[$domeId]) ? $recruited[$domeId] + $enqueuedDome : $enqueuedDome;
+                                $defRecruitedTotal += $enqueuedDome;
                                 $queuedJobs++;
+
+                                $costMDome = (float)(isset($pricelist[$domeId]['cost'][901]) ? $pricelist[$domeId]['cost'][901] : 0);
+                                $costCDome = (float)(isset($pricelist[$domeId]['cost'][902]) ? $pricelist[$domeId]['cost'][902] : 0);
+                                $costDDome = (float)(isset($pricelist[$domeId]['cost'][903]) ? $pricelist[$domeId]['cost'][903] : 0);
+                                $defCredits['metal']     = max(0.0, $defCredits['metal'] - $costMDome);
+                                $defCredits['crystal']   = max(0.0, $defCredits['crystal'] - $costCDome);
+                                $defCredits['deuterium'] = max(0.0, $defCredits['deuterium'] - $costDDome);
+
                                 $pData = $this->refreshPlanetData($pId, $pData);
+                                $queueRemainingSec = $this->calculateQueueRemainingSeconds($pData);
                             }
                         }
                     }
                 }
 
-                // Top Quality Defense Turrets (Accessible & Affordable within Budget)
-                if ($queuedJobs < $maxQueueJobs) {
-                    $topDefenses = $this->evaluateDefenseUnits($pData);
-                    if (!empty($topDefenses)) {
-                        $chosenDef = null;
-                        foreach ($topDefenses as $defCand) {
-                            $defId     = $defCand['unit_id'];
-                            $costMetal = $this->getCostMetal($defId);
-                            $canBuild  = floor($defBudget / $costMetal);
-                            $maxAfford = BuildFunctions::getMaxConstructibleElements($this->ctx->user, $pData, $defId);
-                            if ($canBuild >= 1 && $maxAfford >= 1) {
-                                $chosenDef = $defCand;
-                                break;
-                            }
-                        }
+                // Reclutamiento de Defensas: escalamiento continuo sin techo artificial, regulado por créditos de presupuesto
+                if ($queuedJobs < $maxRegularSlots) {
+                    $eliteShare = 0.40;
+                    $elitePool = array(
+                        'metal'     => $defCredits['metal'] * $eliteShare,
+                        'crystal'   => $defCredits['crystal'] * $eliteShare,
+                        'deuterium' => $defCredits['deuterium'] * $eliteShare,
+                    );
 
-                        // Fallback if none fit full budget: pick best turret with at least 1 affordable
-                        if ($chosenDef === null) {
-                            foreach ($topDefenses as $defCand) {
-                                $defId = $defCand['unit_id'];
-                                $maxAfford = BuildFunctions::getMaxConstructibleElements($this->ctx->user, $pData, $defId);
-                                if ($maxAfford >= 1) {
-                                    $chosenDef = $defCand;
-                                    break;
-                                }
-                            }
-                        }
+                    // A. 40% Defensas de Élite (Top 1, 2 y 3 de daño con plasma/graviton y fuego rápido, con fallback a mayor daño)
+                    $eliteTriad = $this->getEliteDefenseTriad($pData);
+                    if (!empty($eliteTriad)) {
+                        $remainingEliteRoles = count($eliteTriad);
+                        foreach ($eliteTriad as $eliteDefId) {
+                            if ($queuedJobs >= $maxRegularSlots) break;
+                            $allocFraction = ($remainingEliteRoles <= 1) ? 1.00 : (1.0 / $remainingEliteRoles);
+                            $targetRoleCredits = array(
+                                'metal'     => $elitePool['metal'] * $allocFraction,
+                                'crystal'   => $elitePool['crystal'] * $allocFraction,
+                                'deuterium' => $elitePool['deuterium'] * $allocFraction,
+                            );
 
-                        if ($chosenDef !== null) {
-                            $defId     = $chosenDef['unit_id'];
-                            $costMetal = $this->getCostMetal($defId);
-                            $canBuild  = max(1, floor($defBudget / $costMetal));
-                            $maxAfford = BuildFunctions::getMaxConstructibleElements($this->ctx->user, $pData, $defId);
-                            $batchDef  = min($canBuild, $maxAfford);
-
-                            if ($batchDef > 0 && $this->gateway->constructUnits($pId, $defId, $batchDef)) {
-                                $recruited[$defId] = isset($recruited[$defId]) ? $recruited[$defId] + $batchDef : $batchDef;
+                            $batchDef = $this->getConstructibleBatch($pData, $targetRoleCredits, $eliteDefId, $queuedJobs, $maxRegularSlots, $queueRemainingSec, $maxHangarDuration, $batchTimeTarget, $lockedDefResDef, false, $lockedDefAmountDef);
+                            $enqueuedDef = ($batchDef > 0) ? (int)$this->gateway->constructUnits($pId, $eliteDefId, $batchDef) : 0;
+                            if ($enqueuedDef > 0) {
+                                $recruited[$eliteDefId] = isset($recruited[$eliteDefId]) ? $recruited[$eliteDefId] + $enqueuedDef : $enqueuedDef;
+                                $defRecruitedTotal += $enqueuedDef;
                                 $queuedJobs++;
-                                $this->ctx->decisionLog->record(
-                                    'force_build_defense',
-                                    "Recruited {$batchDef}x {$resource[$defId]} on body #{$pId} (Quality Score: {$chosenDef['score']})",
-                                    array('unit' => $defId, 'batch' => $batchDef, 'score' => $chosenDef['score']),
-                                    "recruit_def_{$defId}_{$pId}",
-                                    $chosenDef['score']
-                                );
+
+                                $costMDef = (float)(isset($pricelist[$eliteDefId]['cost'][901]) ? $pricelist[$eliteDefId]['cost'][901] * $enqueuedDef : 0);
+                                $costCDef = (float)(isset($pricelist[$eliteDefId]['cost'][902]) ? $pricelist[$eliteDefId]['cost'][902] * $enqueuedDef : 0);
+                                $costDDef = (float)(isset($pricelist[$eliteDefId]['cost'][903]) ? $pricelist[$eliteDefId]['cost'][903] * $enqueuedDef : 0);
+
+                                $elitePool['metal']     = max(0.0, $elitePool['metal'] - $costMDef);
+                                $elitePool['crystal']   = max(0.0, $elitePool['crystal'] - $costCDef);
+                                $elitePool['deuterium'] = max(0.0, $elitePool['deuterium'] - $costDDef);
+
+                                $defCredits['metal']     = max(0.0, $defCredits['metal'] - $costMDef);
+                                $defCredits['crystal']   = max(0.0, $defCredits['crystal'] - $costCDef);
+                                $defCredits['deuterium'] = max(0.0, $defCredits['deuterium'] - $costDDef);
+
                                 $pData = $this->refreshPlanetData($pId, $pData);
+                                $queueRemainingSec = $this->calculateQueueRemainingSeconds($pData);
+                            }
+                            $remainingEliteRoles--;
+                        }
+                    }
+
+                    // B. Carne de Cañón Iónica: consume el 100% del saldo remanente de defensa ($defCredits)
+                    // (60% base de defensa más cualquier excedente no gastado por las unidades de élite)
+                    if ($queuedJobs < $maxRegularSlots) {
+                        $fodderCredits = array(
+                            'metal'     => max(0.0, (float)$defCredits['metal']),
+                            'crystal'   => max(0.0, (float)$defCredits['crystal']),
+                            'deuterium' => max(0.0, (float)$defCredits['deuterium']),
+                        );
+
+                        $bestFodderId = $this->getBestIonicFodderDefense($pData);
+                        if ($bestFodderId > 0 && !$this->isUnitInQueue($pData, $bestFodderId)) {
+                            $batchFodder = $this->getConstructibleBatch($pData, $fodderCredits, $bestFodderId, $queuedJobs, $maxRegularSlots, $queueRemainingSec, $maxHangarDuration, $batchTimeTarget, $lockedDefResDef, false, $lockedDefAmountDef);
+                            $enqueuedFodder = ($batchFodder > 0) ? (int)$this->gateway->constructUnits($pId, $bestFodderId, $batchFodder) : 0;
+                            if ($enqueuedFodder > 0) {
+                                $recruited[$bestFodderId] = isset($recruited[$bestFodderId]) ? $recruited[$bestFodderId] + $enqueuedFodder : $enqueuedFodder;
+                                $defRecruitedTotal += $enqueuedFodder;
+                                $queuedJobs++;
+
+                                $costMFodder = (float)(isset($pricelist[$bestFodderId]['cost'][901]) ? $pricelist[$bestFodderId]['cost'][901] * $enqueuedFodder : 0);
+                                $costCFodder = (float)(isset($pricelist[$bestFodderId]['cost'][902]) ? $pricelist[$bestFodderId]['cost'][902] * $enqueuedFodder : 0);
+                                $costDFodder = (float)(isset($pricelist[$bestFodderId]['cost'][903]) ? $pricelist[$bestFodderId]['cost'][903] * $enqueuedFodder : 0);
+
+                                $defCredits['metal']     = max(0.0, $defCredits['metal'] - $costMFodder);
+                                $defCredits['crystal']   = max(0.0, $defCredits['crystal'] - $costCFodder);
+                                $defCredits['deuterium'] = max(0.0, $defCredits['deuterium'] - $costDFodder);
+
+                                $pData = $this->refreshPlanetData($pId, $pData);
+                                $queueRemainingSec = $this->calculateQueueRemainingSeconds($pData);
                             }
                         }
                     }
                 }
             }
 
-            // --- 5. Fleet Planning (Combined-Arms Doctrine with Fodder Ratio Control) ---
-            if ($queuedJobs < $maxQueueJobs) {
-                // Calculate current combat fleet on this planet
-                $curFodder = (isset($pData[$resource[204]]) ? (int)$pData[$resource[204]] : 0) +
-                             (isset($pData[$resource[205]]) ? (int)$pData[$resource[205]] : 0);
+            // --- 4. Fleet Planning: 100% Unified Fleet Budget ---
+            // 20% Pesados, 25% Medios, 30% Apoyo, 20% Fodder, 5% Carga (2.5% Recicladores, 2.5% Transportadores)
+            if ($canRunFleet && $queuedJobs < $maxRegularSlots) {
+                // Sondas de Espionaje (Mínimo táctico operativo < 60 sondas para soportar misiones de 30+ sondas)
+                $curProbes = isset($pData[$resource[210]]) ? (int)$pData[$resource[210]] : 0;
+                if ($curProbes < 60 && $queuedJobs < $maxRegularSlots && !$this->isUnitInQueue($pData, 210) && BuildFunctions::isTechnologieAccessible($this->ctx->user, $pData, 210, array())) {
+                    $utilProbeCredits = array(
+                        'metal'     => $fleetCredits['metal'] * 0.02,
+                        'crystal'   => $fleetCredits['crystal'] * 0.02,
+                        'deuterium' => $fleetCredits['deuterium'] * 0.02,
+                    );
+                    $batchProbe = $this->getConstructibleBatch($pData, $utilProbeCredits, 210, $queuedJobs, $maxRegularSlots, $queueRemainingSec, $maxHangarDuration, $batchTimeTarget, $lockedDefResFleet, false, $lockedDefAmountFleet);
+                    $batchProbe = min($batchProbe, 60 - $curProbes);
+                    $enqueuedProbe = ($batchProbe > 0) ? (int)$this->gateway->constructUnits($pId, 210, $batchProbe) : 0;
+                    if ($enqueuedProbe > 0) {
+                        $recruited[210] = isset($recruited[210]) ? $recruited[210] + $enqueuedProbe : $enqueuedProbe;
+                        $fleetRecruitedTotal += $enqueuedProbe;
+                        $queuedJobs++;
 
-                $curWarships = (isset($pData[$resource[206]]) ? (int)$pData[$resource[206]] : 0) +
-                               (isset($pData[$resource[207]]) ? (int)$pData[$resource[207]] : 0) +
-                               (isset($pData[$resource[215]]) ? (int)$pData[$resource[215]] : 0) +
-                               (isset($pData[$resource[211]]) ? (int)$pData[$resource[211]] : 0) +
-                               (isset($pData[$resource[213]]) ? (int)$pData[$resource[213]] : 0) +
-                               (isset($pData[$resource[214]]) ? (int)$pData[$resource[214]] : 0) +
-                               (isset($pData[$resource[216]]) ? (int)$pData[$resource[216]] : 0) +
-                               (isset($pData[$resource[225]]) ? (int)$pData[$resource[225]] : 0) +
-                               (isset($pData[$resource[226]]) ? (int)$pData[$resource[226]] : 0);
+                        $costMP = (float)(isset($pricelist[210]['cost'][901]) ? $pricelist[210]['cost'][901] * $enqueuedProbe : 0);
+                        $costCP = (float)(isset($pricelist[210]['cost'][902]) ? $pricelist[210]['cost'][902] * $enqueuedProbe : 0);
+                        $costDP = (float)(isset($pricelist[210]['cost'][903]) ? $pricelist[210]['cost'][903] * $enqueuedProbe : 0);
+                        $fleetCredits['metal']     = max(0.0, $fleetCredits['metal'] - $costMP);
+                        $fleetCredits['crystal']   = max(0.0, $fleetCredits['crystal'] - $costCP);
+                        $fleetCredits['deuterium'] = max(0.0, $fleetCredits['deuterium'] - $costDP);
 
-                $totalCombat = $curFodder + $curWarships;
-                $fodderRatio = $totalCombat > 0 ? ($curFodder / $totalCombat) : 0.0;
-
-                // Fodder Quota Circuit Breaker:
-                // Target: 40% - 50% fodder. If >= 50%, pause fodder completely and divert 100% to attack warships!
-                $fodderAllowed = ($fodderRatio < 0.50);
-                $fodderBudget  = $fodderAllowed ? ($fleetBudget * 0.20) : 0.0;
-                $attackBudget  = $fleetBudget * ($fodderAllowed ? 0.70 : 0.90);
-                $supportBudget = $fleetBudget * 0.10;
-
-                // A. FODDER RECRUITMENT (Screening Fleet)
-                if ($fodderAllowed && $queuedJobs < $maxQueueJobs && $fodderBudget > 0) {
-                    $hasLight = BuildFunctions::isTechnologieAccessible($this->ctx->user, $pData, 204, array());
-                    $hasHeavy = BuildFunctions::isTechnologieAccessible($this->ctx->user, $pData, 205, array());
-
-                    $fodderBatchPlan = array();
-                    if ($hasLight && $hasHeavy) {
-                        $fodderBatchPlan[] = array('id' => 204, 'share' => 0.60);
-                        $fodderBatchPlan[] = array('id' => 205, 'share' => 0.40);
-                    } elseif ($hasLight) {
-                        $fodderBatchPlan[] = array('id' => 204, 'share' => 1.00);
-                    } elseif ($hasHeavy) {
-                        $fodderBatchPlan[] = array('id' => 205, 'share' => 1.00);
+                        $pData = $this->refreshPlanetData($pId, $pData);
+                        $queueRemainingSec = $this->calculateQueueRemainingSeconds($pData);
                     }
+                }
 
-                    foreach ($fodderBatchPlan as $fPlan) {
-                        if ($queuedJobs >= $maxQueueJobs) break;
-                        $fId = $fPlan['id'];
-                        $fCostMetal = $this->getCostMetal($fId);
-                        $canFodder  = floor(($fodderBudget * $fPlan['share']) / $fCostMetal);
-                        $maxAfford  = BuildFunctions::getMaxConstructibleElements($this->ctx->user, $pData, $fId);
-                        $batchFodder = min($canFodder, $maxAfford);
+                // Reclutamiento Unificado de Flota: 6 Categorías Doctrinales con Cascada Completa
+                // Reparto: 20% Pesados, 25% Medios, 30% Apoyo, 20% Fodder, 2.5% Recicladores, 2.5% Transportadores
+                if ($queuedJobs < $maxRegularSlots) {
+                    $unitHeavy       = $this->resolveCategoryUnit('heavy', $pData);
+                    $unitMedium      = $this->resolveCategoryUnit('medium', $pData);
+                    $unitSupport     = $this->resolveCategoryUnit('support', $pData);
+                    $unitFodder      = $this->resolveCategoryUnit('fodder', $pData);
+                    $unitRecycler    = BuildFunctions::isTechnologieAccessible($this->ctx->user, $pData, 219, array()) ? 219 : (BuildFunctions::isTechnologieAccessible($this->ctx->user, $pData, 209, array()) ? 209 : 0);
+                    $unitTransporter = BuildFunctions::isTechnologieAccessible($this->ctx->user, $pData, 217, array()) ? 217 : (BuildFunctions::isTechnologieAccessible($this->ctx->user, $pData, 203, array()) ? 203 : (BuildFunctions::isTechnologieAccessible($this->ctx->user, $pData, 202, array()) ? 202 : 0));
 
-                        if ($batchFodder > 0 && $this->gateway->constructUnits($pId, $fId, $batchFodder)) {
-                            $recruited[$fId] = isset($recruited[$fId]) ? $recruited[$fId] + $batchFodder : $batchFodder;
-                            $queuedJobs++;
-                            $this->ctx->decisionLog->record(
-                                'force_build_fodder',
-                                "Recruited {$batchFodder}x {$resource[$fId]} on body #{$pId} (Screening Fodder)",
-                                array('unit' => $fId, 'batch' => $batchFodder),
-                                "recruit_fodder_{$fId}_{$pId}",
-                                500.0
+                    $categoryConfigs = array(
+                        'heavy'       => array('unit' => $unitHeavy,       'share' => 0.200, 'priority' => 1),
+                        'medium'      => array('unit' => $unitMedium,      'share' => 0.250, 'priority' => 2),
+                        'support'     => array('unit' => $unitSupport,     'share' => 0.300, 'priority' => 3),
+                        'fodder'      => array('unit' => $unitFodder,      'share' => 0.200, 'priority' => 4),
+                        'recycler'    => array('unit' => $unitRecycler,    'share' => 0.025, 'priority' => 5),
+                        'transporter' => array('unit' => $unitTransporter, 'share' => 0.025, 'priority' => 6),
+                    );
+
+                    // Agrupar unidades coincidentes para no duplicar slots de cola en el hangar
+                    $initialFleetCredits = $fleetCredits;
+                    $cascadedExtra = array('metal' => 0.0, 'crystal' => 0.0, 'deuterium' => 0.0);
+                    $unitPools = array();
+
+                    foreach ($categoryConfigs as $catKey => $cCfg) {
+                        $uId = (int)$cCfg['unit'];
+                        if ($uId <= 0) {
+                            // Si no hay tecnología para esta categoría, su cuota se transfiere directamente a la cascada
+                            $cascadedExtra['metal']     += $initialFleetCredits['metal'] * $cCfg['share'];
+                            $cascadedExtra['crystal']   += $initialFleetCredits['crystal'] * $cCfg['share'];
+                            $cascadedExtra['deuterium'] += $initialFleetCredits['deuterium'] * $cCfg['share'];
+                            continue;
+                        }
+                        if (!isset($unitPools[$uId])) {
+                            $unitPools[$uId] = array(
+                                'unit_id'    => $uId,
+                                'share'      => 0.0,
+                                'priority'   => $cCfg['priority'],
+                                'categories' => array(),
                             );
+                        }
+                        $unitPools[$uId]['share'] += $cCfg['share'];
+                        $unitPools[$uId]['categories'][] = $catKey;
+                        $unitPools[$uId]['priority'] = min($unitPools[$uId]['priority'], $cCfg['priority']);
+                    }
+
+                    // Ordenar por prioridad: Pesados (1) -> Medios (2) -> Apoyo (3) -> Carne de Cañón (4)
+                    uasort($unitPools, function($a, $b) {
+                        return $a['priority'] - $b['priority'];
+                    });
+
+                    $poolIndex = 0;
+                    $totalPools = count($unitPools);
+
+                    foreach ($unitPools as $uId => $pool) {
+                        $poolIndex++;
+                        $isLastPool = ($poolIndex === $totalPools);
+
+                        if ($queuedJobs >= $maxRegularSlots) {
+                            break;
+                        }
+
+                        if ($isLastPool) {
+                            // La última categoría absorbe todo el remanente disponible de flota
+                            $poolCredits = array(
+                                'metal'     => max(0.0, (float)$fleetCredits['metal']),
+                                'crystal'   => max(0.0, (float)$fleetCredits['crystal']),
+                                'deuterium' => max(0.0, (float)$fleetCredits['deuterium']),
+                            );
+                        } else {
+                            $targetM = ($initialFleetCredits['metal'] * $pool['share']) + $cascadedExtra['metal'];
+                            $targetC = ($initialFleetCredits['crystal'] * $pool['share']) + $cascadedExtra['crystal'];
+                            $targetD = ($initialFleetCredits['deuterium'] * $pool['share']) + $cascadedExtra['deuterium'];
+
+                            $poolCredits = array(
+                                'metal'     => min(max(0.0, (float)$fleetCredits['metal']), max(0.0, $targetM)),
+                                'crystal'   => min(max(0.0, (float)$fleetCredits['crystal']), max(0.0, $targetC)),
+                                'deuterium' => min(max(0.0, (float)$fleetCredits['deuterium']), max(0.0, $targetD)),
+                            );
+                        }
+                        $cascadedExtra = array('metal' => 0.0, 'crystal' => 0.0, 'deuterium' => 0.0);
+
+                        $batch = $this->getConstructibleBatch(
+                            $pData,
+                            $poolCredits,
+                            $uId,
+                            $queuedJobs,
+                            $maxRegularSlots,
+                            $queueRemainingSec,
+                            $maxHangarDuration,
+                            $batchTimeTarget,
+                            $lockedDefResFleet,
+                            false,
+                            $lockedDefAmountFleet
+                        );
+
+                        $enqueuedWarship = ($batch > 0) ? (int)$this->gateway->constructUnits($pId, $uId, $batch) : 0;
+                        if ($enqueuedWarship > 0) {
+                            $recruited[$uId] = isset($recruited[$uId]) ? $recruited[$uId] + $enqueuedWarship : $enqueuedWarship;
+                            $fleetRecruitedTotal += $enqueuedWarship;
+                            $queuedJobs++;
+
+                            $costM = (float)(isset($pricelist[$uId]['cost'][901]) ? $pricelist[$uId]['cost'][901] * $enqueuedWarship : 0);
+                            $costC = (float)(isset($pricelist[$uId]['cost'][902]) ? $pricelist[$uId]['cost'][902] * $enqueuedWarship : 0);
+                            $costD = (float)(isset($pricelist[$uId]['cost'][903]) ? $pricelist[$uId]['cost'][903] * $enqueuedWarship : 0);
+
+                            $poolCredits['metal']     = max(0.0, $poolCredits['metal'] - $costM);
+                            $poolCredits['crystal']   = max(0.0, $poolCredits['crystal'] - $costC);
+                            $poolCredits['deuterium'] = max(0.0, $poolCredits['deuterium'] - $costD);
+
+                            $fleetCredits['metal']     = max(0.0, $fleetCredits['metal'] - $costM);
+                            $fleetCredits['crystal']   = max(0.0, $fleetCredits['crystal'] - $costC);
+                            $fleetCredits['deuterium'] = max(0.0, $fleetCredits['deuterium'] - $costD);
+
                             $pData = $this->refreshPlanetData($pId, $pData);
-                        }
-                    }
-                }
-
-                // B. SUPPORT FLEET (Recyclers & Transporters)
-                if ($queuedJobs < $maxQueueJobs) {
-                    // Recyclers (Target: at least 80 on planet)
-                    $curRec = (isset($pData[$resource[209]]) ? (int)$pData[$resource[209]] : 0) +
-                              (isset($pData[$resource[219]]) ? (int)$pData[$resource[219]] : 0);
-                    if ($curRec < 80) {
-                        $recId = 0;
-                        if (BuildFunctions::isTechnologieAccessible($this->ctx->user, $pData, 219, array())) {
-                            $recId = 219;
-                        } elseif (BuildFunctions::isTechnologieAccessible($this->ctx->user, $pData, 209, array())) {
-                            $recId = 209;
+                            $queueRemainingSec = $this->calculateQueueRemainingSeconds($pData);
                         }
 
-                        if ($recId > 0) {
-                            $costRec   = $this->getCostMetal($recId);
-                            $canRec    = floor(($supportBudget * 0.50) / $costRec);
-                            $maxAfford = BuildFunctions::getMaxConstructibleElements($this->ctx->user, $pData, $recId);
-                            $batchRec  = min($canRec, $maxAfford);
-
-                            if ($batchRec > 0 && $this->gateway->constructUnits($pId, $recId, $batchRec)) {
-                                $recruited[$recId] = isset($recruited[$recId]) ? $recruited[$recId] + $batchRec : $batchRec;
-                                $queuedJobs++;
-                                $pData = $this->refreshPlanetData($pId, $pData);
-                            }
-                        }
-                    }
-
-                    // Transporters (Target: at least 120 on planet)
-                    $curTrans = (isset($pData[$resource[202]]) ? (int)$pData[$resource[202]] : 0) +
-                                (isset($pData[$resource[203]]) ? (int)$pData[$resource[203]] : 0) +
-                                (isset($pData[$resource[217]]) ? (int)$pData[$resource[217]] : 0);
-                    if ($curTrans < 120 && $queuedJobs < $maxQueueJobs) {
-                        $transId = 0;
-                        if (BuildFunctions::isTechnologieAccessible($this->ctx->user, $pData, 217, array())) {
-                            $transId = 217;
-                        } elseif (BuildFunctions::isTechnologieAccessible($this->ctx->user, $pData, 203, array())) {
-                            $transId = 203;
-                        } elseif (BuildFunctions::isTechnologieAccessible($this->ctx->user, $pData, 202, array())) {
-                            $transId = 202;
-                        }
-
-                        if ($transId > 0) {
-                            $costTrans = $this->getCostMetal($transId);
-                            $canTrans  = floor(($supportBudget * 0.50) / $costTrans);
-                            $maxAfford = BuildFunctions::getMaxConstructibleElements($this->ctx->user, $pData, $transId);
-                            $batchTrans = min($canTrans, $maxAfford);
-
-                            if ($batchTrans > 0 && $this->gateway->constructUnits($pId, $transId, $batchTrans)) {
-                                $recruited[$transId] = isset($recruited[$transId]) ? $recruited[$transId] + $batchTrans : $batchTrans;
-                                $queuedJobs++;
-                                $pData = $this->refreshPlanetData($pId, $pData);
-                            }
-                        }
-                    }
-
-                    // Spy Probes (Target: at least 80 on planet)
-                    $curProbes = isset($pData[$resource[210]]) ? (int)$pData[$resource[210]] : 0;
-                    if ($curProbes < 80 && $queuedJobs < $maxQueueJobs) {
-                        if (BuildFunctions::isTechnologieAccessible($this->ctx->user, $pData, 210, array())) {
-                            $costProbe = $this->getCostMetal(210);
-                            $canProbe  = floor(($supportBudget * 0.20) / max(1.0, $costProbe));
-                            $maxAfford = BuildFunctions::getMaxConstructibleElements($this->ctx->user, $pData, 210);
-                            $batchProbe = min($canProbe, $maxAfford, 80 - $curProbes);
-
-                            if ($batchProbe > 0 && $this->gateway->constructUnits($pId, 210, $batchProbe)) {
-                                $recruited[210] = isset($recruited[210]) ? $recruited[210] + $batchProbe : $batchProbe;
-                                $queuedJobs++;
-                                $pData = $this->refreshPlanetData($pId, $pData);
-                            }
-                        }
-                    }
-                }
-
-                // C. COMBAT WARSHIPS (Combined-Arms Multi-Role Recruitment)
-                if ($queuedJobs < $maxQueueJobs) {
-                    $selectedWarships = $this->selectTacticalWarships($pData, $attackBudget, $doctrine);
-
-                    if (!empty($selectedWarships)) {
-                        $cascadeCarryover = 0.0;
-
-                        foreach ($selectedWarships as $roleConfig) {
-                            if ($queuedJobs >= $maxQueueJobs) break;
-
-                            $shipId    = $roleConfig['unit_id'];
-                            $score     = $roleConfig['score'];
-                            $roleShare = $roleConfig['share'];
-
-                            $currentAlloc = ($attackBudget * $roleShare) + $cascadeCarryover;
-                            $unitCostMetal = $this->getCostMetal($shipId);
-
-                            $canBuildUnits = floor($currentAlloc / $unitCostMetal);
-                            $maxAffordable = BuildFunctions::getMaxConstructibleElements($this->ctx->user, $pData, $shipId);
-                            $unitsToBuild  = min($canBuildUnits, $maxAffordable);
-
-                            if ($unitsToBuild <= 0) {
-                                // Cascada de Inversión: carry over budget to next role
-                                $cascadeCarryover = $currentAlloc;
-                                continue;
-                            }
-
-                            if ($this->gateway->constructUnits($pId, $shipId, $unitsToBuild)) {
-                                $recruited[$shipId] = isset($recruited[$shipId]) ? $recruited[$shipId] + $unitsToBuild : $unitsToBuild;
-                                $queuedJobs++;
-                                $spent = $unitsToBuild * $unitCostMetal;
-                                $cascadeCarryover = max(0.0, $currentAlloc - $spent);
-
-                                $this->ctx->decisionLog->record(
-                                    'force_build_warship',
-                                    "Recruited {$unitsToBuild}x {$resource[$shipId]} on body #{$pId} (Role: {$roleConfig['role']}, Score: {$score})",
-                                    array('unit' => $shipId, 'batch' => $unitsToBuild, 'role' => $roleConfig['role'], 'score' => $score),
-                                    "recruit_ship_{$shipId}_{$pId}",
-                                    $score
+                        // Cascada hacia la siguiente categoría
+                        if (!$isLastPool) {
+                            $cascadedExtra['metal']     += $poolCredits['metal'];
+                            $cascadedExtra['crystal']   += $poolCredits['crystal'];
+                            $cascadedExtra['deuterium'] += $poolCredits['deuterium'];
+                        } else {
+                            // Barrido final en la última unidad si quedan créditos remanentes suficientes
+                            if ($queuedJobs < $maxRegularSlots && ($poolCredits['metal'] > 3000 || $poolCredits['crystal'] > 1000)) {
+                                $batchFinal = $this->getConstructibleBatch(
+                                    $pData,
+                                    $poolCredits,
+                                    $uId,
+                                    $queuedJobs,
+                                    $maxRegularSlots,
+                                    $queueRemainingSec,
+                                    $maxHangarDuration,
+                                    $batchTimeTarget,
+                                    $lockedDefResFleet,
+                                    false,
+                                    $lockedDefAmountFleet
                                 );
-
-                                $pData = $this->refreshPlanetData($pId, $pData);
-                            }
-                        }
-
-                        // If carryover remains, reinvest into the best affordable warship
-                        if ($cascadeCarryover > 0 && $queuedJobs < $maxQueueJobs) {
-                            foreach ($selectedWarships as $roleConfig) {
-                                $shipId = $roleConfig['unit_id'];
-                                $unitCostMetal = $this->getCostMetal($shipId);
-                                $canBuildUnits = floor($cascadeCarryover / $unitCostMetal);
-                                $maxAffordable = BuildFunctions::getMaxConstructibleElements($this->ctx->user, $pData, $shipId);
-                                $unitsToBuild  = min($canBuildUnits, $maxAffordable);
-
-                                if ($unitsToBuild > 0 && $this->gateway->constructUnits($pId, $shipId, $unitsToBuild)) {
-                                    $recruited[$shipId] = isset($recruited[$shipId]) ? $recruited[$shipId] + $unitsToBuild : $unitsToBuild;
+                                $enqueuedFinal = ($batchFinal > 0) ? (int)$this->gateway->constructUnits($pId, $uId, $batchFinal) : 0;
+                                if ($enqueuedFinal > 0) {
+                                    $recruited[$uId] = isset($recruited[$uId]) ? $recruited[$uId] + $enqueuedFinal : $enqueuedFinal;
+                                    $fleetRecruitedTotal += $enqueuedFinal;
                                     $queuedJobs++;
-                                    break;
+
+                                    $costMF = (float)(isset($pricelist[$uId]['cost'][901]) ? $pricelist[$uId]['cost'][901] * $enqueuedFinal : 0);
+                                    $costCF = (float)(isset($pricelist[$uId]['cost'][902]) ? $pricelist[$uId]['cost'][902] * $enqueuedFinal : 0);
+                                    $costDF = (float)(isset($pricelist[$uId]['cost'][903]) ? $pricelist[$uId]['cost'][903] * $enqueuedFinal : 0);
+
+                                    $fleetCredits['metal']     = max(0.0, $fleetCredits['metal'] - $costMF);
+                                    $fleetCredits['crystal']   = max(0.0, $fleetCredits['crystal'] - $costCF);
+                                    $fleetCredits['deuterium'] = max(0.0, $fleetCredits['deuterium'] - $costDF);
+
+                                    $pData = $this->refreshPlanetData($pId, $pData);
+                                    $queueRemainingSec = $this->calculateQueueRemainingSeconds($pData);
                                 }
                             }
                         }
@@ -597,43 +1120,149 @@ class BotForcePlanner
             }
         }
 
+        // Marcas temporales desacopladas
+        $now = BotClock::get();
+        $updates = array();
+        if ($fleetRecruitedTotal > 0 || $canRunFleet) {
+            $updates['last_fleet_recruit'] = $now;
+        }
+        if ($defRecruitedTotal > 0 || $canRunDefense) {
+            $updates['last_defense_recruit'] = $now;
+        }
         if (!empty($recruited)) {
-            $this->ctx->updateBotRow(array('last_recruit' => TIMESTAMP));
+            $updates['last_recruit'] = $now;
+        }
+        if (!empty($updates)) {
+            $this->ctx->updateBotRow($updates);
         }
 
         return $recruited;
     }
 
     /**
-     * Selects specialized warships according to the bot's chosen permanent doctrine:
-     * - Alta (Heavy): $doctrine['heavy'] (Galeon 225 / Luna Negra 216 / Death Star 214) -> 35%
-     * - Media (Medium): $doctrine['medium'] (Destructor 213 / Bomber 211 / Battlecruiser 215) -> 35%
-     * - Ligera (Light): $doctrine['light'] (Cruiser 206 / Battleship 207) -> 30%
+     * Selects specialized warships according to the perfected tri-role doctrine:
+     * - Fallback sin solapamiento:
+     *   Rol Pesado: 225, 226, 216, 214, 213
+     *   Rol Capital: 215, 211, 207
+     *   Rol Escolta: 206, 207, 205
+     * - Compensación activa de déficit de flota en combate (priorizar el rol que haya sufrido bajas)
      */
-    private function selectTacticalWarships(array $pData, $attackBudget, array $doctrine)
+    public function selectTacticalWarships(array $pData, $attackBudget, array $doctrine)
     {
-        $selected = array();
+        global $resource;
 
+        $heavyList   = array(225, 226, 216, 214, 213);
+        $capitalList = array(215, 211, 207);
+        $escortList  = array(206, 207, 205);
+
+        // 1. Rol Pesado
+        $chosenHeavy = null;
+        if (!empty($doctrine['heavy']) && in_array((int)$doctrine['heavy'], $heavyList) && BuildFunctions::isTechnologieAccessible($this->ctx->user, $pData, (int)$doctrine['heavy'], array())) {
+            $chosenHeavy = (int)$doctrine['heavy'];
+        } else {
+            foreach ($heavyList as $hId) {
+                if (BuildFunctions::isTechnologieAccessible($this->ctx->user, $pData, $hId, array())) {
+                    $chosenHeavy = $hId;
+                    break;
+                }
+            }
+        }
+        if ($chosenHeavy === null) {
+            $chosenHeavy = 213;
+        }
+
+        // 2. Rol Capital
+        $chosenCapital = null;
+        if (!empty($doctrine['medium']) && in_array((int)$doctrine['medium'], $capitalList) && BuildFunctions::isTechnologieAccessible($this->ctx->user, $pData, (int)$doctrine['medium'], array())) {
+            $chosenCapital = (int)$doctrine['medium'];
+        } else {
+            foreach ($capitalList as $cId) {
+                if (BuildFunctions::isTechnologieAccessible($this->ctx->user, $pData, $cId, array())) {
+                    $chosenCapital = $cId;
+                    break;
+                }
+            }
+        }
+        if ($chosenCapital === null) {
+            $chosenCapital = 207;
+        }
+
+        // 3. Rol Escolta (sin solapamiento con el rol capital)
+        $chosenEscort = null;
+        if (!empty($doctrine['light']) && in_array((int)$doctrine['light'], $escortList) && (int)$doctrine['light'] !== $chosenCapital && BuildFunctions::isTechnologieAccessible($this->ctx->user, $pData, (int)$doctrine['light'], array())) {
+            $chosenEscort = (int)$doctrine['light'];
+        } else {
+            foreach ($escortList as $eId) {
+                if ($eId === $chosenCapital) {
+                    continue; // Evitar solapamiento con el rol capital
+                }
+                if (BuildFunctions::isTechnologieAccessible($this->ctx->user, $pData, $eId, array())) {
+                    $chosenEscort = $eId;
+                    break;
+                }
+            }
+        }
+        if ($chosenEscort === null) {
+            $chosenEscort = ($chosenCapital === 207) ? 206 : 205;
+        }
+
+        // Compensación activa de déficit de flota en combate (priorizar el rol que haya sufrido bajas)
+        $curHeavyCount = 0;
+        foreach ($heavyList as $hId) {
+            $curHeavyCount += isset($pData[$resource[$hId]]) ? (int)$pData[$resource[$hId]] : 0;
+        }
+        $curCapitalCount = 0;
+        foreach ($capitalList as $cId) {
+            if ($cId === 207 && $chosenEscort === 207) {
+                continue; // 207 asignado como escolta, no contar como capital
+            }
+            $curCapitalCount += isset($pData[$resource[$cId]]) ? (int)$pData[$resource[$cId]] : 0;
+        }
+        $curEscortCount = 0;
+        foreach ($escortList as $eId) {
+            if ($eId === 207 && $chosenEscort !== 207) {
+                continue; // 207 asignado como capital, no contar como escolta
+            }
+            $curEscortCount += isset($pData[$resource[$eId]]) ? (int)$pData[$resource[$eId]] : 0;
+        }
+
+        $totalWarships = $curHeavyCount + $curCapitalCount + $curEscortCount;
+        $targetShareHeavy   = 0.35;
+        $targetShareCapital = 0.35;
+        $targetShareEscort  = 0.30;
+
+        if ($totalWarships > 0) {
+            $actualShareHeavy   = $curHeavyCount / $totalWarships;
+            $actualShareCapital = $curCapitalCount / $totalWarships;
+            $actualShareEscort  = $curEscortCount / $totalWarships;
+
+            $defHeavy   = max(0.0, $targetShareHeavy - $actualShareHeavy);
+            $defCapital = max(0.0, $targetShareCapital - $actualShareCapital);
+            $defEscort  = max(0.0, $targetShareEscort - $actualShareEscort);
+
+            $shareHeavy   = $targetShareHeavy + ($defHeavy * 0.6);
+            $shareCapital = $targetShareCapital + ($defCapital * 0.6);
+            $shareEscort  = $targetShareEscort + ($defEscort * 0.6);
+
+            $sumShares = $shareHeavy + $shareCapital + $shareEscort;
+            $shareHeavy   = round($shareHeavy / $sumShares, 4);
+            $shareCapital = round($shareCapital / $sumShares, 4);
+            $shareEscort  = round(1.0 - $shareHeavy - $shareCapital, 4);
+        } else {
+            $shareHeavy   = $targetShareHeavy;
+            $shareCapital = $targetShareCapital;
+            $shareEscort  = $targetShareEscort;
+        }
+
+        $selected = array();
         $roles = array(
-            array('role' => self::ROLE_HEAVY,   'unit_id' => $doctrine['heavy'],  'share' => 0.35),
-            array('role' => self::ROLE_CAPITAL, 'unit_id' => $doctrine['medium'], 'share' => 0.35),
-            array('role' => self::ROLE_ESCORT,  'unit_id' => $doctrine['light'],  'share' => 0.30)
+            array('role' => self::ROLE_HEAVY,   'unit_id' => $chosenHeavy,   'share' => $shareHeavy),
+            array('role' => self::ROLE_CAPITAL, 'unit_id' => $chosenCapital, 'share' => $shareCapital),
+            array('role' => self::ROLE_ESCORT,  'unit_id' => $chosenEscort,  'share' => $shareEscort)
         );
 
         foreach ($roles as $r) {
             $uId = $r['unit_id'];
-            if (!BuildFunctions::isTechnologieAccessible($this->ctx->user, $pData, $uId, array())) {
-                // Fallback temporal si la tecnología aún no está desarrollada (ej. bot novato)
-                if ($r['role'] === self::ROLE_HEAVY) {
-                    $fallback = BuildFunctions::isTechnologieAccessible($this->ctx->user, $pData, 213, array()) ? 213 : (BuildFunctions::isTechnologieAccessible($this->ctx->user, $pData, 215, array()) ? 215 : 206);
-                } elseif ($r['role'] === self::ROLE_CAPITAL) {
-                    $fallback = BuildFunctions::isTechnologieAccessible($this->ctx->user, $pData, 215, array()) ? 215 : (BuildFunctions::isTechnologieAccessible($this->ctx->user, $pData, 206, array()) ? 206 : 204);
-                } else {
-                    $fallback = BuildFunctions::isTechnologieAccessible($this->ctx->user, $pData, 206, array()) ? 206 : 204;
-                }
-                $uId = $fallback;
-            }
-
             $score = $this->calculateShipScore($uId, $pData);
             $selected[] = array(
                 'role'    => $r['role'],
@@ -721,18 +1350,32 @@ class BotForcePlanner
 
     /**
      * Dynamic evaluation of planetary defenses
+     *
+     * @param array $pData
+     * @param string|null $categoryFilter 'light', 'heavy', or null
+     * @return array
      */
-    private function evaluateDefenseUnits(array $pData)
+    public function evaluateDefenseUnits(array $pData, $categoryFilter = null)
     {
         global $reslist, $CombatCaps;
 
         $defList = (isset($reslist['defense']) && is_array($reslist['defense'])) ? $reslist['defense'] : array();
         $candidates = array();
 
+        $lightIds = array(401, 402, 403, 405);
+
         foreach ($defList as $defId) {
+            $defId = (int)$defId;
             if (in_array($defId, $reslist['domes']) || in_array($defId, $reslist['missile'])) {
                 continue;
             }
+
+            if ($categoryFilter === 'light' && !in_array($defId, $lightIds)) {
+                continue;
+            } elseif ($categoryFilter === 'heavy' && in_array($defId, $lightIds)) {
+                continue;
+            }
+
             if (!BuildFunctions::isTechnologieAccessible($this->ctx->user, $pData, $defId, array())) {
                 continue;
             }
@@ -777,5 +1420,156 @@ class BotForcePlanner
         });
 
         return $candidates;
+    }
+
+    /**
+     * Encuentra la mejor defensa "carne de cañón" con ataque de tipo Iónico (para el 60% del presupuesto de defensa).
+     * Evalúa las unidades defensivas accesibles cuyo type_gun contenga 'ion',
+     * ordenadas por mayor eficiencia de absorción de daño: (Casco + Escudo) / Coste_MSE.
+     * Si ninguna defensa con ataque iónico está disponible o investigada,
+     * utiliza como fallback la defensa ligera investigada más eficiente (401 o 402).
+     *
+     * @param array $pData
+     * @return int ID de la mejor unidad defensiva de carne de cañón iónica
+     */
+    public function getBestIonicFodderDefense(array $pData)
+    {
+        global $reslist, $CombatCaps;
+
+        $defList = (isset($reslist['defense']) && is_array($reslist['defense'])) ? $reslist['defense'] : array();
+        $candidates = array();
+
+        foreach ($defList as $defId) {
+            $defId = (int)$defId;
+            if (in_array($defId, $reslist['domes']) || in_array($defId, $reslist['missile'])) {
+                continue;
+            }
+
+            if (!BuildFunctions::isTechnologieAccessible($this->ctx->user, $pData, $defId, array())) {
+                continue;
+            }
+
+            $caps = isset($CombatCaps[$defId]) ? $CombatCaps[$defId] : array();
+            $gun  = strtolower((string)($caps['type_gun'] ?? ''));
+
+            if (strpos($gun, 'ion') !== false) {
+                $shd = isset($caps['shield']) ? (float)$caps['shield'] : 10.0;
+                $def = isset($caps['defend']) ? (float)$caps['defend'] / 10.0 : 10.0;
+                $costMSE = BotEconomyValuator::getElementPriceMSE($defId);
+                $fodderEfficiency = ($shd + $def) / max(1.0, $costMSE);
+
+                $candidates[] = array(
+                    'unit_id'    => $defId,
+                    'efficiency' => $fodderEfficiency,
+                );
+            }
+        }
+
+        if (!empty($candidates)) {
+            usort($candidates, function($a, $b) {
+                return $b['efficiency'] <=> $a['efficiency'];
+            });
+            return $candidates[0]['unit_id'];
+        }
+
+        // Fallback: si aún no hay tecnología iónica investigada, usar la mejor defensa ligera disponible (401 o 402)
+        $fallbacks = array(401, 402);
+        foreach ($fallbacks as $fId) {
+            if (BuildFunctions::isTechnologieAccessible($this->ctx->user, $pData, $fId, array())) {
+                return $fId;
+            }
+        }
+
+        return 401;
+    }
+
+    /**
+     * Encuentra la tríada (Top 1, 2 y 3) de defensas de alto daño para el 40% del presupuesto.
+     * Criterios estrictos:
+     * 1. Top 1, 2 y 3 por máxima cantidad de daño (attack en CombatCaps).
+     * 2. Mínimo ataque tipo plasma o graviton/gravity en type_gun.
+     * 3. Fuego rápido contra Acorazados (215), Destructores (213), Naves de Batalla (207), Cruceros (206), Cazadores Ligeros (204) o Galeones (225).
+     * 4. Deben ser unidades investigadas y accesibles en el planeta.
+     * Fallback: si no se cumplen los criterios para llenar los 3 tipos, se rellenan los slots restantes
+     * con las mejores armas defensivas investigadas ordenadas por mayor puntos de daño.
+     *
+     * @param array $pData
+     * @return array Lista de IDs de defensas (hasta 3) ordenadas por daño
+     */
+    public function getEliteDefenseTriad(array $pData)
+    {
+        global $reslist, $CombatCaps;
+
+        $targetShips = array(215, 213, 207, 206, 204, 225);
+        $defList = (isset($reslist['defense']) && is_array($reslist['defense'])) ? $reslist['defense'] : array();
+
+        $strictCandidates = array();
+        $fallbackCandidates = array();
+
+        foreach ($defList as $defId) {
+            $defId = (int)$defId;
+            if (in_array($defId, $reslist['domes']) || in_array($defId, $reslist['missile'])) {
+                continue;
+            }
+
+            if (!BuildFunctions::isTechnologieAccessible($this->ctx->user, $pData, $defId, array())) {
+                continue;
+            }
+
+            $caps = isset($CombatCaps[$defId]) ? $CombatCaps[$defId] : array();
+            $att  = isset($caps['attack']) ? (float)$caps['attack'] : 10.0;
+            $gun  = strtolower((string)($caps['type_gun'] ?? ''));
+
+            $hasPlasmaOrGrav = (strpos($gun, 'plasma') !== false || strpos($gun, 'gravity') !== false || strpos($gun, 'graviton') !== false);
+
+            $sd = isset($caps['sd']) && is_array($caps['sd']) ? $caps['sd'] : array();
+            $hasRapidfire = false;
+            foreach ($targetShips as $tShip) {
+                if (isset($sd[$tShip]) && (float)$sd[$tShip] > 1) {
+                    $hasRapidfire = true;
+                    break;
+                }
+            }
+
+            if ($hasPlasmaOrGrav && $hasRapidfire) {
+                $strictCandidates[] = array(
+                    'unit_id' => $defId,
+                    'attack'  => $att,
+                );
+            } else {
+                $fallbackCandidates[] = array(
+                    'unit_id' => $defId,
+                    'attack'  => $att,
+                );
+            }
+        }
+
+        // Ordenar candidatos estrictos por daño descendente
+        usort($strictCandidates, function($a, $b) {
+            return $b['attack'] <=> $a['attack'];
+        });
+
+        // Ordenar candidatos fallback por daño descendente
+        usort($fallbackCandidates, function($a, $b) {
+            return $b['attack'] <=> $a['attack'];
+        });
+
+        $triad = array();
+        foreach ($strictCandidates as $cand) {
+            $triad[] = $cand['unit_id'];
+            if (count($triad) >= 3) break;
+        }
+
+        // Aplicar fallback si no se alcanzaron 3 tipos que cumplan todos los criterios
+        if (count($triad) < 3) {
+            foreach ($fallbackCandidates as $fCand) {
+                if (!in_array($fCand['unit_id'], $triad)) {
+                    $triad[] = $fCand['unit_id'];
+                    if (count($triad) >= 3) break;
+                }
+            }
+        }
+
+        return $triad;
     }
 }

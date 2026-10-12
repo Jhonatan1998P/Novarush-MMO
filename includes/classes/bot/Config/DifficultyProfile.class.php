@@ -23,10 +23,12 @@ class BotDifficultyProfile
     public $stagingEnabled;         // Whether bot coordinates fleet staging
     public $targetScanRadius;       // System search radius per colony
     public $intergalacticScan;      // Whether bot scans adjacent galaxies if tech permits
-    public $budgetFleet;            // Base percentage for offensive fleet
-    public $budgetDefense;          // Base percentage for planetary defense
-    public $budgetMines;            // Base percentage for infrastructure and mines
-    public $budgetResearch;         // Base percentage for technology research
+    public $militaryCycleInterval;  // Dedicated interval between fleet recruitment cycles (seconds)
+    public $defenseCycleInterval;   // Dedicated interval between defense recruitment cycles (seconds)
+    public $maxHangarQueueDuration; // Max allowed duration for shipyard hangar queue (seconds)
+    public $batchTimeTarget;        // Max target duration for single batch sizing (seconds)
+    public $maxRegularSlots;        // Max allowed concurrent shipyard slots
+    public $recyclerStrikeOffset;   // Seconds after strike impact to harvest debris (offensive)
 
     public function __construct($name = self::NORMAL)
     {
@@ -41,48 +43,54 @@ class BotDifficultyProfile
                 $this->reactionDelayMin       = 180;
                 $this->reactionDelayMax       = 360;
                 $this->simIterations          = 1;
-                $this->intelMaxAgeHours       = 2.0;
+                $this->intelMaxAgeHours       = 1.0;
                 $this->minStrikeEvHp          = 2.5;
                 $this->fleetsaveRiskThreshold = 0.50;
                 $this->stagingEnabled         = false;
                 $this->targetScanRadius       = 20;
                 $this->intergalacticScan      = false;
-                $this->budgetFleet            = 0.15;
-                $this->budgetDefense          = 0.10;
-                $this->budgetMines            = 0.55;
-                $this->budgetResearch         = 0.20;
+                $this->militaryCycleInterval  = 1800;
+                $this->defenseCycleInterval   = 3600;
+                $this->maxHangarQueueDuration = 86400; // 24 horas
+                $this->batchTimeTarget        = 3600;  // 1 hora
+                $this->maxRegularSlots        = 6;
+                $this->recyclerStrikeOffset   = mt_rand(1, 15);
                 break;
 
             case self::HARD:
                 $this->reactionDelayMin       = 45;
                 $this->reactionDelayMax       = 90;
                 $this->simIterations          = 10;
-                $this->intelMaxAgeHours       = 8.0;
+                $this->intelMaxAgeHours       = 1.0;
                 $this->minStrikeEvHp          = 0.8;
                 $this->fleetsaveRiskThreshold = 0.20;
                 $this->stagingEnabled         = true;
                 $this->targetScanRadius       = 80;
                 $this->intergalacticScan      = true;
-                $this->budgetFleet            = 0.45;
-                $this->budgetDefense          = 0.20;
-                $this->budgetMines            = 0.20;
-                $this->budgetResearch         = 0.15;
+                $this->militaryCycleInterval  = 480;
+                $this->defenseCycleInterval   = 900;
+                $this->maxHangarQueueDuration = 86400; // 24 horas
+                $this->batchTimeTarget        = 3600;  // 1 hora
+                $this->maxRegularSlots        = 6;
+                $this->recyclerStrikeOffset   = mt_rand(1, 5);
                 break;
 
             case self::NIGHTMARE:
                 $this->reactionDelayMin       = 15;
                 $this->reactionDelayMax       = 35;
                 $this->simIterations          = 15;
-                $this->intelMaxAgeHours       = 16.0;
+                $this->intelMaxAgeHours       = 1.0;
                 $this->minStrikeEvHp          = 0.4;
                 $this->fleetsaveRiskThreshold = 0.10;
                 $this->stagingEnabled         = true;
                 $this->targetScanRadius       = 150;
                 $this->intergalacticScan      = true;
-                $this->budgetFleet            = 0.55;
-                $this->budgetDefense          = 0.25;
-                $this->budgetMines            = 0.12;
-                $this->budgetResearch         = 0.08;
+                $this->militaryCycleInterval  = 180;
+                $this->defenseCycleInterval   = 360;
+                $this->maxHangarQueueDuration = 86400; // 24 horas
+                $this->batchTimeTarget        = 3600;  // 1 hora
+                $this->maxRegularSlots        = 6;
+                $this->recyclerStrikeOffset   = mt_rand(1, 5);
                 break;
 
             case self::NORMAL:
@@ -91,47 +99,91 @@ class BotDifficultyProfile
                 $this->reactionDelayMin       = 90;
                 $this->reactionDelayMax       = 180;
                 $this->simIterations          = 5;
-                $this->intelMaxAgeHours       = 4.0;
+                $this->intelMaxAgeHours       = 1.0;
                 $this->minStrikeEvHp          = 1.5;
                 $this->fleetsaveRiskThreshold = 0.30;
                 $this->stagingEnabled         = true;
                 $this->targetScanRadius       = 45;
                 $this->intergalacticScan      = false;
-                $this->budgetFleet            = 0.30;
-                $this->budgetDefense          = 0.15;
-                $this->budgetMines            = 0.35;
-                $this->budgetResearch         = 0.20;
+                $this->militaryCycleInterval  = 900;
+                $this->defenseCycleInterval   = 1800;
+                $this->maxHangarQueueDuration = 86400; // 24 horas
+                $this->batchTimeTarget        = 3600;  // 1 hora
+                $this->maxRegularSlots        = 6;
+                $this->recyclerStrikeOffset   = mt_rand(1, 10);
                 break;
         }
     }
 
     /**
-     * Returns normalized macro budget ratios combining difficulty profile and bot personality
+     * Retorna el desfase aleatorio de arribo de recicladores post-impacto según dificultad (Ataque y Defensa):
+     * - Pesadilla / Titán y Difícil: 1 a 5 segundos aleatorios (1..5)
+     * - Normal: 1 a 10 segundos aleatorios (1..10)
+     * - Fácil: 1 a 15 segundos aleatorios (1..15)
+     *
+     * @return int
+     */
+    public function getRecyclerOffset()
+    {
+        switch ($this->name) {
+            case self::NIGHTMARE:
+            case 'titan':
+            case 'titán':
+            case self::HARD:
+                return mt_rand(1, 5);
+
+            case self::EASY:
+                return mt_rand(1, 15);
+
+            case self::NORMAL:
+            default:
+                return mt_rand(1, 10);
+        }
+    }
+
+    /**
+     * Retorna el desfase de reciclaje ofensivo post-impacto.
+     *
+     * @return int
+     */
+    public function getRecyclerStrikeOffset()
+    {
+        return $this->getRecyclerOffset();
+    }
+
+    /**
+     * Retorna el desfase de reciclaje defensivo post-impacto ("Estampadas" y Búnker).
+     *
+     * @return int
+     */
+    public function getRecyclerDefenseOffset()
+    {
+        return $this->getRecyclerOffset();
+    }
+
+    /**
+     * Returns macro budget ratios governed purely by the bot personality
      *
      * @param BotPersonality|null $personality
      * @return array ['fleet' => float, 'defense' => float, 'mines' => float, 'research' => float]
      */
-    public function getAdjustedBudget($personality = null)
-    {
-        $wFleet = ($personality && isset($personality->weightFleet)) ? (float)$personality->weightFleet : 1.0;
-        $wDef   = ($personality && isset($personality->weightDefense)) ? (float)$personality->weightDefense : 1.0;
-        $wMines = ($personality && isset($personality->weightMines)) ? (float)$personality->weightMines : 1.0;
-        $wTech  = ($personality && isset($personality->weightResearch)) ? (float)$personality->weightResearch : 1.0;
+     public function getAdjustedBudget($personality = null)
+     {
+         if ($personality && method_exists($personality, 'getBudgetRatios')) {
+             return $personality->getBudgetRatios();
+         }
 
-        $rawFleet = $this->budgetFleet * $wFleet;
-        $rawDef   = $this->budgetDefense * $wDef;
-        $rawMines = $this->budgetMines * $wMines;
-        $rawTech  = $this->budgetResearch * $wTech;
+         if (class_exists('BotPersonality')) {
+             return (new BotPersonality())->getBudgetRatios();
+         }
 
-        $total = max(0.01, $rawFleet + $rawDef + $rawMines + $rawTech);
-
-        return array(
-            'fleet'    => round($rawFleet / $total, 4),
-            'defense'  => round($rawDef / $total, 4),
-            'mines'    => round($rawMines / $total, 4),
-            'research' => round($rawTech / $total, 4),
-        );
-    }
+         return array(
+             'mines'    => 0.30,
+             'fleet'    => 0.35,
+             'defense'  => 0.15,
+             'research' => 0.20,
+         );
+     }
 
     public function isTitan()
     {

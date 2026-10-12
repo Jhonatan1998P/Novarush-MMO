@@ -4,19 +4,43 @@
  * NovaRush Bot AI - Anti-Bashing & Target Rotation Blacklist
  *
  * Rules:
- * 1. An AI bot cannot achieve more than 3 attacks against a target PLAYER within a 24-hour window.
- *    Upon the 3rd attack, the bot immediately releases any tactical lock on that player's planets
- *    and places the player on a strict 24-hour blacklist.
- * 2. If a target player suffers 3 total AI attacks across all bots within 24 hours (global cap = 3),
- *    the player is placed on a global 24-hour blacklist for ALL bots, and all bots release locks.
- * 3. While blacklisted, bots will not scout, lock, or attack ANY planet belonging to that player.
+ * 1. An AI bot cannot achieve more than 6 victories against a target PLAYER within a 24-hour window.
+ *    Upon the 6th victory, the bot immediately releases any tactical lock on that player's planets
+ *    and places the player on a strict 24-hour blacklist for THAT bot only.
+ * 2. The blacklist is strictly isolated per bot: other bots have independent quotas and tracking.
+ * 3. While blacklisted, the bot will not scout, lock, or attack ANY planet belonging to that player.
  * 4. All queries use atomic, non-blocking InnoDB operations to avoid deadlocks and race conditions.
  */
 class BotTargetBlacklist
 {
-    const MAX_BOT_ATTACKS     = 3;
-    const MAX_GLOBAL_ATTACKS  = 3;
+    const MAX_BOT_ATTACKS     = 6;
+    const MAX_GLOBAL_ATTACKS  = 6;
     const BLACKLIST_DURATION  = 86400; // 24 Hours in seconds
+
+    /**
+     * Ensure the dedicated planet cooldown table exists for isolated 1h target discards
+     */
+    public static function ensureCooldownTableExists()
+    {
+        static $checked = false;
+        if ($checked) return;
+        $db = Database::get();
+        $db->nativeQuery("CREATE TABLE IF NOT EXISTS " . DB_PREFIX . "bot_planet_cooldown (
+            id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+            bot_id INT UNSIGNED NOT NULL DEFAULT 0,
+            planet_id INT UNSIGNED NOT NULL DEFAULT 0,
+            galaxy TINYINT UNSIGNED NOT NULL DEFAULT 0,
+            system SMALLINT UNSIGNED NOT NULL DEFAULT 0,
+            planet TINYINT UNSIGNED NOT NULL DEFAULT 0,
+            cooldown_until INT NOT NULL DEFAULT 0,
+            reason VARCHAR(64) NOT NULL DEFAULT '',
+            created_at INT NOT NULL DEFAULT 0,
+            UNIQUE KEY idx_bot_planet (bot_id, planet_id),
+            KEY idx_bot_coords (bot_id, galaxy, system, planet),
+            KEY idx_cooldown (cooldown_until)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;");
+        $checked = true;
+    }
 
     /**
      * Checks if a target player (or target planet/coordinates) is currently blacklisted.
@@ -41,6 +65,11 @@ class BotTargetBlacklist
         $system = (int)$system;
         $planet = (int)$planet;
 
+        // If botId is invalid, not blacklisted
+        if ($botId <= 0) {
+            return false;
+        }
+
         $db = Database::get();
 
         // If targetUserId is not provided, resolve it from planetId or coordinates
@@ -61,16 +90,18 @@ class BotTargetBlacklist
             }
         }
 
-        // 1. Primary Check: Is the target PLAYER blacklisted (bot-specific or global bot_id=0)?
+        // 1. Primary Check: Is the target PLAYER blacklisted (reached 6 successful attacks in 24h)?
         if ($targetUserId > 0) {
             $row = $db->selectSingle("SELECT blacklisted_until FROM %%BOT_TARGET_BLACKLIST%% 
                 WHERE target_user_id = :uId 
                   AND (bot_id = :botId OR bot_id = 0) 
+                  AND successful_wins >= :maxWins
                   AND blacklisted_until > :now 
                 LIMIT 1;", array(
-                ':uId'   => $targetUserId,
-                ':botId' => $botId,
-                ':now'   => $now,
+                ':uId'     => $targetUserId,
+                ':botId'   => $botId,
+                ':maxWins' => self::MAX_BOT_ATTACKS,
+                ':now'     => $now,
             ));
 
             if (!empty($row)) {
@@ -78,12 +109,14 @@ class BotTargetBlacklist
             }
         }
 
-        // 2. Fallback Check: Direct planet_id match
+        // 2. Secondary Check: Is THIS SPECIFIC PLANET on cooldown in dedicated planet cooldown table?
+        self::ensureCooldownTableExists();
+        $cooldownTable = DB_PREFIX . 'bot_planet_cooldown';
         if ($planetId > 0) {
-            $row = $db->selectSingle("SELECT blacklisted_until FROM %%BOT_TARGET_BLACKLIST%% 
-                WHERE target_planet_id = :pId 
+            $row = $db->selectSingle("SELECT cooldown_until FROM {$cooldownTable} 
+                WHERE planet_id = :pId 
                   AND (bot_id = :botId OR bot_id = 0) 
-                  AND blacklisted_until > :now 
+                  AND cooldown_until > :now 
                 LIMIT 1;", array(
                 ':pId'   => $planetId,
                 ':botId' => $botId,
@@ -95,12 +128,11 @@ class BotTargetBlacklist
             }
         }
 
-        // 3. Fallback Check: Direct coordinates match
         if ($galaxy > 0 && $system > 0 && $planet > 0) {
-            $row = $db->selectSingle("SELECT blacklisted_until FROM %%BOT_TARGET_BLACKLIST%% 
+            $row = $db->selectSingle("SELECT cooldown_until FROM {$cooldownTable} 
                 WHERE galaxy = :g AND system = :s AND planet = :p 
                   AND (bot_id = :botId OR bot_id = 0) 
-                  AND blacklisted_until > :now 
+                  AND cooldown_until > :now 
                 LIMIT 1;", array(
                 ':g'     => $galaxy,
                 ':s'     => $system,
@@ -115,6 +147,49 @@ class BotTargetBlacklist
         }
 
         return false;
+    }
+
+    /**
+     * Returns the remaining number of attacks allowed for this bot against a target player
+     * within the 24-hour window (NovaRush Anti-Bashing: max 6 attacks per player).
+     *
+     * @param int $botId
+     * @param int $targetUserId
+     * @param int|null $now
+     * @return int Number of attacks remaining (0 to 6)
+     */
+    public static function getRemainingAttacks($botId, $targetUserId, $now = null)
+    {
+        $now = ($now === null) ? TIMESTAMP : (int)$now;
+        $botId = (int)$botId;
+        $targetUserId = (int)$targetUserId;
+
+        if ($botId <= 0 || $targetUserId <= 0) {
+            return 0;
+        }
+
+        $db = Database::get();
+        $row = $db->selectSingle("SELECT successful_wins, total_attacks, blacklisted_until FROM %%BOT_TARGET_BLACKLIST%% 
+            WHERE bot_id = :botId AND target_user_id = :uId LIMIT 1;", array(
+            ':botId' => $botId,
+            ':uId'   => $targetUserId,
+        ));
+
+        if (empty($row)) {
+            return self::MAX_BOT_ATTACKS;
+        }
+
+        if ((int)$row['blacklisted_until'] > $now) {
+            return 0; // Currently blacklisted
+        }
+
+        // If blacklist expired, quota resets to max
+        if ((int)$row['blacklisted_until'] > 0 && (int)$row['blacklisted_until'] <= $now) {
+            return self::MAX_BOT_ATTACKS;
+        }
+
+        $used = max((int)$row['successful_wins'], (int)$row['total_attacks']);
+        return max(0, self::MAX_BOT_ATTACKS - $used);
     }
 
     /**
@@ -207,9 +282,20 @@ class BotTargetBlacklist
 
         $currentWins = !empty($status) ? (int)$status['successful_wins'] : 1;
         $blacklistedUntil = !empty($status) ? (int)$status['blacklisted_until'] : 0;
+
+        // Ensure blacklist is set if wins reach the cap
+        if ($currentWins >= self::MAX_BOT_ATTACKS && $blacklistedUntil <= $now) {
+            $blacklistedUntil = $expireTime;
+            $db->update("UPDATE %%BOT_TARGET_BLACKLIST%% SET blacklisted_until = :exp WHERE bot_id = :botId AND target_user_id = :uId;", array(
+                ':exp'   => $expireTime,
+                ':botId' => $botId,
+                ':uId'   => $targetUserId,
+            ));
+        }
+
         $isBlacklisted = ($blacklistedUntil > $now);
 
-        // Rule 1: Upon 3rd attack by this bot on this player, release target locks immediately
+        // Rule 1: Upon reaching cap by this bot on this player, release target locks for this bot immediately
         if ($isBlacklisted) {
             self::releaseBotTargetLockForPlayer($botId, $targetUserId);
             if ($galaxy > 0 && $system > 0 && $planet > 0) {
@@ -217,7 +303,7 @@ class BotTargetBlacklist
             }
 
             // Log event in bot logs
-            $logMsg = "Bot #{$botId} alcanzó {$currentWins} ataques contra el jugador #{$targetUserId} ([{$galaxy}:{$system}:{$planet}]). Objetivo liberado y jugador en lista negra por 24 horas.";
+            $logMsg = "Bot #{$botId} alcanzó {$currentWins} victorias contra el jugador #{$targetUserId} ([{$galaxy}:{$system}:{$planet}]). Objetivo liberado y jugador en lista negra de este bot por 24 horas.";
             $db->insert("INSERT INTO %%BOT_LOGS%% (bot_id, action_type, details, timestamp) VALUES (:botId, 'target_blacklisted', :details, :ts);", array(
                 ':botId'   => $botId,
                 ':details' => $logMsg,
@@ -280,6 +366,76 @@ class BotTargetBlacklist
             'blacklisted' => $isBlacklisted,
             'expires'     => $blacklistedUntil
         );
+    }
+
+    /**
+     * Sets a temporary cooldown blacklist for a bot against a target player/coordinates
+     *
+     * @param int $botId
+     * @param int $targetUserId
+     * @param int $planetId
+     * @param int $galaxy
+     * @param int $system
+     * @param int $planet
+     * @param int $duration Cooldown in seconds (default 21600 = 6 hours)
+     * @param string $reason
+     */
+    public static function addCooldown($botId, $targetUserId = 0, $planetId = 0, $galaxy = 0, $system = 0, $planet = 0, $duration = 3600, $reason = '')
+    {
+        $now = TIMESTAMP;
+        $botId = (int)$botId;
+        $planetId = (int)$planetId;
+        $galaxy = (int)$galaxy;
+        $system = (int)$system;
+        $planet = (int)$planet;
+
+        if ($botId <= 0) return;
+
+        self::ensureCooldownTableExists();
+        $db = Database::get();
+
+        if ($planetId <= 0 && $galaxy > 0 && $system > 0 && $planet > 0) {
+            $pRow = $db->selectSingle("SELECT id FROM %%PLANETS%% WHERE galaxy = :g AND system = :s AND planet = :p AND planet_type = 1 LIMIT 1;", array(
+                ':g' => $galaxy, ':s' => $system, ':p' => $planet
+            ));
+            if (!empty($pRow)) {
+                $planetId = (int)$pRow['id'];
+            }
+        }
+
+        $expireTime = $now + (int)$duration;
+
+        $cooldownTable = DB_PREFIX . 'bot_planet_cooldown';
+        $sql = "INSERT INTO {$cooldownTable} (
+            bot_id, planet_id, galaxy, system, planet, cooldown_until, reason, created_at
+        ) VALUES (
+            :botId, :pId, :g, :s, :p, :expireTime, :reason, :now
+        ) ON DUPLICATE KEY UPDATE
+            galaxy         = :g,
+            system         = :s,
+            planet         = :p,
+            cooldown_until = GREATEST(cooldown_until, :expireTime),
+            reason         = :reason;";
+
+        $db->insert($sql, array(
+            ':botId'      => $botId,
+            ':pId'        => $planetId,
+            ':g'          => $galaxy,
+            ':s'          => $system,
+            ':p'          => $planet,
+            ':expireTime' => $expireTime,
+            ':reason'     => substr((string)$reason, 0, 64),
+            ':now'        => $now,
+        ));
+
+        if (!empty($reason)) {
+            $logMsg = "Bot #{$botId} fijó cooldown de " . round($duration / 3600, 1) . "h para planeta [{$galaxy}:{$system}:{$planet}]: {$reason}";
+            $db->insert("INSERT INTO %%BOT_LOGS%% (bot_id, action_type, details, timestamp) VALUES (:botId, 'target_cooldown', :details, :ts);", array(
+                ':botId'   => $botId,
+                ':details' => $logMsg,
+                ':ts'      => $now
+            ));
+        }
     }
 
     /**

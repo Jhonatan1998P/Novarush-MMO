@@ -260,7 +260,12 @@ class PlayerUtil
 
 		if(empty($name))
 		{
-			$name	= $isHome ? $LNG['fcm_mainplanet'] : $LNG['fcp_colony'];
+			if (file_exists('includes/classes/bot/BotNameHelper.class.php')) {
+				require_once 'includes/classes/bot/BotNameHelper.class.php';
+				$name = BotNameHelper::getRandomPlanetName();
+			} else {
+				$name = $isHome ? $LNG['fcm_mainplanet'] : $LNG['fcp_colony'];
+			}
 		}
 
 		$params	= array(
@@ -343,7 +348,12 @@ class PlayerUtil
 
 		if(!isset($moonName) || empty($moonName))
 		{
-			$moonName		= !empty($LNG['type_planet_3']) ? $LNG['type_planet_3'] : 'Luna';
+			if (file_exists('includes/classes/bot/BotNameHelper.class.php')) {
+				require_once 'includes/classes/bot/BotNameHelper.class.php';
+				$moonName = BotNameHelper::getRandomMoonName();
+			} else {
+				$moonName = !empty($LNG['type_planet_3']) ? $LNG['type_planet_3'] : 'Luna';
+			}
 		}
 
 		$sql	= "INSERT INTO %%PLANETS%% SET

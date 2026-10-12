@@ -1,5 +1,7 @@
 <?php
 
+require_once 'includes/classes/bot/Kernel/BotClock.class.php';
+
 /**
  * NovaRush Bot AI v2 - Task Scheduler
  *
@@ -24,13 +26,15 @@ class BotScheduler
                 (bot_id, task_type, payload, scheduled_at, created_at, status)
                 VALUES (:bot_id, :task_type, :payload, :scheduled_at, :created_at, 'pending');";
 
-        return $db->insert($sql, array(
+        $db->insert($sql, array(
             ':bot_id'       => (int)$botId,
             ':task_type'    => (string)$taskType,
             ':payload'      => json_encode($payload),
             ':scheduled_at' => (int)$scheduledAt,
             ':created_at'   => TIMESTAMP,
         ));
+
+        return (int)$db->lastInsertId();
     }
 
     /**
@@ -42,7 +46,7 @@ class BotScheduler
      */
     public static function getDueTasks($botId, $currentTime = null)
     {
-        $time = $currentTime !== null ? $currentTime : TIMESTAMP;
+        $time = $currentTime !== null ? $currentTime : BotClock::get();
         $db = Database::get();
 
         $sql = "SELECT * FROM " . DB_PREFIX . "bot_tasks 

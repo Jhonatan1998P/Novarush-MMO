@@ -69,14 +69,14 @@ if (!empty($bot1007)) {
     assert_bb("1.1 Bot 1007 existe en DB", false, "Bot 1007 no encontrado");
 }
 
-// TEST 2: Bloqueo Administrativo de Movimientos de Flota para otros Bots
-echo "\n--- 2. VERIFICACIÓN DE SEGURIDAD: BLOQUEO ADMINISTRATIVO DE FLOTA ---\n";
-$isBlockedOther = BotKernel::isFleetMovementBlocked(1001);
+// TEST 2: Verificación de Movilidad de Flota sin Restricciones
+echo "\n--- 2. VERIFICACIÓN DE MOVILIDAD DE FLOTA (SIN RESTRICCIONES) ---\n";
+$isAllowedOther = !BotKernel::isFleetMovementBlocked(1001);
 $isAllowed1007  = !BotKernel::isFleetMovementBlocked(1007);
 assert_bb(
-    "2.1 Bloqueo administrativo restringe flotas de otros bots (bot_id != 1007)",
-    $isBlockedOther && $isAllowed1007,
-    "Bot 1001 bloqueado: " . ($isBlockedOther ? 'SI' : 'NO') . " | Bot 1007 permitido: " . ($isAllowed1007 ? 'SI' : 'NO')
+    "2.1 Todos los bots tienen libre movimiento de flotas y ataques como LaParca",
+    $isAllowedOther && $isAllowed1007,
+    "Bot 1001 permitido: " . ($isAllowedOther ? 'SI' : 'NO') . " | Bot 1007 permitido: " . ($isAllowed1007 ? 'SI' : 'NO')
 );
 
 // TEST 3: Tareas Agendadas Asíncronas (BotScheduler)

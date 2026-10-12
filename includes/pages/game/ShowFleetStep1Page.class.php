@@ -327,10 +327,7 @@ class ShowFleetStep1Page extends AbstractGamePage
 				$this->sendJSON($LNG['fl_error_not_avalible']);
 			}
 
-			if($targetPlanetType == 2 && empty($planetData['der_metal']) && empty($planetData['der_crystal']))
-			{
-				$this->sendJSON($LNG['fl_error_empty_derbis']);
-			}
+			// Permitir reciclar campos de escombros vacíos (reciclaje previo / sincronizado con ataques)
 
 			$sql	= 'SELECT (
 				(SELECT COUNT(*) FROM %%MULTI%% WHERE userID = :userID) +
@@ -343,11 +340,16 @@ class ShowFleetStep1Page extends AbstractGamePage
 				':dataID' => $planetData['id']
 			), 'count');
 
-            if(!empty($planetData))
-			if(ENABLE_MULTIALERT && $USER['id'] != $planetData['id'] && $USER['authlevel'] != AUTH_ADM && $USER['user_lastip'] == $planetData['user_lastip'] && $multiCount != 2)
-			{
-				$this->sendJSON($LNG['fl_multi_alarm']);
-			}
+            if(!empty($planetData)) {
+                $isTargetBot = $db->selectSingle("SELECT 1 FROM %%BOTS%% WHERE bot_id = :bId LIMIT 1;", array(':bId' => $planetData['id']));
+                $isUserBot   = $db->selectSingle("SELECT 1 FROM %%BOTS%% WHERE bot_id = :bId LIMIT 1;", array(':bId' => $USER['id']));
+                $isDummy     = in_array((int)$planetData['id'], array(998, 999), true);
+
+                if(ENABLE_MULTIALERT && empty($isTargetBot) && empty($isUserBot) && !$isDummy && (int)$USER['id'] !== 4 && $USER['id'] != $planetData['id'] && $USER['authlevel'] != AUTH_ADM && $USER['user_lastip'] == $planetData['user_lastip'] && $multiCount != 2)
+                {
+                    $this->sendJSON($LNG['fl_multi_alarm']);
+                }
+            }
 		}
 		else
 		{

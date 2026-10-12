@@ -96,7 +96,10 @@ class BotStagingPlanner
      */
     public function rallyFleets(BotEmpireState $empire, $stagingBaseId, array $targetDefenders = array())
     {
-        global $resource, $reslist;
+        global $resource, $reslist, $pricelist;
+        if (empty($pricelist)) {
+            require 'includes/vars/General.php';
+        }
 
         $target = $empire->getPlanet($stagingBaseId);
         if (empty($target)) {
@@ -134,10 +137,11 @@ class BotStagingPlanner
 
         $db = Database::get();
 
-        // Reserve at least 3 slots for attacks and espionage
-        $maxSlots = FleetFunctions::GetMaxFleetSlots($this->ctx->user);
-        $actualFleets = FleetFunctions::GetCurrentFleets($this->ctx->botId);
-        if ($actualFleets >= ($maxSlots - 3)) {
+        // Reserve 1 slot for the campaign assault strike, strictly respecting shielded military slots
+        $maxSlots       = FleetFunctions::GetMaxFleetSlots($this->ctx->user);
+        $actualFleets   = FleetFunctions::GetCurrentFleets($this->ctx->botId);
+        $availableMil   = BotActionGateway::getAvailableMilitarySlots($this->ctx->botId, $this->ctx->user);
+        if ($actualFleets >= ($maxSlots - 1) || $availableMil <= 1) {
             return 0;
         }
 
@@ -160,23 +164,98 @@ class BotStagingPlanner
             if ($pId == $stagingBaseId) continue;
             if (isset($rallyingOrigins[$pId])) continue; // Already rallying from this colony
 
-            // Enforce slot reservation dynamically
-            if ($actualFleets >= ($maxSlots - 3)) {
+            // Enforce slot reservation dynamically (leaving 1 slot for the assault)
+            if ($actualFleets >= ($maxSlots - 1)) {
                 break;
             }
 
             $pData = $body['data'];
             $combatShips = array();
 
-            // Check combat ships
+            // Calculate 2 hours of physical resource production on this colony (Metal + Crystal + Deuterium, NOT MSE)
+            $prod2h = 2.0 * (
+                (float)($pData['metal_perhour'] ?? 0.0) +
+                (float)($pData['crystal_perhour'] ?? 0.0) +
+                (float)($pData['deuterium_perhour'] ?? 0.0)
+            );
+            if ($prod2h <= 0.0) {
+                $prod2h = 100000.0;
+            }
+
+            // 1. Calculate minimum transporters to retain to move >= 2h production
+            $keepTrans = array(217 => 0, 203 => 0, 202 => 0);
+            $remTransCap = $prod2h;
+            foreach (array(217, 203, 202) as $tId) {
+                if ($remTransCap <= 0) break;
+                $avail = isset($pData[$resource[$tId]]) ? (int)$pData[$resource[$tId]] : 0;
+                if ($avail <= 0) continue;
+                $cap = max(1.0, (float)($pricelist[$tId]['capacity'] ?? 5000));
+                $needed = (int)ceil($remTransCap / $cap);
+                $take = min($avail, $needed);
+                $keepTrans[$tId] = $take;
+                $remTransCap -= ($take * $cap);
+            }
+            if (array_sum($keepTrans) === 0) {
+                foreach (array(217, 203, 202) as $tId) {
+                    $avail = isset($pData[$resource[$tId]]) ? (int)$pData[$resource[$tId]] : 0;
+                    if ($avail > 0) {
+                        $keepTrans[$tId] = min($avail, 5);
+                        break;
+                    }
+                }
+            }
+
+            // 2. Calculate minimum recyclers to retain to harvest >= 2h production
+            $keepRec = array(219 => 0, 209 => 0);
+            $remRecCap = $prod2h;
+            foreach (array(219, 209) as $rId) {
+                if ($remRecCap <= 0) break;
+                $avail = isset($pData[$resource[$rId]]) ? (int)$pData[$resource[$rId]] : 0;
+                if ($avail <= 0) continue;
+                $cap = max(1.0, (float)($pricelist[$rId]['capacity'] ?? 20000));
+                $needed = (int)ceil($remRecCap / $cap);
+                $take = min($avail, $needed);
+                $keepRec[$rId] = $take;
+                $remRecCap -= ($take * $cap);
+            }
+            if (array_sum($keepRec) === 0) {
+                foreach (array(219, 209) as $rId) {
+                    $avail = isset($pData[$resource[$rId]]) ? (int)$pData[$resource[$rId]] : 0;
+                    if ($avail > 0) {
+                        $keepRec[$rId] = min($avail, 5);
+                        break;
+                    }
+                }
+            }
+
+            // Check combat & campaign logistics ships
             foreach ($fleetList as $shipId) {
-                // Don't rally civil support ships automatically (cargos, recyclers, colonizers, probes, scouts, satellites)
-                if (in_array($shipId, array(202, 203, 208, 209, 210, 212, 217, 219, 233))) {
+                // Non-tactical civil units that should never rally (colonizers, probes, satellites, terraformers)
+                if (in_array($shipId, array(208, 210, 212, 233))) {
                     continue;
                 }
 
                 $cnt = isset($pData[$resource[$shipId]]) ? (int)$pData[$resource[$shipId]] : 0;
-                if ($cnt > 0) {
+                if ($cnt <= 0) continue;
+
+                // Transporters: retain units to cover at least 2h physical production, rally the rest
+                if (in_array($shipId, array(202, 203, 217))) {
+                    $retained = $keepTrans[$shipId] ?? 0;
+                    $rallyQty = max(0, $cnt - $retained);
+                    if ($rallyQty > 0) {
+                        $combatShips[$shipId] = $rallyQty;
+                    }
+                }
+                // Recyclers: retain units to cover at least 2h physical production, rally the rest
+                elseif (in_array($shipId, array(209, 219))) {
+                    $retained = $keepRec[$shipId] ?? 0;
+                    $rallyQty = max(0, $cnt - $retained);
+                    if ($rallyQty > 0) {
+                        $combatShips[$shipId] = $rallyQty;
+                    }
+                }
+                // Combat warships: 100% rally to FOB
+                else {
                     $combatShips[$shipId] = $cnt;
                 }
             }

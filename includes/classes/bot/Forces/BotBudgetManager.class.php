@@ -1,6 +1,7 @@
 <?php
 
 require_once 'includes/classes/bot/Evaluation/EconomyValuator.class.php';
+require_once 'includes/classes/bot/Kernel/BotClock.class.php';
 
 /**
  * NovaRush Bot AI v3.1 - Decoupled Incremental Budget & Vector Logistics Manager
@@ -56,8 +57,32 @@ class BotBudgetManager
                 'planets'          => array(),
                 'research'         => array('metal' => 0.0, 'crystal' => 0.0, 'deuterium' => 0.0),
                 'opportunity_fund' => array('metal' => 0.0, 'crystal' => 0.0, 'deuterium' => 0.0),
-                'last_updated'     => TIMESTAMP,
+                'last_physical'    => array(),
+                'last_updated'     => BotClock::get(),
             );
+        }
+
+        // Initialize last_physical baseline if missing
+        if (!isset($this->credits['last_physical']) || !is_array($this->credits['last_physical'])) {
+            $this->credits['last_physical'] = array();
+            try {
+                $db = Database::get();
+                if ($db && !empty($this->ctx->botId)) {
+                    $planetRows = $db->select("SELECT id, metal, crystal, deuterium FROM %%PLANETS%% WHERE id_owner = :id AND destruyed = 0;", array(':id' => (int)$this->ctx->botId));
+                    if (is_array($planetRows)) {
+                        foreach ($planetRows as $p) {
+                            $pId = (int)$p['id'];
+                            $this->credits['last_physical'][$pId] = array(
+                                'metal'     => (float)$p['metal'],
+                                'crystal'   => (float)$p['crystal'],
+                                'deuterium' => (float)$p['deuterium'],
+                            );
+                        }
+                    }
+                }
+            } catch (Throwable $e) {
+                // Non-DB unit test fallback
+            }
         }
 
         // 2. Savings lock JSON
@@ -79,21 +104,25 @@ class BotBudgetManager
      */
     public function getMacroRatios()
     {
+        if (isset($this->ctx->personality) && method_exists($this->ctx->personality, 'getBudgetRatios')) {
+            return $this->ctx->personality->getBudgetRatios();
+        }
+
         $persName = isset($this->ctx->personality->name) ? strtolower($this->ctx->personality->name) : 'balanced';
 
         switch ($persName) {
             case 'raider':
             case 'aggressive':
-                return array('mines' => 0.20, 'fleet' => 0.50, 'defense' => 0.10, 'research' => 0.20);
+                return array('mines' => 0.15, 'fleet' => 0.55, 'defense' => 0.10, 'research' => 0.20);
 
             case 'miner':
             case 'economic':
-                return array('mines' => 0.50, 'fleet' => 0.10, 'defense' => 0.15, 'research' => 0.25);
+                return array('mines' => 0.55, 'fleet' => 0.10, 'defense' => 0.15, 'research' => 0.20);
 
             case 'bunker':
             case 'turtle':
             case 'defensive':
-                return array('mines' => 0.30, 'fleet' => 0.15, 'defense' => 0.40, 'research' => 0.15);
+                return array('mines' => 0.25, 'fleet' => 0.15, 'defense' => 0.50, 'research' => 0.10);
 
             case 'balanced':
             default:
@@ -108,7 +137,7 @@ class BotBudgetManager
      */
     public function updateCredits(BotEmpireState $empire)
     {
-        $now = TIMESTAMP;
+        $now = BotClock::get();
         $deltaT = ($this->lastBudgetTime > 0) ? ($now - $this->lastBudgetTime) : 45;
         $deltaT = max(1, min(3600, $deltaT));
 
@@ -132,6 +161,10 @@ class BotBudgetManager
         $totalEmpireCapC  = 0.0;
         $totalEmpireCapD  = 0.0;
 
+        $totalEmpireWindfallM = 0.0;
+        $totalEmpireWindfallC = 0.0;
+        $totalEmpireWindfallD = 0.0;
+
         foreach ($planets as $pId => $pEntry) {
             $pData = $pEntry['data'];
             $pId = (int)$pId;
@@ -143,6 +176,10 @@ class BotBudgetManager
                     'defense' => array('metal' => 0.0, 'crystal' => 0.0, 'deuterium' => 0.0),
                 );
             }
+
+            $curStockM = (float)($pData['metal'] ?? 0.0);
+            $curStockC = (float)($pData['crystal'] ?? 0.0);
+            $curStockD = (float)($pData['deuterium'] ?? 0.0);
 
             $prodM = max(0.0, (float)($pData['metal_perhour'] ?? 0.0));
             $prodC = max(0.0, (float)($pData['crystal_perhour'] ?? 0.0));
@@ -159,80 +196,82 @@ class BotBudgetManager
             $totalEmpireCapC  += $capC;
             $totalEmpireCapD  += $capD;
 
+            $prodDeltaM = ($prodM * $deltaT / 3600.0);
+            $prodDeltaC = ($prodC * $deltaT / 3600.0);
+            $prodDeltaD = ($prodD * $deltaT / 3600.0);
+
+            // Detect external windfall (loot from combat, recyclers returning, expeditions)
+            if (!isset($this->credits['last_physical'][$pId])) {
+                $this->credits['last_physical'][$pId] = array('metal' => $curStockM, 'crystal' => $curStockC, 'deuterium' => $curStockD);
+            }
+
+            $lastPhysM = (float)$this->credits['last_physical'][$pId]['metal'];
+            $lastPhysC = (float)$this->credits['last_physical'][$pId]['crystal'];
+            $lastPhysD = (float)$this->credits['last_physical'][$pId]['deuterium'];
+
+            $windfallM = max(0.0, $curStockM - ($lastPhysM + $prodDeltaM));
+            $windfallC = max(0.0, $curStockC - ($lastPhysC + $prodDeltaC));
+            $windfallD = max(0.0, $curStockD - ($lastPhysD + $prodDeltaD));
+
+            if ($windfallM < 1.0) $windfallM = 0.0;
+            if ($windfallC < 1.0) $windfallC = 0.0;
+            if ($windfallD < 1.0) $windfallD = 0.0;
+
+            $totalEmpireWindfallM += $windfallM;
+            $totalEmpireWindfallC += $windfallC;
+            $totalEmpireWindfallD += $windfallD;
+
             // Update local planetary categories: mines, fleet, defense
             foreach (array('mines', 'fleet', 'defense') as $cat) {
                 $r_k = $ratios[$cat];
 
-                $deltaBM = ($prodM * $deltaT / 3600.0) * $r_k;
-                $deltaBC = ($prodC * $deltaT / 3600.0) * $r_k;
-                $deltaBD = ($prodD * $deltaT / 3600.0) * $r_k;
+                $deltaBM = ($prodDeltaM * $r_k) + ($windfallM * $r_k);
+                $deltaBC = ($prodDeltaC * $r_k) + ($windfallC * $r_k);
+                $deltaBD = ($prodDeltaD * $r_k) + ($windfallD * $r_k);
 
                 $maxCeilingM = $capM * $r_k;
                 $maxCeilingC = $capC * $r_k;
                 $maxCeilingD = $capD * $r_k;
 
-                // Metal accumulation & opportunity overflow
+                // Metal accumulation strictly within category ceiling
                 $curM = (float)($this->credits['planets'][$pId][$cat]['metal'] ?? 0.0) + $deltaBM;
-                if ($curM > $maxCeilingM) {
-                    $overflowM = $curM - $maxCeilingM;
-                    $this->credits['opportunity_fund']['metal'] += $overflowM;
-                    $curM = $maxCeilingM;
-                }
-                $this->credits['planets'][$pId][$cat]['metal'] = round($curM, 2);
+                $this->credits['planets'][$pId][$cat]['metal'] = round(min($maxCeilingM, $curM), 2);
 
-                // Crystal accumulation & opportunity overflow
+                // Crystal accumulation strictly within category ceiling
                 $curC = (float)($this->credits['planets'][$pId][$cat]['crystal'] ?? 0.0) + $deltaBC;
-                if ($curC > $maxCeilingC) {
-                    $overflowC = $curC - $maxCeilingC;
-                    $this->credits['opportunity_fund']['crystal'] += $overflowC;
-                    $curC = $maxCeilingC;
-                }
-                $this->credits['planets'][$pId][$cat]['crystal'] = round($curC, 2);
+                $this->credits['planets'][$pId][$cat]['crystal'] = round(min($maxCeilingC, $curC), 2);
 
-                // Deuterium accumulation & opportunity overflow
+                // Deuterium accumulation strictly within category ceiling
                 $curD = (float)($this->credits['planets'][$pId][$cat]['deuterium'] ?? 0.0) + $deltaBD;
-                if ($curD > $maxCeilingD) {
-                    $overflowD = $curD - $maxCeilingD;
-                    $this->credits['opportunity_fund']['deuterium'] += $overflowD;
-                    $curD = $maxCeilingD;
-                }
-                $this->credits['planets'][$pId][$cat]['deuterium'] = round($curD, 2);
+                $this->credits['planets'][$pId][$cat]['deuterium'] = round(min($maxCeilingD, $curD), 2);
             }
+
+            // Update tracked physical stock
+            $this->credits['last_physical'][$pId] = array(
+                'metal'     => $curStockM,
+                'crystal'   => $curStockC,
+                'deuterium' => $curStockD,
+            );
         }
 
         // Global research budget (empire-wide aggregate)
         $r_research = $ratios['research'];
-        $deltaResM = ($totalEmpireProdM * $deltaT / 3600.0) * $r_research;
-        $deltaResC = ($totalEmpireProdC * $deltaT / 3600.0) * $r_research;
-        $deltaResD = ($totalEmpireProdD * $deltaT / 3600.0) * $r_research;
+        $deltaResM = (($totalEmpireProdM * $deltaT / 3600.0) * $r_research) + ($totalEmpireWindfallM * $r_research);
+        $deltaResC = (($totalEmpireProdC * $deltaT / 3600.0) * $r_research) + ($totalEmpireWindfallC * $r_research);
+        $deltaResD = (($totalEmpireProdD * $deltaT / 3600.0) * $r_research) + ($totalEmpireWindfallD * $r_research);
 
         $resCeilingM = $totalEmpireCapM * $r_research;
         $resCeilingC = $totalEmpireCapC * $r_research;
         $resCeilingD = $totalEmpireCapD * $r_research;
 
         $curResM = (float)($this->credits['research']['metal'] ?? 0.0) + $deltaResM;
-        if ($curResM > $resCeilingM) {
-            $overflowM = $curResM - $resCeilingM;
-            $this->credits['opportunity_fund']['metal'] += $overflowM;
-            $curResM = $resCeilingM;
-        }
-        $this->credits['research']['metal'] = round($curResM, 2);
+        $this->credits['research']['metal'] = round(min($resCeilingM, $curResM), 2);
 
         $curResC = (float)($this->credits['research']['crystal'] ?? 0.0) + $deltaResC;
-        if ($curResC > $resCeilingC) {
-            $overflowC = $curResC - $resCeilingC;
-            $this->credits['opportunity_fund']['crystal'] += $overflowC;
-            $curResC = $resCeilingC;
-        }
-        $this->credits['research']['crystal'] = round($curResC, 2);
+        $this->credits['research']['crystal'] = round(min($resCeilingC, $curResC), 2);
 
         $curResD = (float)($this->credits['research']['deuterium'] ?? 0.0) + $deltaResD;
-        if ($curResD > $resCeilingD) {
-            $overflowD = $curResD - $resCeilingD;
-            $this->credits['opportunity_fund']['deuterium'] += $overflowD;
-            $curResD = $resCeilingD;
-        }
-        $this->credits['research']['deuterium'] = round($curResD, 2);
+        $this->credits['research']['deuterium'] = round(min($resCeilingD, $curResD), 2);
 
         $this->credits['last_updated'] = $now;
         $this->lastBudgetTime = $now;
@@ -268,8 +307,36 @@ class BotBudgetManager
             $this->deductResourcePair($this->credits['planets'][$planetId][$category], 'deuterium', $costD);
         }
 
+        // Keep last_physical synchronized when resources are spent on this planet
+        if (isset($this->credits['last_physical'][$planetId])) {
+            $this->credits['last_physical'][$planetId]['metal']     = max(0.0, (float)$this->credits['last_physical'][$planetId]['metal'] - $costM);
+            $this->credits['last_physical'][$planetId]['crystal']   = max(0.0, (float)$this->credits['last_physical'][$planetId]['crystal'] - $costC);
+            $this->credits['last_physical'][$planetId]['deuterium'] = max(0.0, (float)$this->credits['last_physical'][$planetId]['deuterium'] - $costD);
+        }
+
         $this->saveState();
         return true;
+    }
+
+    /**
+     * Synchronize physical evacuation from an endangered planet (fleetsave)
+     *
+     * @param int $planetId
+     * @param array $cargo
+     */
+    public function syncPlanetEvacuation($planetId, array $cargo)
+    {
+        $planetId = (int)$planetId;
+        $m = (float)($cargo[901] ?? $cargo['metal'] ?? 0.0);
+        $c = (float)($cargo[902] ?? $cargo['crystal'] ?? 0.0);
+        $d = (float)($cargo[903] ?? $cargo['deuterium'] ?? 0.0);
+
+        if (isset($this->credits['last_physical'][$planetId])) {
+            $this->credits['last_physical'][$planetId]['metal']     = max(0.0, (float)$this->credits['last_physical'][$planetId]['metal'] - $m);
+            $this->credits['last_physical'][$planetId]['crystal']   = max(0.0, (float)$this->credits['last_physical'][$planetId]['crystal'] - $c);
+            $this->credits['last_physical'][$planetId]['deuterium'] = max(0.0, (float)$this->credits['last_physical'][$planetId]['deuterium'] - $d);
+        }
+        $this->saveState();
     }
 
     private function deductResourcePair(array &$catRef, $resourceKey, $amount)
@@ -277,20 +344,11 @@ class BotBudgetManager
         if ($amount <= 0.0) return;
 
         $cur = (float)($catRef[$resourceKey] ?? 0.0);
-        if ($cur >= $amount) {
-            $catRef[$resourceKey] = round($cur - $amount, 2);
-        } else {
-            $deficit = $amount - $cur;
-            $catRef[$resourceKey] = 0.0;
-            if (isset($this->credits['opportunity_fund'][$resourceKey])) {
-                $fundCur = (float)$this->credits['opportunity_fund'][$resourceKey];
-                $this->credits['opportunity_fund'][$resourceKey] = round(max(0.0, $fundCur - $deficit), 2);
-            }
-        }
+        $catRef[$resourceKey] = round(max(0.0, $cur - $amount), 2);
     }
 
     /**
-     * Check if a category has sufficient credits (including opportunity fund)
+     * Check if a category has sufficient credits in its own dedicated budget
      *
      * @param int $planetId
      * @param string $category
@@ -303,20 +361,16 @@ class BotBudgetManager
         $costC = (float)($cost[902] ?? $cost['crystal'] ?? 0.0);
         $costD = (float)($cost[903] ?? $cost['deuterium'] ?? 0.0);
 
-        $fundM = (float)($this->credits['opportunity_fund']['metal'] ?? 0.0);
-        $fundC = (float)($this->credits['opportunity_fund']['crystal'] ?? 0.0);
-        $fundD = (float)($this->credits['opportunity_fund']['deuterium'] ?? 0.0);
-
         if ($category === 'research') {
-            $availM = (float)($this->credits['research']['metal'] ?? 0.0) + $fundM;
-            $availC = (float)($this->credits['research']['crystal'] ?? 0.0) + $fundC;
-            $availD = (float)($this->credits['research']['deuterium'] ?? 0.0) + $fundD;
+            $availM = (float)($this->credits['research']['metal'] ?? 0.0);
+            $availC = (float)($this->credits['research']['crystal'] ?? 0.0);
+            $availD = (float)($this->credits['research']['deuterium'] ?? 0.0);
         } else {
             $planetId = (int)$planetId;
             $cat = $this->credits['planets'][$planetId][$category] ?? array();
-            $availM = (float)($cat['metal'] ?? 0.0) + $fundM;
-            $availC = (float)($cat['crystal'] ?? 0.0) + $fundC;
-            $availD = (float)($cat['deuterium'] ?? 0.0) + $fundD;
+            $availM = (float)($cat['metal'] ?? 0.0);
+            $availC = (float)($cat['crystal'] ?? 0.0);
+            $availD = (float)($cat['deuterium'] ?? 0.0);
         }
 
         return ($availM >= $costM && $availC >= $costC && $availD >= $costD);
@@ -332,11 +386,620 @@ class BotBudgetManager
         return $this->savingsLock;
     }
 
-    /**
-     * Engage or refresh Savings Lock for a priority element
-     */
-    public function setSavingsLock($planetId, $targetType, $elementId, array $cost, array $planetData)
+    public function getCategoryCredits($planetId, $category)
     {
+        if ($category === 'research') {
+            return $this->credits['research'] ?? array('metal' => 0.0, 'crystal' => 0.0, 'deuterium' => 0.0);
+        }
+        $planetId = (int)$planetId;
+        return $this->credits['planets'][$planetId][$category] ?? array('metal' => 0.0, 'crystal' => 0.0, 'deuterium' => 0.0);
+    }
+
+    public function getTraderCooldown($category)
+    {
+        return isset($this->credits['trader_cooldowns'][$category]) ? (int)$this->credits['trader_cooldowns'][$category] : 0;
+    }
+
+    public function setTraderCooldown($category, $timestamp)
+    {
+        if (!isset($this->credits['trader_cooldowns'])) {
+            $this->credits['trader_cooldowns'] = array();
+        }
+        $this->credits['trader_cooldowns'][$category] = (int)$timestamp;
+        $this->saveState();
+    }
+
+    public function getEmpireTraderCooldown()
+    {
+        return isset($this->credits['trader_empire_cooldown']) ? (int)$this->credits['trader_empire_cooldown'] : 0;
+    }
+
+    public function setEmpireTraderCooldown($timestamp)
+    {
+        $this->credits['trader_empire_cooldown'] = (int)$timestamp;
+        $this->saveState();
+    }
+
+    public function isEmpireTraderOnCooldown()
+    {
+        return BotClock::get() < $this->getEmpireTraderCooldown();
+    }
+
+    public function getPlanetTraderCooldown($planetId)
+    {
+        $planetId = (int)$planetId;
+        return isset($this->credits['trader_planet_cooldowns'][$planetId]) ? (int)$this->credits['trader_planet_cooldowns'][$planetId] : 0;
+    }
+
+    public function setPlanetTraderCooldown($planetId, $timestamp)
+    {
+        $planetId = (int)$planetId;
+        if (!isset($this->credits['trader_planet_cooldowns'])) {
+            $this->credits['trader_planet_cooldowns'] = array();
+        }
+        $this->credits['trader_planet_cooldowns'][$planetId] = (int)$timestamp;
+        $this->saveState();
+    }
+
+    public function isPlanetTraderOnCooldown($planetId)
+    {
+        return BotClock::get() < $this->getPlanetTraderCooldown($planetId);
+    }
+
+    /**
+     * Universal On-Demand Trader Synchronization with Strict Budget Isolation
+     *
+     * 1. Deducts source resource and credits target resource ONLY in the virtual bucket
+     *    of the requesting category ($category in budget_credits).
+     * 2. Immediately updates last_physical in budget_credits to match the physical exchange
+     *    on uni1_planets, completely preventing BotBudgetManager from treating the physical
+     *    gain as external windfall.
+     * 3. Sets 1-hour cooldown for this specific category (if $setCooldown is true).
+     */
+    public function syncTraderExchange($planetId, $category, $fromResId, $fromAmount, $toResId, $toAmount, $setCooldown = true)
+    {
+        $planetId = (int)$planetId;
+        $fromKey = ($fromResId == 901) ? 'metal' : (($fromResId == 902) ? 'crystal' : 'deuterium');
+        $toKey   = ($toResId == 901) ? 'metal' : (($toResId == 902) ? 'crystal' : 'deuterium');
+
+        // 1. Strictly isolated virtual budget adjustment
+        if ($category === 'research') {
+            $this->credits['research'][$fromKey] = round(max(0.0, (float)($this->credits['research'][$fromKey] ?? 0.0) - $fromAmount), 2);
+            $this->credits['research'][$toKey]   = round((float)($this->credits['research'][$toKey] ?? 0.0) + $toAmount, 2);
+        } else {
+            if (!isset($this->credits['planets'][$planetId][$category])) {
+                $this->credits['planets'][$planetId][$category] = array('metal' => 0.0, 'crystal' => 0.0, 'deuterium' => 0.0);
+            }
+            $this->credits['planets'][$planetId][$category][$fromKey] = round(max(0.0, (float)($this->credits['planets'][$planetId][$category][$fromKey] ?? 0.0) - $fromAmount), 2);
+            $this->credits['planets'][$planetId][$category][$toKey]   = round((float)($this->credits['planets'][$planetId][$category][$toKey] ?? 0.0) + $toAmount, 2);
+        }
+
+        // 2. Synchronize last_physical baseline to prevent windfall misdetection
+        if (isset($this->credits['last_physical'][$planetId])) {
+            $this->credits['last_physical'][$planetId][$fromKey] = round(max(0.0, (float)$this->credits['last_physical'][$planetId][$fromKey] - $fromAmount), 2);
+            $this->credits['last_physical'][$planetId][$toKey]   = round((float)$this->credits['last_physical'][$planetId][$toKey] + $toAmount, 2);
+        }
+
+        // 3. Category trader cooldown (1 hour = 3600 seconds) if requested
+        if ($setCooldown) {
+            if (!isset($this->credits['trader_cooldowns'])) {
+                $this->credits['trader_cooldowns'] = array();
+            }
+            $this->credits['trader_cooldowns'][$category] = BotClock::get() + 3600;
+        }
+
+        $this->saveState();
+        return true;
+    }
+
+    /**
+     * Synchronize 50/35/15 Demand Trader Rebalance:
+     * - Updates category virtual budget with the executed bilateral rebalance exchanges
+     * - Synchronizes last_physical with new physical targets (targetM, targetC, targetD)
+     * - Sets 1-hour cooldown for empire (trader_empire_cooldown = now + 3600)
+     * - Sets 2-hour cooldown for this specific planet (trader_planet_cooldowns[planetId] = now + 7200)
+     *
+     * @param int $planetId
+     * @param string $category 'fleet', 'defense', 'research', 'mines'
+     * @param float $targetM Target metal
+     * @param float $targetC Target crystal
+     * @param float $targetD Target deuterium
+     * @param array $exchanges Array of executed minimum exchanges
+     * @param bool $setCooldowns
+     * @return bool
+     */
+    public function syncDemandTraderRebalance($planetId, $category, $targetM, $targetC, $targetD, array $exchanges = array(), $setCooldowns = true, $setEmpireCooldown = true)
+    {
+        $planetId = (int)$planetId;
+        $now = BotClock::get();
+
+        // 1. Synchronize category virtual budget based on executed bilateral exchanges
+        if (!empty($exchanges)) {
+            foreach ($exchanges as $ex) {
+                $fromKey = ($ex['from_res'] == 901) ? 'metal' : (($ex['from_res'] == 902) ? 'crystal' : 'deuterium');
+                $toKey   = ($ex['to_res'] == 901) ? 'metal' : (($ex['to_res'] == 902) ? 'crystal' : 'deuterium');
+                $fromAmt = (float)($ex['from_units'] ?? 0.0);
+                $toAmt   = (float)($ex['to_units'] ?? 0.0);
+
+                if ($category === 'research') {
+                    $this->credits['research'][$fromKey] = round(max(0.0, (float)($this->credits['research'][$fromKey] ?? 0.0) - $fromAmt), 2);
+                    $this->credits['research'][$toKey]   = round((float)($this->credits['research'][$toKey] ?? 0.0) + $toAmt, 2);
+                } else {
+                    if (!isset($this->credits['planets'][$planetId][$category])) {
+                        $this->credits['planets'][$planetId][$category] = array('metal' => 0.0, 'crystal' => 0.0, 'deuterium' => 0.0);
+                    }
+                    $this->credits['planets'][$planetId][$category][$fromKey] = round(max(0.0, (float)($this->credits['planets'][$planetId][$category][$fromKey] ?? 0.0) - $fromAmt), 2);
+                    $this->credits['planets'][$planetId][$category][$toKey]   = round((float)($this->credits['planets'][$planetId][$category][$toKey] ?? 0.0) + $toAmt, 2);
+                }
+            }
+        }
+
+        // 2. Synchronize last_physical baseline exactly with the physical targets to prevent windfall false positives
+        $this->credits['last_physical'][$planetId] = array(
+            'metal'     => round((float)$targetM, 2),
+            'crystal'   => round((float)$targetC, 2),
+            'deuterium' => round((float)$targetD, 2),
+        );
+
+        // 3. Set Cooldowns: 1 hour (3600s) for Empire, 2 hours (7200s) for this Planet
+        if ($setCooldowns) {
+            if ($setEmpireCooldown) {
+                $this->setEmpireTraderCooldown($now + 3600);
+            }
+            $this->setPlanetTraderCooldown($planetId, $now + 7200);
+            $this->setTraderCooldown($category, $now + 3600);
+        }
+
+        $this->saveState();
+        return true;
+    }
+
+    /**
+     * Synchronize return of fleetsave and reconcile deuterium fuel to military 'fleet' budget
+     *
+     * @param int $planetId
+     * @param array $payload
+     */
+    public function syncFleetsaveReturn($planetId, array $payload)
+    {
+        $planetId = (int)$planetId;
+        $fuelTraded = isset($payload['fuel_traded']) ? (float)$payload['fuel_traded'] : 0.0;
+
+        if ($fuelTraded > 0.0) {
+            if (!isset($this->credits['planets'][$planetId]['fleet'])) {
+                $this->credits['planets'][$planetId]['fleet'] = array('metal' => 0.0, 'crystal' => 0.0, 'deuterium' => 0.0);
+            }
+            $this->credits['planets'][$planetId]['fleet']['deuterium'] = round((float)($this->credits['planets'][$planetId]['fleet']['deuterium'] ?? 0.0) + $fuelTraded, 2);
+            $this->saveState();
+        }
+    }
+
+    public function syncPhysicalAdjustment($planetId, $deltaM, $deltaC, $deltaD)
+    {
+        $planetId = (int)$planetId;
+        if (isset($this->credits['last_physical'][$planetId])) {
+            $this->credits['last_physical'][$planetId]['metal']     = round(max(0.0, (float)$this->credits['last_physical'][$planetId]['metal'] + $deltaM), 2);
+            $this->credits['last_physical'][$planetId]['crystal']   = round(max(0.0, (float)$this->credits['last_physical'][$planetId]['crystal'] + $deltaC), 2);
+            $this->credits['last_physical'][$planetId]['deuterium'] = round(max(0.0, (float)$this->credits['last_physical'][$planetId]['deuterium'] + $deltaD), 2);
+            $this->saveState();
+        }
+    }
+
+    /**
+     * Credit container rewards directly into category budgets based on macro personality ratios
+     *
+     * @param int $planetId
+     * @param float $deltaM
+     * @param float $deltaC
+     * @param float $deltaD
+     * @return bool
+     */
+    public function creditContainerReward($planetId, $deltaM, $deltaC, $deltaD)
+    {
+        $planetId = (int)$planetId;
+        $ratios = $this->getMacroRatios();
+
+        foreach (array('mines', 'fleet', 'defense') as $cat) {
+            $r_k = (float)($ratios[$cat] ?? 0.25);
+            if (!isset($this->credits['planets'][$planetId][$cat])) {
+                $this->credits['planets'][$planetId][$cat] = array('metal' => 0.0, 'crystal' => 0.0, 'deuterium' => 0.0);
+            }
+            $this->credits['planets'][$planetId][$cat]['metal']     = round((float)($this->credits['planets'][$planetId][$cat]['metal'] ?? 0.0) + ($deltaM * $r_k), 2);
+            $this->credits['planets'][$planetId][$cat]['crystal']   = round((float)($this->credits['planets'][$planetId][$cat]['crystal'] ?? 0.0) + ($deltaC * $r_k), 2);
+            $this->credits['planets'][$planetId][$cat]['deuterium'] = round((float)($this->credits['planets'][$planetId][$cat]['deuterium'] ?? 0.0) + ($deltaD * $r_k), 2);
+        }
+
+        $r_res = (float)($ratios['research'] ?? 0.15);
+        if (!isset($this->credits['research'])) {
+            $this->credits['research'] = array('metal' => 0.0, 'crystal' => 0.0, 'deuterium' => 0.0);
+        }
+        $this->credits['research']['metal']     = round((float)($this->credits['research']['metal'] ?? 0.0) + ($deltaM * $r_res), 2);
+        $this->credits['research']['crystal']   = round((float)($this->credits['research']['crystal'] ?? 0.0) + ($deltaC * $r_res), 2);
+        $this->credits['research']['deuterium'] = round((float)($this->credits['research']['deuterium'] ?? 0.0) + ($deltaD * $r_res), 2);
+
+        if (isset($this->credits['last_physical'][$planetId])) {
+            $this->credits['last_physical'][$planetId]['metal']     = round(max(0.0, (float)$this->credits['last_physical'][$planetId]['metal'] + $deltaM), 2);
+            $this->credits['last_physical'][$planetId]['crystal']   = round(max(0.0, (float)$this->credits['last_physical'][$planetId]['crystal'] + $deltaC), 2);
+            $this->credits['last_physical'][$planetId]['deuterium'] = round(max(0.0, (float)$this->credits['last_physical'][$planetId]['deuterium'] + $deltaD), 2);
+        }
+
+        $this->saveState();
+        return true;
+    }
+
+    public function deductResearchCredits($deltaM, $deltaC = 0.0, $deltaD = 0.0)
+    {
+        if (!isset($this->credits['research'])) {
+            $this->credits['research'] = array('metal' => 0.0, 'crystal' => 0.0, 'deuterium' => 0.0);
+        }
+        $this->credits['research']['metal']     = round(max(0.0, (float)($this->credits['research']['metal'] ?? 0.0) - (float)$deltaM), 2);
+        $this->credits['research']['crystal']   = round(max(0.0, (float)($this->credits['research']['crystal'] ?? 0.0) - (float)$deltaC), 2);
+        $this->credits['research']['deuterium'] = round(max(0.0, (float)($this->credits['research']['deuterium'] ?? 0.0) - (float)$deltaD), 2);
+        $this->saveState();
+        return true;
+    }
+
+    public function deductOpportunityFund($deltaM, $deltaC = 0.0, $deltaD = 0.0)
+    {
+        return $this->deductResearchCredits($deltaM, $deltaC, $deltaD);
+    }
+
+    /**
+     * Credit refunded resources from scrapping directly into a planet budget category
+     *
+     * @param int $planetId
+     * @param array $refund
+     * @param string $category 'fleet' or 'defense'
+     * @return bool
+     */
+    public function creditScrapRefund($planetId, array $refund, $category = 'fleet')
+    {
+        $planetId = (int)$planetId;
+        $refM = (float)($refund[901] ?? $refund['metal'] ?? 0.0);
+        $refC = (float)($refund[902] ?? $refund['crystal'] ?? 0.0);
+        $refD = (float)($refund[903] ?? $refund['deuterium'] ?? 0.0);
+
+        if (!isset($this->credits['planets'][$planetId][$category])) {
+            $this->credits['planets'][$planetId][$category] = array('metal' => 0.0, 'crystal' => 0.0, 'deuterium' => 0.0);
+        }
+
+        $this->credits['planets'][$planetId][$category]['metal']     = round((float)($this->credits['planets'][$planetId][$category]['metal'] ?? 0.0) + $refM, 2);
+        $this->credits['planets'][$planetId][$category]['crystal']   = round((float)($this->credits['planets'][$planetId][$category]['crystal'] ?? 0.0) + $refC, 2);
+        $this->credits['planets'][$planetId][$category]['deuterium'] = round((float)($this->credits['planets'][$planetId][$category]['deuterium'] ?? 0.0) + $refD, 2);
+
+        if (isset($this->credits['last_physical'][$planetId])) {
+            $this->credits['last_physical'][$planetId]['metal'] += $refM;
+            $this->credits['last_physical'][$planetId]['crystal'] += $refC;
+            $this->credits['last_physical'][$planetId]['deuterium'] += $refD;
+        }
+
+        $this->saveState();
+        return true;
+    }
+
+    /**
+     * Compute donor surplus strictly available for a specific budget category,
+     * maintaining a 2-hour production safety reserve on the donor planet.
+     *
+     * @param int $planetId
+     * @param string $category 'mines', 'fleet', 'defense', 'research'
+     * @param array $planetData
+     * @return array ['metal' => float, 'crystal' => float, 'deuterium' => float]
+     */
+    public function getDonorSurplusByCategory($planetId, $category, array $planetData)
+    {
+        $planetId = (int)$planetId;
+        $prodM = max(0.0, (float)($planetData['metal_perhour'] ?? 0.0));
+        $prodC = max(0.0, (float)($planetData['crystal_perhour'] ?? 0.0));
+        $prodD = max(0.0, (float)($planetData['deuterium_perhour'] ?? 0.0));
+
+        // Safety reserve: minimum 2 hours of local production (or baseline floor)
+        $reserveM = max(50000.0, 2.0 * $prodM);
+        $reserveC = max(30000.0, 2.0 * $prodC);
+        $reserveD = max(20000.0, 2.0 * $prodD);
+
+        $physSurplusM = max(0.0, (float)($planetData['metal'] ?? 0.0) - $reserveM);
+        $physSurplusC = max(0.0, (float)($planetData['crystal'] ?? 0.0) - $reserveC);
+        $physSurplusD = max(0.0, (float)($planetData['deuterium'] ?? 0.0) - $reserveD);
+
+        // Budget credits available for this category
+        $catCredits = ($category === 'research')
+            ? ($this->credits['research'] ?? array())
+            : ($this->credits['planets'][$planetId][$category] ?? array());
+
+        // Budget credits available for this category (strictly isolated to the 4 canonical budgets)
+        $catCredits = ($category === 'research')
+            ? ($this->credits['research'] ?? array())
+            : ($this->credits['planets'][$planetId][$category] ?? array());
+
+        $budgetAvailM = (float)($catCredits['metal'] ?? 0.0);
+        $budgetAvailC = (float)($catCredits['crystal'] ?? 0.0);
+        $budgetAvailD = (float)($catCredits['deuterium'] ?? 0.0);
+
+        return array(
+            'metal'     => round(min($physSurplusM, $budgetAvailM), 2),
+            'crystal'   => round(min($physSurplusC, $budgetAvailC), 2),
+            'deuterium' => round(min($physSurplusD, $budgetAvailD), 2),
+        );
+    }
+
+    /**
+     * Debit donated resources atomically from the donor's category ONLY.
+     *
+     * @param int $planetId
+     * @param string $category
+     * @param array $resources
+     * @return bool
+     */
+    public function debitDonorCategory($planetId, $category, array $resources)
+    {
+        $planetId = (int)$planetId;
+        $resM = (float)($resources[901] ?? $resources['metal'] ?? 0.0);
+        $resC = (float)($resources[902] ?? $resources['crystal'] ?? 0.0);
+        $resD = (float)($resources[903] ?? $resources['deuterium'] ?? 0.0);
+
+        $this->debitSingleResource($planetId, $category, 'metal', $resM);
+        $this->debitSingleResource($planetId, $category, 'crystal', $resC);
+        $this->debitSingleResource($planetId, $category, 'deuterium', $resD);
+
+        if (isset($this->credits['last_physical'][$planetId])) {
+            $this->credits['last_physical'][$planetId]['metal'] = max(0.0, (float)$this->credits['last_physical'][$planetId]['metal'] - $resM);
+            $this->credits['last_physical'][$planetId]['crystal'] = max(0.0, (float)$this->credits['last_physical'][$planetId]['crystal'] - $resC);
+            $this->credits['last_physical'][$planetId]['deuterium'] = max(0.0, (float)$this->credits['last_physical'][$planetId]['deuterium'] - $resD);
+        }
+
+        $this->saveState();
+        return true;
+    }
+
+    private function debitSingleResource($planetId, $category, $key, $amount)
+    {
+        if ($amount <= 0.0) return;
+
+        // Strictly drawn from the specific category only - zero cross-budget bleeding
+        if ($category === 'research') {
+            $cur = (float)($this->credits['research'][$key] ?? 0.0);
+            $this->credits['research'][$key] = round(max(0.0, $cur - $amount), 2);
+        } else {
+            if (!isset($this->credits['planets'][$planetId])) {
+                $this->credits['planets'][$planetId] = array(
+                    'mines'   => array('metal' => 0.0, 'crystal' => 0.0, 'deuterium' => 0.0),
+                    'fleet'   => array('metal' => 0.0, 'crystal' => 0.0, 'deuterium' => 0.0),
+                    'defense' => array('metal' => 0.0, 'crystal' => 0.0, 'deuterium' => 0.0),
+                );
+            } elseif (!isset($this->credits['planets'][$planetId][$category])) {
+                $this->credits['planets'][$planetId][$category] = array('metal' => 0.0, 'crystal' => 0.0, 'deuterium' => 0.0);
+            }
+            $cur = (float)($this->credits['planets'][$planetId][$category][$key] ?? 0.0);
+            $this->credits['planets'][$planetId][$category][$key] = round(max(0.0, $cur - $amount), 2);
+        }
+    }
+
+    /**
+     * Credit arrived logistics resources directly into a planet budget category (or global research)
+     *
+     * @param int $planetId
+     * @param string $category
+     * @param array $resources
+     * @return bool
+     */
+    public function creditPlanetCategory($planetId, $category, array $resources)
+    {
+        $planetId = (int)$planetId;
+        $resM = (float)($resources[901] ?? $resources['metal'] ?? 0.0);
+        $resC = (float)($resources[902] ?? $resources['crystal'] ?? 0.0);
+        $resD = (float)($resources[903] ?? $resources['deuterium'] ?? 0.0);
+
+        if ($category === 'research') {
+            $this->credits['research']['metal']     = round((float)($this->credits['research']['metal'] ?? 0.0) + $resM, 2);
+            $this->credits['research']['crystal']   = round((float)($this->credits['research']['crystal'] ?? 0.0) + $resC, 2);
+            $this->credits['research']['deuterium'] = round((float)($this->credits['research']['deuterium'] ?? 0.0) + $resD, 2);
+        } else {
+            if (!isset($this->credits['planets'][$planetId])) {
+                $this->credits['planets'][$planetId] = array(
+                    'mines'   => array('metal' => 0.0, 'crystal' => 0.0, 'deuterium' => 0.0),
+                    'fleet'   => array('metal' => 0.0, 'crystal' => 0.0, 'deuterium' => 0.0),
+                    'defense' => array('metal' => 0.0, 'crystal' => 0.0, 'deuterium' => 0.0),
+                );
+            } elseif (!isset($this->credits['planets'][$planetId][$category])) {
+                $this->credits['planets'][$planetId][$category] = array('metal' => 0.0, 'crystal' => 0.0, 'deuterium' => 0.0);
+            }
+            $this->credits['planets'][$planetId][$category]['metal']     = round((float)($this->credits['planets'][$planetId][$category]['metal'] ?? 0.0) + $resM, 2);
+            $this->credits['planets'][$planetId][$category]['crystal']   = round((float)($this->credits['planets'][$planetId][$category]['crystal'] ?? 0.0) + $resC, 2);
+            $this->credits['planets'][$planetId][$category]['deuterium'] = round((float)($this->credits['planets'][$planetId][$category]['deuterium'] ?? 0.0) + $resD, 2);
+        }
+
+        if (isset($this->credits['last_physical'][$planetId])) {
+            $this->credits['last_physical'][$planetId]['metal'] += $resM;
+            $this->credits['last_physical'][$planetId]['crystal'] += $resC;
+            $this->credits['last_physical'][$planetId]['deuterium'] += $resD;
+        }
+
+        $this->saveState();
+        return true;
+    }
+
+    /**
+     * Explicitly credit external windfall (e.g. from loot, debris, expedition)
+     * distributed according to macro ratios across local categories and global research.
+     *
+     * @param int $planetId
+     * @param array $resources [901 => M, 902 => C, 903 => D] or ['metal' => M, ...]
+     * @return bool
+     */
+    public function creditExternalWindfall($planetId, array $resources)
+    {
+        $planetId = (int)$planetId;
+        $resM = (float)($resources[901] ?? $resources['metal'] ?? 0.0);
+        $resC = (float)($resources[902] ?? $resources['crystal'] ?? 0.0);
+        $resD = (float)($resources[903] ?? $resources['deuterium'] ?? 0.0);
+
+        if ($resM <= 0.0 && $resC <= 0.0 && $resD <= 0.0) {
+            return false;
+        }
+
+        $ratios = $this->getMacroRatios();
+
+        // 1. Local categories
+        if (!isset($this->credits['planets'][$planetId])) {
+            $this->credits['planets'][$planetId] = array(
+                'mines'   => array('metal' => 0.0, 'crystal' => 0.0, 'deuterium' => 0.0),
+                'fleet'   => array('metal' => 0.0, 'crystal' => 0.0, 'deuterium' => 0.0),
+                'defense' => array('metal' => 0.0, 'crystal' => 0.0, 'deuterium' => 0.0),
+            );
+        }
+
+        foreach (array('mines', 'fleet', 'defense') as $cat) {
+            $rk = $ratios[$cat];
+            $this->credits['planets'][$planetId][$cat]['metal']     = round((float)($this->credits['planets'][$planetId][$cat]['metal'] ?? 0.0) + ($resM * $rk), 2);
+            $this->credits['planets'][$planetId][$cat]['crystal']   = round((float)($this->credits['planets'][$planetId][$cat]['crystal'] ?? 0.0) + ($resC * $rk), 2);
+            $this->credits['planets'][$planetId][$cat]['deuterium'] = round((float)($this->credits['planets'][$planetId][$cat]['deuterium'] ?? 0.0) + ($resD * $rk), 2);
+        }
+
+        // 2. Global research
+        $rRes = $ratios['research'];
+        $this->credits['research']['metal']     = round((float)($this->credits['research']['metal'] ?? 0.0) + ($resM * $rRes), 2);
+        $this->credits['research']['crystal']   = round((float)($this->credits['research']['crystal'] ?? 0.0) + ($resC * $rRes), 2);
+        $this->credits['research']['deuterium'] = round((float)($this->credits['research']['deuterium'] ?? 0.0) + ($resD * $rRes), 2);
+
+        // 3. Update last_physical to avoid double-counting in next updateCredits()
+        if (isset($this->credits['last_physical'][$planetId])) {
+            $this->credits['last_physical'][$planetId]['metal'] += $resM;
+            $this->credits['last_physical'][$planetId]['crystal'] += $resC;
+            $this->credits['last_physical'][$planetId]['deuterium'] += $resD;
+        }
+
+        $this->saveState();
+        return true;
+    }
+
+    /**
+     * Get available fleet recruitment credits for a planet
+     *
+     * @param int $planetId
+     * @return array ['metal' => float, 'crystal' => float, 'deuterium' => float]
+     */
+    public function getPlanetFleetCredits($planetId)
+    {
+        $planetId = (int)$planetId;
+        $credits = $this->credits['planets'][$planetId]['fleet'] ?? array('metal' => 0.0, 'crystal' => 0.0, 'deuterium' => 0.0);
+
+        return array(
+            'metal'     => max(0.0, (float)($credits['metal'] ?? 0.0)),
+            'crystal'   => max(0.0, (float)($credits['crystal'] ?? 0.0)),
+            'deuterium' => max(0.0, (float)($credits['deuterium'] ?? 0.0)),
+        );
+    }
+
+    /**
+     * Get available defense recruitment credits for a planet
+     *
+     * @param int $planetId
+     * @return array ['metal' => float, 'crystal' => float, 'deuterium' => float]
+     */
+    public function getPlanetDefenseCredits($planetId)
+    {
+        $planetId = (int)$planetId;
+        $credits = $this->credits['planets'][$planetId]['defense'] ?? array('metal' => 0.0, 'crystal' => 0.0, 'deuterium' => 0.0);
+
+        return array(
+            'metal'     => max(0.0, (float)($credits['metal'] ?? 0.0)),
+            'crystal'   => max(0.0, (float)($credits['crystal'] ?? 0.0)),
+            'deuterium' => max(0.0, (float)($credits['deuterium'] ?? 0.0)),
+        );
+    }
+
+    /**
+     * Get available construction credits for a planet
+     *
+     * @param int $planetId
+     * @return array ['metal' => float, 'crystal' => float, 'deuterium' => float]
+     */
+    public function getPlanetMinesCredits($planetId)
+    {
+        $planetId = (int)$planetId;
+        $credits = $this->credits['planets'][$planetId]['mines'] ?? array('metal' => 0.0, 'crystal' => 0.0, 'deuterium' => 0.0);
+
+        return array(
+            'metal'     => max(0.0, (float)($credits['metal'] ?? 0.0)),
+            'crystal'   => max(0.0, (float)($credits['crystal'] ?? 0.0)),
+            'deuterium' => max(0.0, (float)($credits['deuterium'] ?? 0.0)),
+        );
+    }
+
+    /**
+     * Get available research credits for the entire empire
+     *
+     * @return array ['metal' => float, 'crystal' => float, 'deuterium' => float]
+     */
+    public function getResearchCredits()
+    {
+        $credits = $this->credits['research'] ?? array('metal' => 0.0, 'crystal' => 0.0, 'deuterium' => 0.0);
+
+        return array(
+            'metal'     => max(0.0, (float)($credits['metal'] ?? 0.0)),
+            'crystal'   => max(0.0, (float)($credits['crystal'] ?? 0.0)),
+            'deuterium' => max(0.0, (float)($credits['deuterium'] ?? 0.0)),
+        );
+    }
+
+    /**
+     * Get timestamp of last dedicated fleet recruitment cycle
+     *
+     * @return int
+     */
+    public function getLastFleetRecruit()
+    {
+        return isset($this->ctx->botRow['last_fleet_recruit']) ? (int)$this->ctx->botRow['last_fleet_recruit'] : 0;
+    }
+
+    /**
+     * Update timestamp of last dedicated fleet recruitment cycle
+     *
+     * @param int $time
+     */
+    public function setLastFleetRecruit($time)
+    {
+        $this->ctx->updateBotRow(array('last_fleet_recruit' => (int)$time));
+    }
+
+    /**
+     * Get timestamp of last dedicated defense recruitment cycle
+     *
+     * @return int
+     */
+    public function getLastDefenseRecruit()
+    {
+        return isset($this->ctx->botRow['last_defense_recruit']) ? (int)$this->ctx->botRow['last_defense_recruit'] : 0;
+    }
+
+    /**
+     * Update timestamp of last dedicated defense recruitment cycle
+     *
+     * @param int $time
+     */
+    public function setLastDefenseRecruit($time)
+    {
+        $this->ctx->updateBotRow(array('last_defense_recruit' => (int)$time));
+    }
+
+    /**
+     * Engage or refresh Savings Lock for a priority element in a specific category
+     */
+    public function setSavingsLock($planetId, $targetType, $elementId, array $cost, array $planetData, $category = null)
+    {
+        if ($category === null) {
+            if ($targetType === 'tech' || $targetType === 'research') {
+                $category = 'research';
+            } elseif ($targetType === 'ship' || $targetType === 'fleet') {
+                $category = 'fleet';
+            } elseif ($targetType === 'defense' || $targetType === 'missile') {
+                $category = 'defense';
+            } else {
+                $category = 'mines';
+            }
+        }
+
         $costM = (float)($cost[901] ?? $cost['metal'] ?? 0.0);
         $costC = (float)($cost[902] ?? $cost['crystal'] ?? 0.0);
         $costD = (float)($cost[903] ?? $cost['deuterium'] ?? 0.0);
@@ -373,16 +1036,47 @@ class BotBudgetManager
         $this->savingsLock = array(
             'planet_id'        => (int)$planetId,
             'target_type'      => $targetType,
+            'category'         => $category,
             'element_id'       => (int)$elementId,
             'cost'             => array(901 => $costM, 902 => $costC, 903 => $costD),
             'deficit_resource' => $defRes,
             'last_stock'       => (float)$stockMap[$defRes],
             'stagnant_cycles'  => 0,
-            'start_time'       => TIMESTAMP,
+            'start_time'       => BotClock::get(),
             'eta_seconds'      => $eta,
         );
 
         $this->saveState();
+    }
+
+    /**
+     * Check if a specific category is locked by savings on a planet
+     */
+    public function isCategoryLocked($planetId, $category)
+    {
+        if (empty($this->savingsLock)) {
+            return false;
+        }
+
+        $lockPlanet = (int)($this->savingsLock['planet_id'] ?? 0);
+        $lockCat    = $this->savingsLock['category'] ?? 'mines';
+
+        if ($category === 'research') {
+            return ($lockCat === 'research');
+        }
+
+        return ($lockPlanet === (int)$planetId && $lockCat === $category);
+    }
+
+    /**
+     * Get active savings lock only if it matches the requested category
+     */
+    public function getSavingsLockForCategory($planetId, $category)
+    {
+        if ($this->isCategoryLocked($planetId, $category)) {
+            return $this->savingsLock;
+        }
+        return null;
     }
 
     public function clearSavingsLock()
@@ -445,26 +1139,32 @@ class BotBudgetManager
         $pData = $planetEntry['data'];
         $cost  = $this->savingsLock['cost'];
 
-        // --- 1. Dynamic Storage Cap Guard ---
-        // If cost exceeds 95% of storage capacity, the planet can never save enough!
-        // Immediately force warehouse construction funded directly by savings reserve.
-        $storeNeeded = 0;
-        if ((float)($cost[901] ?? $cost['metal'] ?? 0.0) > ((float)($pData['metal_max'] ?? 0.0) * 0.95)) {
-            $storeNeeded = 22; // Metal store
-        } elseif ((float)($cost[902] ?? $cost['crystal'] ?? 0.0) > ((float)($pData['crystal_max'] ?? 0.0) * 0.95)) {
-            $storeNeeded = 23; // Crystal store
-        } elseif ((float)($cost[903] ?? $cost['deuterium'] ?? 0.0) > ((float)($pData['deuterium_max'] ?? 0.0) * 0.95)) {
-            $storeNeeded = 24; // Deuterium store
-        }
+        $defRes = (int)($this->savingsLock['deficit_resource'] ?? 901);
+        $colKey = ($defRes === 901) ? 'metal' : (($defRes === 902) ? 'crystal' : 'deuterium');
+        $costDef = (float)($cost[$defRes] ?? $cost[$colKey] ?? 0.0);
+        $maxStockCap = (float)($pData[$colKey . '_max'] ?? 0.0);
+        $currentStock = (float)($pData[$colKey] ?? 0.0);
+        $lastStock    = (float)($this->savingsLock['last_stock'] ?? $currentStock);
+
+        // Warehouse corresponding to the current deficit resource
+        $storeIdForDeficit = ($defRes === 901) ? 22 : (($defRes === 902) ? 23 : 24);
 
         $isWarehouseBuilding = false;
         if (!empty($planetEntry['building_queue'])) {
             foreach ($planetEntry['building_queue'] as $bItem) {
-                if (in_array((int)$bItem[0], array(22, 23, 24))) {
+                if ((int)$bItem[0] === $storeIdForDeficit) {
                     $isWarehouseBuilding = true;
                     break;
                 }
             }
+        }
+
+        // --- 1. Dynamic Storage Cap Guard ---
+        // If cost of deficit resource exceeds 95% of storage capacity, the planet can never save enough!
+        // Immediately force warehouse construction funded directly by savings reserve.
+        $storeNeeded = 0;
+        if ($maxStockCap > 0 && $costDef > ($maxStockCap * 0.95)) {
+            $storeNeeded = $storeIdForDeficit;
         }
 
         if ($storeNeeded > 0 && !$isWarehouseBuilding) {
@@ -484,11 +1184,6 @@ class BotBudgetManager
         // --- 2. Anti-Farm Watchdog ---
         // If for 3 consecutive cycles (135s) Delta_stock[deficit] <= 0:
         // Planet is being raided/farmed. Abort savings, release reserve, build defenses and light fighters!
-        $defRes = (int)$this->savingsLock['deficit_resource'];
-        $colKey = ($defRes === 901) ? 'metal' : (($defRes === 902) ? 'crystal' : 'deuterium');
-        $currentStock = (float)($pData[$colKey] ?? 0.0);
-        $lastStock    = (float)$this->savingsLock['last_stock'];
-        $maxStockCap  = (float)($pData[$colKey . '_max'] ?? 0.0);
 
         // Check if warehouse is currently being upgraded or if storage is saturated (>95%)
         $isStorageSaturated = ($maxStockCap > 0 && $currentStock >= ($maxStockCap * 0.95));

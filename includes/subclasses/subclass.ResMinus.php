@@ -23,6 +23,10 @@ foreach($reslist['resstype'][1] as $resP) //проверка всего маси
     
 foreach($reslist['resstype'][3] as $resU) //проверка всего масива элементов
 {
-    if(isset($costResources[$resU])) {$USER[$resource[$resU]]	-= $costResources[$resU]; }
+    if(isset($costResources[$resU]) && $costResources[$resU] > 0) {
+        $source = !empty($mode) ? $mode . '_queue' : 'construction_queue';
+        $elementId = isset($Element) ? (int)$Element : 0;
+        PremiumEconomy::debit($USER, $resU, $costResources[$resU], $source, $elementId, '');
+    }
 }
 //$new_code

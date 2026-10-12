@@ -100,6 +100,81 @@ class BotPersonality
         }
     }
 
+    /**
+     * Retorna los ratios de presupuesto macro canónicos gobernados 100% por la personalidad
+     *
+     * @return array ['mines' => float, 'fleet' => float, 'defense' => float, 'research' => float]
+     */
+    public function getBudgetRatios()
+    {
+        switch ($this->name) {
+            case self::AGGRESSIVE:
+            case 'raider':
+                return array('mines' => 0.15, 'fleet' => 0.55, 'defense' => 0.10, 'research' => 0.20);
+
+            case self::DEFENSIVE:
+            case 'bunker':
+            case 'turtle':
+                return array('mines' => 0.25, 'fleet' => 0.15, 'defense' => 0.50, 'research' => 0.10);
+
+            case self::ECONOMIC:
+            case 'miner':
+            case 'minero':
+                return array('mines' => 0.55, 'fleet' => 0.10, 'defense' => 0.15, 'research' => 0.20);
+
+            case self::BALANCED:
+            case 'equilibrado':
+            default:
+                return array('mines' => 0.30, 'fleet' => 0.35, 'defense' => 0.15, 'research' => 0.20);
+        }
+    }
+
+    /**
+     * Retorna el multiplicador estratégico de investigación por tecnología según la doctrina del bot
+     *
+     * @param int $techId
+     * @return float
+     */
+    public function getTechMultiplier($techId)
+    {
+        $techId = (int)$techId;
+        switch ($this->name) {
+            case self::AGGRESSIVE:
+            case 'raider':
+                // Impulso masivo a flotas, computación, motores y armamento
+                if (in_array($techId, array(108, 109, 110, 111, 115, 117, 118, 122))) {
+                    return 2.20;
+                }
+                if (in_array($techId, array(120, 121, 124))) {
+                    return 1.40;
+                }
+                return 1.00;
+
+            case self::ECONOMIC:
+            case 'miner':
+            case 'minero':
+                // Impulso masivo a procesamiento NovaRush, astrofísica, IRN y energía
+                if (in_array($techId, array(131, 132, 133, 124, 123, 113, 134))) {
+                    return 2.50;
+                }
+                return 1.00;
+
+            case self::DEFENSIVE:
+            case 'bunker':
+            case 'turtle':
+                // Impulso masivo a escudos, blindaje, energía y misilería
+                if (in_array($techId, array(110, 111, 113, 117, 122))) {
+                    return 2.20;
+                }
+                return 1.00;
+
+            case self::BALANCED:
+            case 'equilibrado':
+            default:
+                return 1.10;
+        }
+    }
+
     public static function getAll()
     {
         return array(self::BALANCED, self::AGGRESSIVE, self::DEFENSIVE, self::ECONOMIC);

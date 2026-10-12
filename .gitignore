@@ -6,6 +6,7 @@ cache/templates/*
 cache/*.cache.php
 cache/*.tpl.php
 cache/*^*.php
+cache/cache.vars.php
 
 # Local backups and database dumps
 includes/backups/Backup_*.sql
@@ -13,6 +14,7 @@ includes/backups/Backup_*.sql
 
 # Temporary and IDE folders
 scratch/
+scratch_*
 .idea/
 .vscode/
 *.log

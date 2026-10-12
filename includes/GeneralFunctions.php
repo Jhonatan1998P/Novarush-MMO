@@ -501,6 +501,16 @@ function shortly_number($number, $decial = NULL)
 }
 
 function floatToString($number, $Pro = 0, $output = false){
+	if(is_string($number)) {
+		$clean = trim($number);
+		if(preg_match('/^[+-]?\d{1,3}(\.\d{3})+(,\d+)?$/', $clean)) {
+			$clean = str_replace('.', '', $clean);
+			$clean = str_replace(',', '.', $clean);
+			$number = $clean;
+		} elseif(preg_match('/^[+-]?\d+$/', $clean)) {
+			$number = $clean;
+		}
+	}
 	return $output ? str_replace(",",".", sprintf("%.".$Pro."f", $number)) : sprintf("%.".$Pro."f", $number);
 }
 

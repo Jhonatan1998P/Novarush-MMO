@@ -69,7 +69,7 @@ class BotIntelStore
      * @param float $halfLifeHours
      * @return array|null Intel record with calculated confidence [0.0, 1.0], or null if unspied
      */
-    public function getIntel($galaxy, $system, $planet, $planetType = 1, $halfLifeHours = 4.0)
+    public function getIntel($galaxy, $system, $planet, $planetType = 1, $halfLifeHours = 1.0)
     {
         $db = Database::get();
         $sql = "SELECT * FROM " . DB_PREFIX . "bot_intel 
@@ -93,6 +93,12 @@ class BotIntelStore
         }
 
         $ageHours = max(0.0, (TIMESTAMP - (int)$row['scanned_at']) / 3600.0);
+        // Regla estricta universal: La inteligencia de espionaje caduca a los 60 minutos (1 hora)
+        if ($ageHours >= 1.0) {
+            $this->deleteIntel((int)$row['galaxy'], (int)$row['system'], (int)$row['planet'], (int)$row['planet_type']);
+            return null;
+        }
+
         $lambda   = log(2) / max(0.5, (float)$halfLifeHours);
         $conf     = exp(-$lambda * $ageHours);
 
@@ -165,6 +171,26 @@ class BotIntelStore
               AND planet_type = :planet_type;", array(
             ':data'        => json_encode($def),
             ':now'         => TIMESTAMP,
+            ':bot_id'      => $this->botId,
+            ':galaxy'      => (int)$galaxy,
+            ':system'      => (int)$system,
+            ':planet'      => (int)$planet,
+            ':planet_type' => (int)$planetType,
+        ));
+    }
+
+    /**
+     * Purges espionage intel for a coordinate, forcing fresh reconnaissance
+     */
+    public function deleteIntel($galaxy, $system, $planet, $planetType = 1)
+    {
+        $db = Database::get();
+        $db->delete("DELETE FROM " . DB_PREFIX . "bot_intel 
+            WHERE bot_id = :bot_id 
+              AND galaxy = :galaxy 
+              AND system = :system 
+              AND planet = :planet 
+              AND planet_type = :planet_type;", array(
             ':bot_id'      => $this->botId,
             ':galaxy'      => (int)$galaxy,
             ':system'      => (int)$system,

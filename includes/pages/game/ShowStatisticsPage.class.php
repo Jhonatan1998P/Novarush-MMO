@@ -84,8 +84,11 @@ class ShowStatisticsPage extends AbstractGamePage
         switch($who)
         {
             case 1:
-                $MaxUsers 	= $config->users_amount;
-                $range		= min($range, $MaxUsers);
+                $MaxUsers 	= (int)$config->users_amount;
+                if ($MaxUsers <= 0) {
+                    $MaxUsers = (int)$db->selectSingle("SELECT COUNT(*) as c FROM %%STATPOINTS%% s INNER JOIN %%USERS%% u ON u.id = s.id_owner WHERE s.universe = :universe AND s.stat_type = 1 AND u.authlevel = 0 AND u.id NOT IN (1, 998, 999) AND LOWER(u.username) NOT LIKE '%dummy%' AND LOWER(u.username) NOT LIKE '%test%' AND LOWER(u.username) NOT LIKE '%omega%';", array(':universe' => Universe::current()), 'c');
+                }
+                $range		= min($range, max(1, $MaxUsers));
                 $LastPage 	= max(1, ceil($MaxUsers / 100));
 
                 for ($Page = 0; $Page < $LastPage; $Page++)
@@ -97,11 +100,13 @@ class ShowStatisticsPage extends AbstractGamePage
 
                 $start = max(floor(($range - 1) / 100) * 100, 0);
 
+                $excludeFilter = " AND u.authlevel = 0 AND u.id NOT IN (1, 998, 999) AND LOWER(u.username) NOT LIKE '%dummy%' AND LOWER(u.username) NOT LIKE '%test%' AND LOWER(u.username) NOT LIKE '%omega%'";
+
 				if ($config->stat == 2) {
 					$sql = "SELECT DISTINCT s.*, u.id, u.username, u.ally_id, u.banaday, u.onlinetime, u.race, u.formgovernment, u.ethics, a.ally_name FROM %%STATPOINTS%% as s
 					INNER JOIN %%USERS%% as u ON u.id = s.id_owner
 					LEFT JOIN %%ALLIANCE%% as a ON a.id = s.id_ally
-					WHERE s.universe = :universe AND s.stat_type = 1 AND u.authlevel < :authLevel
+					WHERE s.universe = :universe AND s.stat_type = 1 AND u.authlevel < :authLevel" . $excludeFilter . "
 					ORDER BY ".$Order." ASC LIMIT :offset, :limit;";
 					$query = $db->select($sql, array(
 						':universe'	=> Universe::current(),
@@ -113,7 +118,7 @@ class ShowStatisticsPage extends AbstractGamePage
 					$sql = "SELECT DISTINCT s.*, u.id, u.username, u.ally_id, u.banaday, u.onlinetime, u.race, u.formgovernment, u.ethics, a.ally_name FROM %%STATPOINTS%% as s
 					INNER JOIN %%USERS%% as u ON u.id = s.id_owner
 					LEFT JOIN %%ALLIANCE%% as a ON a.id = s.id_ally
-					WHERE s.universe = :universe AND s.stat_type = 1
+					WHERE s.universe = :universe AND s.stat_type = 1" . $excludeFilter . "
 					ORDER BY ".$Order." ASC LIMIT :offset, :limit;";
 					$query = $db->select($sql, array(
 						':universe'	=> Universe::current(),
