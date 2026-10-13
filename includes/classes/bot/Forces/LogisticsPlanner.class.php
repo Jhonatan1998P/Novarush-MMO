@@ -358,6 +358,14 @@ class BotLogisticsPlanner
             $demands[] = $milFuel;
         }
 
+        // --- Priority 1b: Staging Colonies Military Fuel Demand ---
+        $stagingFuelDemands = $this->estimateStagingFuelDemands($empire, $hubPlanetId);
+        if (!empty($stagingFuelDemands)) {
+            foreach ($stagingFuelDemands as $sfd) {
+                $demands[] = $sfd;
+            }
+        }
+
         $siloDemands = $this->estimateSiloSiegeDemand($empire, $world);
         if (!empty($siloDemands)) {
             foreach ($siloDemands as $sd) {
@@ -409,7 +417,8 @@ class BotLogisticsPlanner
 
         $intel = null;
         if ($world !== null && isset($world->intel)) {
-            $intel = $world->intel->getIntel($lockedGalaxy, $lockedSystem, $lockedPlanet, 1, 4.0);
+            $intelHalfLife = isset($this->ctx->difficulty->intelMaxAgeHours) ? (float)$this->ctx->difficulty->intelMaxAgeHours : 16.0;
+            $intel = $world->intel->getIntel($lockedGalaxy, $lockedSystem, $lockedPlanet, 1, $intelHalfLife);
         }
 
         $targetDefenders = array();
@@ -470,6 +479,43 @@ class BotLogisticsPlanner
             'required'         => array('metal' => 0.0, 'crystal' => 0.0, 'deuterium' => $totalFuelNeeded),
             'reason'           => "Combustible para armada de asalto y recicladores con 25% de margen hacia [{$lockedGalaxy}:{$lockedSystem}:{$lockedPlanet}]",
         );
+    }
+
+    /**
+     * Priority 1: Estimate military fuel demand for colonies with large garrisons needing to deploy to FOB
+     */
+    public function estimateStagingFuelDemands(BotEmpireState $empire, $hubPlanetId)
+    {
+        if ($hubPlanetId <= 0) {
+            return array();
+        }
+        global $reslist, $resource;
+        $demands = array();
+        $fleetList = (isset($reslist['fleet']) && is_array($reslist['fleet'])) ? $reslist['fleet'] : array();
+
+        foreach ($empire->getPlanets() as $pId => $pBody) {
+            if ($pId == $hubPlanetId) continue;
+            $pData = $pBody['data'];
+
+            $combatShipsCount = 0;
+            foreach ($fleetList as $sId) {
+                if (in_array($sId, array(202, 203, 208, 209, 210, 212, 217, 219, 233))) continue;
+                $combatShipsCount += (int)($pData[$resource[$sId]] ?? 0);
+            }
+
+            $deutAvail = (float)($pData['deuterium'] ?? 0.0);
+            if ($combatShipsCount >= 5000 && $deutAvail < 100000000.0) {
+                $demands[] = array(
+                    'target_planet_id' => $pId,
+                    'type'             => 'military_fuel',
+                    'priority'         => 1,
+                    'urgency_score'    => 8500.0,
+                    'required'         => array('metal' => 0.0, 'crystal' => 0.0, 'deuterium' => 150000000.0),
+                    'reason'           => "Combustible de despliegue para armada de refuerzo en colonia #{$pId} (" . number_format($combatShipsCount) . " naves)",
+                );
+            }
+        }
+        return $demands;
     }
 
     /**

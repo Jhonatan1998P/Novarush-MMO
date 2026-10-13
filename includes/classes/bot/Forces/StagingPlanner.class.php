@@ -108,34 +108,58 @@ class BotStagingPlanner
 
         $fleetList = (isset($reslist['fleet']) && is_array($reslist['fleet'])) ? $reslist['fleet'] : array();
 
-        // Check if the fleet already stationed on FOB is sufficient (>90% win rate)
-        if (!empty($targetDefenders)) {
-            $fobData = $target['data'];
-            $fobCombatFleet = array();
-            foreach ($fleetList as $shipId) {
-                if (in_array($shipId, array(202, 203, 208, 209, 210, 212, 217, 219, 233))) continue;
-                $cnt = isset($fobData[$resource[$shipId]]) ? (int)$fobData[$resource[$shipId]] : 0;
-                if ($cnt > 0) {
-                    $fobCombatFleet[$shipId] = $cnt;
+        $fobData = $target['data'];
+        $fobCombatFleet = array();
+        foreach ($fleetList as $shipId) {
+            if (in_array($shipId, array(202, 203, 208, 209, 210, 212, 217, 219, 233))) continue;
+            $cnt = isset($fobData[$resource[$shipId]]) ? (int)$fobData[$resource[$shipId]] : 0;
+            if ($cnt > 0) {
+                $fobCombatFleet[$shipId] = $cnt;
+            }
+        }
+
+        $db = Database::get();
+
+        // Query active in-flight deployments to FOB to count effective firepower
+        $activeInbound = $db->select("SELECT fleet_array FROM %%FLEETS%% WHERE fleet_owner = :botId AND fleet_end_id = :fobId AND fleet_mission = 4 AND fleet_mess = 0;", array(
+            ':botId' => $this->ctx->botId,
+            ':fobId' => $stagingBaseId
+        ));
+        $effectiveFobFleet = $fobCombatFleet;
+        if (!empty($activeInbound)) {
+            foreach ($activeInbound as $aib) {
+                $fArr = FleetFunctions::unserialize($aib['fleet_array']);
+                if (is_array($fArr)) {
+                    foreach ($fArr as $sId => $cnt) {
+                        $sId = (int)$sId;
+                        if (in_array($sId, array(202, 203, 208, 209, 210, 212, 217, 219, 233))) continue;
+                        $effectiveFobFleet[$sId] = ($effectiveFobFleet[$sId] ?? 0) + (int)$cnt;
+                    }
                 }
             }
+        }
 
-            if (!empty($fobCombatFleet)) {
+        // Check if the fleet already stationed or inbound to FOB is sufficient (>90% win rate or massive garrison)
+        if (!empty($targetDefenders)) {
+            if (!empty($effectiveFobFleet)) {
                 $sim = BotCombatOracle::evaluate(
-                    $fobCombatFleet,
+                    $effectiveFobFleet,
                     $targetDefenders,
                     array('id' => $this->ctx->botId, 'factor' => $this->ctx->user['factor']),
                     array('id' => 0, 'factor' => array()),
                     1
                 );
                 if (isset($sim['win_probability']) && $sim['win_probability'] >= 0.90) {
-                    // Local FOB firepower already exceeds 90% win rate; keep remaining fleets stationed
+                    // Local FOB firepower + inbound deployments already exceeds 90% win rate; keep remaining fleets stationed
                     return 0;
                 }
             }
+        } else {
+            // Si el objetivo está indefenso o la inteligencia aún no reporta defensores, pero la FOB ya cuenta con guarnición respetable (>= 5,000 naves de combate), no saturar en despliegues
+            if (!empty($effectiveFobFleet) && array_sum($effectiveFobFleet) >= 5000) {
+                return 0;
+            }
         }
-
-        $db = Database::get();
 
         // Reserve 1 slot for the campaign assault strike, strictly respecting shielded military slots
         $maxSlots       = FleetFunctions::GetMaxFleetSlots($this->ctx->user);
@@ -229,6 +253,7 @@ class BotStagingPlanner
             }
 
             // Check combat & campaign logistics ships
+            $candidateShips = array();
             foreach ($fleetList as $shipId) {
                 // Non-tactical civil units that should never rally (colonizers, probes, satellites, terraformers)
                 if (in_array($shipId, array(208, 210, 212, 233))) {
@@ -243,7 +268,7 @@ class BotStagingPlanner
                     $retained = $keepTrans[$shipId] ?? 0;
                     $rallyQty = max(0, $cnt - $retained);
                     if ($rallyQty > 0) {
-                        $combatShips[$shipId] = $rallyQty;
+                        $candidateShips[$shipId] = $rallyQty;
                     }
                 }
                 // Recyclers: retain units to cover at least 2h physical production, rally the rest
@@ -251,23 +276,124 @@ class BotStagingPlanner
                     $retained = $keepRec[$shipId] ?? 0;
                     $rallyQty = max(0, $cnt - $retained);
                     if ($rallyQty > 0) {
-                        $combatShips[$shipId] = $rallyQty;
+                        $candidateShips[$shipId] = $rallyQty;
                     }
                 }
-                // Combat warships: 100% rally to FOB
+                // Combat warships:
                 else {
-                    $combatShips[$shipId] = $cnt;
+                    $candidateShips[$shipId] = $cnt;
                 }
             }
 
             // Minimum squadron size of 25 combat ships to avoid slot exhaustion
-            if (empty($combatShips) || array_sum($combatShips) < 25) {
+            if (empty($candidateShips) || array_sum($candidateShips) < 25) {
+                continue;
+            }
+
+            // 3. FMA Sizing & Fuel-Aware Budgeting
+            $stockDeut = (float)($pData['deuterium'] ?? 0.0);
+            $fuelBudget = max(0.0, $stockDeut * 0.90); // Reserve 10% for local operations
+            if ($fuelBudget < 500.0) {
+                continue; // Insufficient local fuel to launch any deploy
+            }
+
+            $origCoords   = array((int)$pData['galaxy'], (int)$pData['system'], (int)$pData['planet']);
+            $targetCoords = array((int)$target['galaxy'], (int)$target['system'], (int)$target['planet']);
+            $dist         = FleetFunctions::GetTargetDistance($origCoords, $targetCoords);
+            $gameSpeed    = FleetFunctions::GetGameSpeedFactor();
+
+            // Sizing: prioritize capital and heavy warships
+            $selectedShips = array();
+            if (!empty($targetDefenders)) {
+                $targetMSE = 0.0;
+                foreach ($targetDefenders as $dId => $dCnt) {
+                    $targetMSE += BotEconomyValuator::getElementPriceMSE((int)$dId, (float)$dCnt);
+                }
+                $targetCapMSE = $targetMSE * 2.2;
+                $currentMSE = 0.0;
+                foreach ($effectiveFobFleet as $sId => $cnt) {
+                    $currentMSE += BotEconomyValuator::getElementPriceMSE((int)$sId, (float)$cnt);
+                }
+                $remNeededMSE = max(50000000.0, ($targetCapMSE * 1.15) - $currentMSE);
+
+                $priorityOrder = array(213, 225, 215, 211, 206, 207, 205, 204, 217, 203, 219, 209, 202);
+                $accumMSE = 0.0;
+                foreach ($priorityOrder as $sId) {
+                    if (empty($candidateShips[$sId])) continue;
+                    $priceMSE = BotEconomyValuator::getElementPriceMSE($sId, 1);
+                    if ($priceMSE <= 0) $priceMSE = 1000.0;
+                    $avail = $candidateShips[$sId];
+                    if ($accumMSE < $remNeededMSE) {
+                        $take = min($avail, (int)ceil(($remNeededMSE - $accumMSE) / $priceMSE));
+                        if ($take > 0) {
+                            $selectedShips[$sId] = $take;
+                            $accumMSE += ($take * $priceMSE);
+                        }
+                    }
+                }
+                // Include utility ships (transporters/recyclers) if present
+                foreach (array(217, 203, 219, 209) as $sId) {
+                    if (!empty($candidateShips[$sId]) && empty($selectedShips[$sId])) {
+                        $selectedShips[$sId] = $candidateShips[$sId];
+                    }
+                }
+            }
+
+            if (empty($selectedShips) || array_sum($selectedShips) < 25) {
+                $selectedShips = $candidateShips;
+            }
+
+            // Determine optimal speed factor (10 down to 1) that fits within fuelBudget
+            $fleetSpeed = FleetFunctions::GetFleetMaxSpeed($selectedShips, $this->ctx->user);
+            $chosenSpeed = 0;
+            $chosenConsumption = 0;
+
+            for ($spd = 10; $spd >= 1; $spd--) {
+                $dur = FleetFunctions::GetMissionDuration($spd, $fleetSpeed, $dist, $gameSpeed, $this->ctx->user);
+                $cons = FleetFunctions::GetFleetConsumption($selectedShips, $dur, $dist, $this->ctx->user, $gameSpeed);
+                if ($cons <= $fuelBudget) {
+                    $chosenSpeed = $spd;
+                    $chosenConsumption = $cons;
+                    break;
+                }
+            }
+
+            // If even at 10% speed consumption exceeds fuelBudget, scale down fleet to fit budget safely
+            if ($chosenSpeed === 0) {
+                $dur1 = FleetFunctions::GetMissionDuration(1, $fleetSpeed, $dist, $gameSpeed, $this->ctx->user);
+                $cons1 = FleetFunctions::GetFleetConsumption($selectedShips, $dur1, $dist, $this->ctx->user, $gameSpeed);
+                if ($cons1 > 0) {
+                    $scale = min(0.95, ($fuelBudget / $cons1) * 0.90);
+                    $scaled = array();
+                    foreach ($selectedShips as $sId => $cnt) {
+                        $nCnt = (int)floor($cnt * $scale);
+                        if ($nCnt > 0) {
+                            $scaled[$sId] = $nCnt;
+                        }
+                    }
+                    if (!empty($scaled) && array_sum($scaled) >= 25) {
+                        $selectedShips = $scaled;
+                        $fleetSpeed = FleetFunctions::GetFleetMaxSpeed($selectedShips, $this->ctx->user);
+                        for ($spd = 10; $spd >= 1; $spd--) {
+                            $dur = FleetFunctions::GetMissionDuration($spd, $fleetSpeed, $dist, $gameSpeed, $this->ctx->user);
+                            $cons = FleetFunctions::GetFleetConsumption($selectedShips, $dur, $dist, $this->ctx->user, $gameSpeed);
+                            if ($cons <= $fuelBudget) {
+                                $chosenSpeed = $spd;
+                                $chosenConsumption = $cons;
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+
+            if ($chosenSpeed <= 0 || empty($selectedShips) || array_sum($selectedShips) < 25) {
                 continue;
             }
 
             // Launch Deploy (Mission 4)
             $ok = $this->gateway->launchFleet(
-                $combatShips,
+                $selectedShips,
                 4, // Mission 4: Stay / Deploy
                 $pId,
                 $target['id'],
@@ -277,18 +403,21 @@ class BotStagingPlanner
                 $target['planet'],
                 $target['planet_type'],
                 array(),
-                10
+                $chosenSpeed
             );
 
             if ($ok) {
                 $rallied++;
                 $actualFleets++;
+                foreach ($selectedShips as $sId => $sCnt) {
+                    $effectiveFobFleet[$sId] = ($effectiveFobFleet[$sId] ?? 0) + $sCnt;
+                }
                 $this->ctx->decisionLog->record(
                     'fleet_staging',
-                    "Rallied combat fleet from colony #{$pId} to FOB #{$stagingBaseId} to consolidate firepower",
-                    array('from' => $pId, 'to' => $stagingBaseId, 'ships' => $combatShips),
+                    "Rallied combat fleet from colony #{$pId} to FOB #{$stagingBaseId} to consolidate firepower (Speed: {$chosenSpeed}0%, Ships: " . number_format(array_sum($selectedShips)) . ", Fuel: " . number_format($chosenConsumption) . " Deut)",
+                    array('from' => $pId, 'to' => $stagingBaseId, 'ships' => $selectedShips, 'speed' => $chosenSpeed, 'fuel' => $chosenConsumption),
                     "rally_{$pId}_to_{$stagingBaseId}",
-                    array_sum($combatShips)
+                    array_sum($selectedShips)
                 );
             }
         }

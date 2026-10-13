@@ -87,6 +87,16 @@ class MissionCaseSpy extends MissionFunctions implements Mission
 		$SpyDef			= $fleetAmount >= $MinAmount + 1 * SPY_VIEW_FACTOR;
 		$SpyBuild		= $fleetAmount >= $MinAmount + 3 * SPY_VIEW_FACTOR;
 		$SpyTechno		= $fleetAmount >= $MinAmount + 5 * SPY_VIEW_FACTOR;
+
+		// NovaRush Bot AI: Infallible Espionage Bypass (100% full intel regardless of tech difference or counter-espionage)
+		$dbInst = Database::get();
+		$isSenderBot = $dbInst->selectSingle("SELECT bot_id FROM " . DB_PREFIX . "bots WHERE bot_id = :id AND is_active = 1 LIMIT 1;", array(':id' => (int)$this->_fleet['fleet_owner']));
+		if (!empty($isSenderBot)) {
+			$SpyFleet   = true;
+			$SpyDef     = true;
+			$SpyBuild   = true;
+			$SpyTechno  = true;
+		}
 			
 
 		$classIDs[900]	= array_merge($reslist['resstype'][1], $reslist['resstype'][2]);
@@ -258,17 +268,14 @@ class MissionCaseSpy extends MissionFunctions implements Mission
 		}
 
 		$LNG			= $this->getLanguage($targetUser['lang']);
-		$targetMessage  = $LNG['sys_mess_spy_ennemyfleet'] ." ". $senderPlanetName;
 
-		if($this->_fleet['fleet_start_type'] == 3)
-		{
-			$targetMessage .= $LNG['sys_mess_spy_report_moon'].' ';
-		}
-
-		$attackerCoords = array(
-			'galaxy' => $this->_fleet['fleet_start_galaxy'],
-			'system' => $this->_fleet['fleet_start_system'],
-			'planet' => $this->_fleet['fleet_start_planet']
+		$attackerInfo = array(
+			'player_name' => $senderUser['username'] ?? '',
+			'planet_name' => $senderPlanetName ?? '',
+			'galaxy'      => $this->_fleet['fleet_start_galaxy'],
+			'system'      => $this->_fleet['fleet_start_system'],
+			'planet'      => $this->_fleet['fleet_start_planet'],
+			'planet_type' => $this->_fleet['fleet_start_type']
 		);
 		$targetInfo = array(
 			'name'        => $targetPlanet['name'] ?? '',
@@ -279,7 +286,7 @@ class MissionCaseSpy extends MissionFunctions implements Mission
 			'image'       => $targetPlanet['image'] ?? 'normaltempplanet01'
 		);
 
-		$targetMessage = MessageTemplateHelper::buildSpyAlertCard($attackerCoords, $targetInfo, $LNG);
+		$targetMessage = MessageTemplateHelper::buildSpyAlertCard($attackerInfo, $targetInfo, $LNG);
 
 		PlayerUtil::sendMessage($this->_fleet['fleet_target_owner'], 0, $LNG['sys_mess_spy_control'], 0,
 			$LNG['sys_mess_spy_activity'], $targetMessage, $this->_fleet['fleet_start_time'], NULL, 1, $this->_fleet['fleet_universe']);

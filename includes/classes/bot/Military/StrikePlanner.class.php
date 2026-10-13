@@ -58,6 +58,13 @@ class BotStrikePlanner
         // 0. PRE-IMPACT VERIFICATION: Check in-flight fleets for ninja/anomalies (Section 2.5)
         $this->verifyInFlightStrikes($world);
 
+        // 0.1 GLOBAL SCAN COOLDOWN CHECK:
+        // Si el bot evaluó exhaustivamente todos los candidatos del universo en un ciclo anterior y ninguno
+        // fue atacable, entra en pausa de 1 hora para recargar deuterio y no consumir CPU inútilmente.
+        if (BotTargetBlacklist::isGlobalScanOnCooldown($this->ctx->botId)) {
+            return $this->executeParallelFarming($world, $basePlanet, $targetCandidates);
+        }
+
         // 1. EVALUATE ACTIVE TARGET LOCK (Campaign)
         $lockedGalaxy = isset($this->ctx->botRow['target_galaxy']) ? (int)$this->ctx->botRow['target_galaxy'] : 0;
         $lockedSystem = isset($this->ctx->botRow['target_system']) ? (int)$this->ctx->botRow['target_system'] : 0;
@@ -93,22 +100,93 @@ class BotStrikePlanner
                 $this->releaseLock("Objetivo es cuenta de administrador protegida", "{$lockedGalaxy}:{$lockedSystem}:{$lockedPlanet}");
             } elseif (!empty($pRow['urlaubs_modus'])) {
                 $this->releaseLock("El jugador defensor activó Modo Vacaciones", "{$lockedGalaxy}:{$lockedSystem}:{$lockedPlanet}");
-            } elseif (BotTargetBlacklist::isBlacklisted($this->ctx->botId, (int)$pRow['id_owner'], (int)$pRow['id'], $lockedGalaxy, $lockedSystem, $lockedPlanet)) {
-                $this->releaseLock("Objetivo en lista negra de 24 horas tras alcanzar límite de 3 ataques por jugador", "{$lockedGalaxy}:{$lockedSystem}:{$lockedPlanet}");
+            } elseif (BotTargetBlacklist::isPlayerBlacklisted($this->ctx->botId, (int)$pRow['id_owner'])) {
+                $this->releaseLock("Objetivo en lista negra de 24 horas tras alcanzar límite de victorias por jugador (Anti-Bashing)", "{$lockedGalaxy}:{$lockedSystem}:{$lockedPlanet}");
             } else {
                 // Fetch latest intel synced to difficulty half-life (16.0h on Nightmare)
                 $intelHalfLife = isset($this->ctx->difficulty->intelMaxAgeHours) ? (float)$this->ctx->difficulty->intelMaxAgeHours : 16.0;
                 $intel = $world->intel->getIntel($lockedGalaxy, $lockedSystem, $lockedPlanet, 1, $intelHalfLife);
 
+                // --- DYNAMIC RECLASSIFICATION ENGINE (NovaRush Real-Time Tactical Adaptation) ---
+                if ($intel !== null && $intel['confidence'] >= 0.4) {
+                    $hasHostileFleet = false;
+                    $hasHeavyDefs    = false;
+                    $fodderCount     = 0;
+                    if (!empty($intel['fleet']) && is_array($intel['fleet'])) {
+                        foreach ($intel['fleet'] as $sId => $cnt) {
+                            if ($cnt <= 0 || in_array($sId, array(202, 203, 208, 209, 210, 212, 217, 219, 233))) continue;
+                            if (in_array($sId, array(204, 205))) {
+                                $fodderCount += (int)$cnt;
+                            } else {
+                                $hasHostileFleet = true;
+                                break;
+                            }
+                        }
+                    }
+                    if (!$hasHostileFleet && $fodderCount > 50) {
+                        $hasHostileFleet = true;
+                    }
+
+                    if (!empty($intel['defense']) && is_array($intel['defense'])) {
+                        foreach ($intel['defense'] as $dId => $dCnt) {
+                            if ($dCnt <= 0 || $dId == 502) continue;
+                            if ($dId > 402) {
+                                $hasHeavyDefs = true;
+                                break;
+                            } else {
+                                $fodderCount += (int)$dCnt;
+                            }
+                        }
+                    }
+                    if (!$hasHeavyDefs && $fodderCount > 50) {
+                        $hasHeavyDefs = true;
+                    }
+
+                    // A) Ascender dinámicamente de 'farming' -> 'fleet_crash' si hay guarnición hostil
+                    if ($lockedType === 'farming' && ($hasHostileFleet || $hasHeavyDefs)) {
+                        $newType = 'fleet_crash';
+                        $lockedType = $newType;
+                        $db->update("UPDATE " . DB_PREFIX . "bots SET target_type = :tt WHERE bot_id = :bId;", array(
+                            ':tt'  => $newType,
+                            ':bId' => $this->ctx->botId
+                        ));
+                        $this->ctx->botRow['target_type'] = $newType;
+                        $this->ctx->decisionLog->record(
+                            'target_reclassified',
+                            "Reclasificación dinámica en caliente: Objetivo [{$lockedGalaxy}:{$lockedSystem}:{$lockedPlanet}] ascendido de 'farming' a 'fleet_crash' tras confirmar presencia de guarnición hostil (" . ($hasHostileFleet ? "flota de combate" : "defensas pesadas") . ").",
+                            array('target' => "{$lockedGalaxy}:{$lockedSystem}:{$lockedPlanet}", 'old_type' => 'farming', 'new_type' => 'fleet_crash'),
+                            "reclass_{$lockedGalaxy}_{$lockedSystem}_{$lockedPlanet}",
+                            4000.0
+                        );
+                    }
+                    // B) Desescalar dinámicamente de 'fleet_crash' -> 'farming' si la flota enemiga evacuó
+                    elseif ($lockedType === 'fleet_crash' && !$hasHostileFleet && !$hasHeavyDefs) {
+                        $newType = 'farming';
+                        $lockedType = $newType;
+                        $db->update("UPDATE " . DB_PREFIX . "bots SET target_type = :tt WHERE bot_id = :bId;", array(
+                            ':tt'  => $newType,
+                            ':bId' => $this->ctx->botId
+                        ));
+                        $this->ctx->botRow['target_type'] = $newType;
+                        $this->ctx->decisionLog->record(
+                            'target_reclassified',
+                            "Reclasificación dinámica en caliente: Objetivo [{$lockedGalaxy}:{$lockedSystem}:{$lockedPlanet}] desescalado de 'fleet_crash' a 'farming' al constatar retirada total de la flota defensora.",
+                            array('target' => "{$lockedGalaxy}:{$lockedSystem}:{$lockedPlanet}", 'old_type' => 'fleet_crash', 'new_type' => 'farming'),
+                            "reclass_{$lockedGalaxy}_{$lockedSystem}_{$lockedPlanet}",
+                            4000.0
+                        );
+                    }
+                }
+
                 $release = false;
                 $releaseReason = '';
 
-                // Section 2.6: Anti-Sunk-Cost & Horizon Limits (80 cycles = 60 mins at 45s/cycle)
-                if ($lockedType === 'siege') {
-                    if ($siegeCycles >= 80) {
+                // Fail-Fast: Límite de horizonte estricto de asedio / asalto (3 ciclos = ~135s en lugar de 80 ciclos)
+                if (in_array($lockedType, array('siege', 'fleet_crash', 'farming'))) {
+                    if ($siegeCycles >= 3) {
                         $release = true;
-                        $releaseReason = "Límite de horizonte de asedio alcanzado (80 ciclos sin brecha defensiva)";
-                        BotTargetBlacklist::addCooldown($this->ctx->botId, (int)$pRow['id_owner'], (int)$pRow['id'], $lockedGalaxy, $lockedSystem, $lockedPlanet, 21600, $releaseReason);
+                        $releaseReason = "Fail-Fast: Límite de horizonte alcanzado (3 ciclos consecutivos sin condiciones de despegue)";
+                        BotTargetBlacklist::addCooldown($this->ctx->botId, (int)$pRow['id_owner'], (int)$pRow['id'], $lockedGalaxy, $lockedSystem, $lockedPlanet, 1800, $releaseReason);
                     } elseif ($spentSiege > 0 && $initialMse > 0 && $spentSiege > (1.2 * $initialMse)) {
                         $release = true;
                         $releaseReason = "Anti-Sunk-Cost: Gasto acumulado (" . number_format($spentSiege) . " MSE) superó el límite de rentabilidad ROI sobre el botín esperado (" . number_format($initialMse) . " MSE)";
@@ -166,10 +244,32 @@ class BotStrikePlanner
                             2
                         );
                         $empireWinProb = isset($simEmpire['win_probability']) ? (float)$simEmpire['win_probability'] : 0.0;
-                        if ($empireWinProb < 0.70) {
+                        $deployedEmpireMSE = 0.0;
+                        foreach ($empireCombatFleet as $sId => $cnt) {
+                            $deployedEmpireMSE += BotEconomyValuator::getElementPriceMSE($sId, $cnt);
+                        }
+
+                        $minRoiReq = isset($this->ctx->difficulty->minRoiRequired) ? (float)$this->ctx->difficulty->minRoiRequired : 0.20;
+                        $maxLossAllowed = isset($this->ctx->difficulty->maxOwnFleetLossRatioAllowed) ? (float)$this->ctx->difficulty->maxOwnFleetLossRatioAllowed : 0.40;
+
+                        $finEmpire = BotCombatOracle::evaluateFinancialBalance(
+                            $simEmpire,
+                            $deployedEmpireMSE,
+                            0.0,
+                            500000000000.0, // Cap amplio para verificar viabilidad macro
+                            $initialMse * 0.50
+                        );
+
+                        $isEmpireViable = ($empireWinProb >= 0.70) || (
+                            $finEmpire['is_net_profitable'] &&
+                            $finEmpire['roi'] >= $minRoiReq &&
+                            $finEmpire['att_loss_pct'] <= $maxLossAllowed
+                        );
+
+                        if (!$isEmpireViable) {
                             $release = true;
-                            $releaseReason = "Inviable militarmente para el imperio (" . round($empireWinProb * 100, 1) . "% prob victoria < 70%)";
-                            BotTargetBlacklist::addCooldown($this->ctx->botId, (int)$pRow['id_owner'], (int)$pRow['id'], $lockedGalaxy, $lockedSystem, $lockedPlanet, 86400, $releaseReason);
+                            $releaseReason = "Inviable militar/financieramente para el imperio (Win: " . round($empireWinProb * 100, 1) . "%, ROI: " . round($finEmpire['roi'] * 100, 1) . "%)";
+                            BotTargetBlacklist::addCooldown($this->ctx->botId, (int)$pRow['id_owner'], (int)$pRow['id'], $lockedGalaxy, $lockedSystem, $lockedPlanet, 1800, $releaseReason);
                         }
                     }
                 }
@@ -250,6 +350,37 @@ class BotStrikePlanner
                 }
 
                 if ($release) {
+                    // CRITICAL SAFETY GATE: Never release target or cancel tasks if missiles (mission 10)
+                    // or assault fleets (missions 1, 2) are already active in flight towards the locked target!
+                    $activeInFlightOps = $db->selectSingle("
+                        SELECT COUNT(*) as cnt 
+                        FROM %%FLEETS%% 
+                        WHERE fleet_owner = :botId 
+                          AND fleet_end_galaxy = :g 
+                          AND fleet_end_system = :s 
+                          AND fleet_end_planet = :p 
+                          AND fleet_mission IN (1, 2, 10) 
+                          AND fleet_mess = 0;
+                    ", array(
+                        ':botId' => $this->ctx->botId,
+                        ':g'     => $lockedGalaxy,
+                        ':s'     => $lockedSystem,
+                        ':p'     => $lockedPlanet
+                    ));
+
+                    if (!empty($activeInFlightOps['cnt']) && (int)$activeInFlightOps['cnt'] > 0) {
+                        $release = false;
+                        $this->ctx->decisionLog->record(
+                            'target_release_blocked',
+                            "Intento de liberación cancelado: Hay {$activeInFlightOps['cnt']} misiones activas (ataques/misiles) en vuelo hacia [{$lockedGalaxy}:{$lockedSystem}:{$lockedPlanet}]. Manteniendo objetivo bloqueado.",
+                            array('galaxy' => $lockedGalaxy, 'system' => $lockedSystem, 'planet' => $lockedPlanet, 'active_missions' => (int)$activeInFlightOps['cnt']),
+                            "block_rel_{$lockedGalaxy}_{$lockedSystem}_{$lockedPlanet}",
+                            4000.0
+                        );
+                    }
+                }
+
+                if ($release) {
                     $this->releaseLock($releaseReason, "{$lockedGalaxy}:{$lockedSystem}:{$lockedPlanet}");
                 } else {
                     $targetLocked = true;
@@ -271,243 +402,119 @@ class BotStrikePlanner
             }
         }
 
-        // 2. IF NO LOCKED TARGET, LOCK ONTO BEST QUALIFIED CAMPAIGN CANDIDATE
-        // Section 2.3: Only 'fleet_crash' and 'siege' are locked as Campaign targets!
-        // Farming targets are handled in parallel sweeps without target lock.
-        if (!$targetLocked && is_array($targetCandidates) && !empty($targetCandidates)) {
-            foreach ($targetCandidates as $cand) {
-                $cat = $cand['category'];
-                if (in_array($cat, array('fleet_crash', 'siege', 'farming'))) {
-                    $t = $cand['target'];
-                    if ((int)$t['owner_id'] === 1) {
-                        continue;
-                    }
-                    $tG = (int)$t['galaxy'];
-                    $tS = (int)$t['system'];
-                    $tP = (int)$t['planet'];
-                    $tId = isset($t['planet_id']) ? (int)$t['planet_id'] : (int)($t['id'] ?? 0);
-                    $ownerId = (int)$t['owner_id'];
+        $campaignStrikes = 0;
 
-                    if (BotTargetBlacklist::isBlacklisted($this->ctx->botId, $ownerId, $tId, $tG, $tS, $tP)) {
-                        continue;
-                    }
-
-                    $bestFobId = !empty($cand['nearest_colony_id']) ? (int)$cand['nearest_colony_id'] : $this->determineFobPlanetId($world->empire, $tG, $tS);
-
-                    $initMse = 0.0;
-                    if ($cat === 'fleet_crash') {
-                        $cfg = Config::get();
-                        $fCdr = max(0.01, ((float)$cfg->Fleet_Cdr) / 100.0);
-                        $initMse = $cand['debris_mse'] / $fCdr;
-                    } elseif ($cat === 'siege' || $cat === 'farming') {
-                        $initMse = $cand['loot_mse'] + $cand['debris_mse'];
-                    }
-
-                    $this->ctx->updateBotRow(array(
-                        'target_galaxy'      => $tG,
-                        'target_system'      => $tS,
-                        'target_planet'      => $tP,
-                        'target_type'        => $cat,
-                        'target_initial_mse' => (float)$initMse,
-                        'target_lock_time'   => TIMESTAMP,
-                        'siege_cycles'       => 0,
-                        'fob_planet_id'      => $bestFobId,
-                        'siege_spent_mse'    => 0.0,
-                    ));
-
-                    $this->ctx->decisionLog->record(
-                        'target_locked',
-                        "Campaign target locked at [{$tG}:{$tS}:{$tP}] classified as {$cat} (Initial Value: " . number_format($initMse) . " MSE, EV/h: " . number_format($cand['valor_hora'] ?? 0) . "). Designated FOB colony #{$bestFobId}",
-                        array('galaxy' => $tG, 'system' => $tS, 'planet' => $tP, 'type' => $cat, 'mse' => $initMse, 'fob_id' => $bestFobId),
-                        "lock_{$tG}_{$tS}_{$tP}",
-                        5000.0
-                    );
-
-                    $targetLocked = true;
-                    $activeTarget = array(
-                        'target'       => $t,
-                        'category'     => $cat,
-                        'initial_mse'  => $initMse,
-                        'siege_cycles' => 0,
-                        'fob_id'       => $bestFobId,
-                    );
-                    break;
+        // 2. EXECUTE MISSION AGAINST CURRENTLY LOCKED CAMPAIGN TARGET (IF ANY)
+        if ($targetLocked && !empty($activeTarget)) {
+            $execRes = $this->tryExecuteCampaignTarget($world, $activeTarget, $basePlanet, false);
+            if ($execRes['success']) {
+                $campaignStrikes += $execRes['strikes'];
+            } else {
+                // If active target failed or reached Fail-Fast horizon (3 cycles) and lock was released:
+                $stillLocked = !empty($this->ctx->botRow['target_galaxy']) &&
+                               !empty($this->ctx->botRow['target_system']) &&
+                               !empty($this->ctx->botRow['target_planet']);
+                if (!$stillLocked) {
+                    $targetLocked = false;
+                    $activeTarget = null;
                 }
             }
         }
 
-        $campaignStrikes = 0;
+        // 3. EXHAUSTIVE CANDIDATE QUEUE (CASCADE 1..N WITHOUT ARTIFICIAL LIMITS)
+        // If there is no active target lock (or previous lock was just released by Fail-Fast),
+        // sequentially evaluate every candidate in the radar.
+        if (!$targetLocked && is_array($targetCandidates) && !empty($targetCandidates)) {
+            $candidateAttempted = 0;
+            foreach ($targetCandidates as $cand) {
+                $cat = $cand['category'];
+                if (!in_array($cat, array('fleet_crash', 'siege', 'farming'))) {
+                    continue;
+                }
+                $t = $cand['target'];
+                $ownerId = (int)$t['owner_id'];
+                if ($ownerId === 1) {
+                    continue;
+                }
+                $tG = (int)$t['galaxy'];
+                $tS = (int)$t['system'];
+                $tP = (int)$t['planet'];
+                $tId = isset($t['planet_id']) ? (int)$t['planet_id'] : (int)($t['id'] ?? 0);
 
-        // 3. EXECUTE MISSION AGAINST LOCKED CAMPAIGN TARGET
-        if ($targetLocked && !empty($activeTarget)) {
-            $t = $activeTarget['target'];
-            $tId = isset($t['planet_id']) ? (int)$t['planet_id'] : (int)($t['id'] ?? 0);
-            $ownerId = (int)$t['owner_id'];
-            if ((int)$t['owner_id'] === 1) {
-                $this->releaseLock("Administrador protegido de ataques de IA", "{$t['galaxy']}:{$t['system']}:{$t['planet']}");
-            } elseif (BotTargetBlacklist::isBlacklisted($this->ctx->botId, $ownerId, $tId, (int)$t['galaxy'], (int)$t['system'], (int)$t['planet'])) {
-                $this->releaseLock("Objetivo en lista negra de 24 horas tras alcanzar límite de 3 ataques por jugador", "{$t['galaxy']}:{$t['system']}:{$t['planet']}");
-            } else {
-                $cat = $activeTarget['category'];
-                $fobId = !empty($activeTarget['fob_id']) ? $activeTarget['fob_id'] : $basePlanet['id'];
-
-                $fobBody = $world->empire->getPlanet($fobId);
-                if (empty($fobBody)) {
-                    $fobBody = $basePlanet;
-                    $fobId = (int)$fobBody['id'];
+                if (BotTargetBlacklist::isBlacklisted($this->ctx->botId, $ownerId, $tId, $tG, $tS, $tP)) {
+                    continue;
                 }
 
-                $fobData = $fobBody['data'];
+                $bestFobId = !empty($cand['nearest_colony_id']) ? (int)$cand['nearest_colony_id'] : $this->determineFobPlanetId($world->empire, $tG, $tS);
 
-                // Gather available combat fleet on FOB
-                $availableFleet = array();
-                $fleetList = (isset($reslist['fleet']) && is_array($reslist['fleet'])) ? $reslist['fleet'] : array();
-                foreach ($fleetList as $shipId) {
-                    if ($shipId == 210 || $shipId == 212 || in_array($shipId, array(208, 209, 219))) continue;
-                    $qty = isset($fobData[$resource[$shipId]]) ? (int)$fobData[$resource[$shipId]] : 0;
-                    if ($qty > 0) {
-                        $availableFleet[$shipId] = $qty;
-                    }
+                $initMse = 0.0;
+                if ($cat === 'fleet_crash') {
+                    $cfg = Config::get();
+                    $fCdr = max(0.01, ((float)$cfg->Fleet_Cdr) / 100.0);
+                    $initMse = $cand['debris_mse'] / $fCdr;
+                } elseif ($cat === 'farming') {
+                    $initMse = $cand['loot_mse'];
+                } elseif ($cat === 'siege') {
+                    $initMse = $cand['loot_mse'] + $cand['debris_mse'];
                 }
 
-                // Fetch target intel
-                $intelHalfLife = isset($this->ctx->difficulty->intelMaxAgeHours) ? (float)$this->ctx->difficulty->intelMaxAgeHours : 16.0;
-                $intel = $world->intel->getIntel($t['galaxy'], $t['system'], $t['planet'], 1, $intelHalfLife);
-                $targetDefense = (isset($intel['defense']) && is_array($intel['defense'])) ? $intel['defense'] : array();
-                $targetFleet   = (isset($intel['fleet']) && is_array($intel['fleet'])) ? $intel['fleet'] : array();
-                $targetDefenders = $targetDefense + $targetFleet;
+                $candidateTarget = array(
+                    'target'       => $t,
+                    'category'     => $cat,
+                    'initial_mse'  => $initMse,
+                    'siege_cycles' => 0,
+                    'fob_id'       => $bestFobId,
+                );
 
-                // Guard: Active strike or missiles in transit (Section 1.6 Guard)
-                $activeStrikes = $db->selectSingle("SELECT COUNT(*) as cnt, SUM(fleet_amount) as total_ships FROM %%FLEETS%% 
-                    WHERE fleet_owner = :botId 
-                      AND fleet_end_galaxy = :g 
-                      AND fleet_end_system = :s 
-                      AND fleet_end_planet = :p 
-                      AND fleet_mission IN (1, 8, 10) 
-                      AND fleet_mess = 0;", array(
-                    ':botId' => $this->ctx->botId,
-                    ':g'     => $t['galaxy'],
-                    ':s'     => $t['system'],
-                    ':p'     => $t['planet']
-                ));
+                $candidateAttempted++;
 
-                // Also check if there are pending scheduled staggered missile, fleet or recycler tasks for this target
-                $hasScheduledSalvo = BotScheduler::hasPendingTask($this->ctx->botId, 'staggered_mip_salvo')
-                                  || BotScheduler::hasPendingTask($this->ctx->botId, 'staggered_fleet_assault')
-                                  || BotScheduler::hasPendingTask($this->ctx->botId, 'staggered_recycler_dispatch');
-
-                $hasAssaultInFlight = (!empty($activeStrikes) && (int)$activeStrikes['cnt'] > 0) || $hasScheduledSalvo;
-
-                // Check if an armada deployment (Mission 4: Stay/Deploy) is currently en route to this FOB
-                $inboundDeployment = $db->selectSingle("SELECT COUNT(*) as cnt, SUM(fleet_amount) as total_ships FROM %%FLEETS%% 
-                    WHERE fleet_owner = :botId 
-                      AND fleet_end_id = :fobId 
-                      AND fleet_mission = 4 
-                      AND fleet_mess = 0;", array(
-                    ':botId' => $this->ctx->botId,
-                    ':fobId' => $fobId,
-                ));
-                $hasDeploymentInFlight = (!empty($inboundDeployment) && (int)$inboundDeployment['cnt'] > 0);
-
-                if ($hasAssaultInFlight) {
-                    $this->ctx->decisionLog->record(
-                        'strike_in_progress',
-                        "Operación táctica en curso (" . number_format((int)($activeStrikes['total_ships'] ?? 0)) . " naves/misiles en vuelo/programados) hacia [{$t['galaxy']}:{$t['system']}:{$t['planet']}]. Esperando sincronización e impacto.",
-                        array('target' => $t, 'ships' => (int)($activeStrikes['total_ships'] ?? 0)),
-                        "inflight_{$t['galaxy']}_{$t['system']}_{$t['planet']}",
-                        5000.0
-                    );
-                } elseif ($hasDeploymentInFlight) {
-                    $this->ctx->decisionLog->record(
-                        'staging_in_transit',
-                        "Armada expedicionaria en vuelo de despliegue (Misión 4: " . number_format((int)($inboundDeployment['total_ships'] ?? 0)) . " naves) aproximándose a la FOB frontera #{$fobId}. Manteniendo objetivo y sincronizando asalto al aterrizaje.",
-                        array('target' => $t, 'fob_id' => $fobId, 'ships' => (int)($inboundDeployment['total_ships'] ?? 0)),
-                        "staging_fob_{$fobId}",
-                        5000.0
-                    );
+                // Evaluate candidate for immediate assault or staging rally
+                $res = $this->tryExecuteCampaignTarget($world, $candidateTarget, $basePlanet, true);
+                if ($res['success']) {
+                    // Candidate succeeded! Lock as active target in database
+                    $this->lockCandidateTarget($candidateTarget);
+                    $campaignStrikes += $res['strikes'];
+                    $targetLocked = true;
+                    break;
                 } else {
-                    // Check if local FOB firepower has sufficient win probability; if under 80%, rally armada to this FOB
-                    $needStagingRally = false;
-                    if (in_array($cat, array('fleet_crash', 'farming')) && !empty($targetDefenders)) {
-                        $simLocal = !empty($availableFleet) ? BotCombatOracle::evaluate(
-                            $availableFleet,
-                            $targetDefenders,
-                            array('id' => $this->ctx->botId, 'factor' => $this->ctx->user['factor'] ?? array()),
-                            array('id' => (int)$t['owner_id'], 'factor' => BotCombatOracle::resolveDefenderFactors((int)$t['owner_id'], is_array($intel) ? $intel : array())),
-                            1
-                        ) : array('win_probability' => 0.0);
-
-                        $localWinProb = (float)($simLocal['win_probability'] ?? 0.0);
-                        if ($localWinProb < 0.80) {
-                            // Validar viabilidad del imperio entero antes de comprometer flotas en Misión 4
-                            $empireCombatFleet = array();
-                            global $reslist, $resource;
-                            if (isset($world->empire)) {
-                                foreach ($world->empire->getAllBodies() as $b) {
-                                    if (empty($b['data'])) continue;
-                                    foreach ($reslist['fleet'] as $sId) {
-                                        if ($sId == 210 || $sId == 212 || in_array($sId, array(208, 209, 219))) continue;
-                                        $cnt = isset($b['data'][$resource[$sId]]) ? (int)$b['data'][$resource[$sId]] : 0;
-                                        if ($cnt > 0) {
-                                            $empireCombatFleet[$sId] = isset($empireCombatFleet[$sId]) ? $empireCombatFleet[$sId] + $cnt : $cnt;
-                                        }
-                                    }
-                                }
-                            }
-                            $simEmpire = !empty($empireCombatFleet) ? BotCombatOracle::evaluate(
-                                $empireCombatFleet,
-                                $targetDefenders,
-                                array('id' => $this->ctx->botId, 'factor' => $this->ctx->user['factor'] ?? array()),
-                                array('id' => (int)$t['owner_id'], 'factor' => BotCombatOracle::resolveDefenderFactors((int)$t['owner_id'], is_array($intel) ? $intel : array())),
-                                1
-                            ) : array('win_probability' => 0.0);
-                            $empireWin = (float)($simEmpire['win_probability'] ?? 0.0);
-                            if ($empireWin < 0.70) {
-                                $reason = "Fuerza militar del imperio insuficiente para vencer al objetivo (" . round($empireWin * 100, 1) . "% < 70%). Cancelando staging.";
-                                BotTargetBlacklist::addCooldown($this->ctx->botId, (int)$t['owner_id'], (int)($t['planet_id'] ?? 0), (int)$t['galaxy'], (int)$t['system'], (int)$t['planet'], 86400, $reason);
-                                $this->releaseLock($reason, "{$t['galaxy']}:{$t['system']}:{$t['planet']}");
-                                return 0;
-                            }
-                            $needStagingRally = true;
-                        }
-                    }
-
-                    if ($needStagingRally && isset($world->empire)) {
-                        require_once 'includes/classes/bot/Forces/StagingPlanner.class.php';
-                        $stagingPlanner = new BotStagingPlanner($this->ctx, $this->gateway);
-                        $rallied = $stagingPlanner->rallyFleets($world->empire, $fobId, $targetDefenders);
-                        if ($rallied > 0) {
-                            $this->ctx->decisionLog->record(
-                                'campaign_staging_dispatched',
-                                "Desplegada armada de refuerzo desde el bastión hacia la nueva FOB frontera #{$fobId} para alcanzar superioridad militar contra [{$t['galaxy']}:{$t['system']}:{$t['planet']}].",
-                                array('target' => $t, 'fob_id' => $fobId, 'rallied_fleets' => $rallied),
-                                "stage_fob_{$fobId}",
-                                5000.0
-                            );
-                        } else {
-                            if ($cat === 'siege') {
-                                $campaignStrikes += $this->executeSiegeCampaign($world, $t, $activeTarget, $targetDefense, $targetDefenders, $intel, $fobData, $fobId);
-                            } elseif ($cat === 'fleet_crash') {
-                                $campaignStrikes += $this->executeFleetCrashCampaign($world, $t, $activeTarget, $targetDefense, $targetFleet, $targetDefenders, $intel, $fobData, $fobId, $availableFleet);
-                            } elseif ($cat === 'farming') {
-                                $campaignStrikes += $this->executeFarmingCampaign($world, $t, $activeTarget, $targetDefense, $targetDefenders, $intel, $fobData, $fobId);
-                            }
-                        }
-                    } else {
-                        // --- BRANCH A: TACTICAL MULTI-STEP SIEGE (Sections 1.1 - 1.6) ---
-                        if ($cat === 'siege') {
-                            $campaignStrikes += $this->executeSiegeCampaign($world, $t, $activeTarget, $targetDefense, $targetDefenders, $intel, $fobData, $fobId);
-                        }
-                        // --- BRANCH B: FLEET CRASH (Sections 2 & 3) ---
-                        elseif ($cat === 'fleet_crash') {
-                            $campaignStrikes += $this->executeFleetCrashCampaign($world, $t, $activeTarget, $targetDefense, $targetFleet, $targetDefenders, $intel, $fobData, $fobId, $availableFleet);
-                        }
-                        // --- BRANCH C: FOCUSED HIGH-VALUE FARMING CAMPAIGN ---
-                        elseif ($cat === 'farming') {
-                            $campaignStrikes += $this->executeFarmingCampaign($world, $t, $activeTarget, $targetDefense, $targetDefenders, $intel, $fobData, $fobId);
-                        }
-                    }
+                    // Candidate failed (fuel deficit, lack of local force, or slots full).
+                    // Apply short 15-minute cooldown (900s) to this target so we don't repeat it immediately,
+                    // and continue to the next candidate in the queue!
+                    BotTargetBlacklist::addCooldown(
+                        $this->ctx->botId,
+                        $ownerId,
+                        $tId,
+                        $tG,
+                        $tS,
+                        $tP,
+                        900,
+                        "Candidato descartado en cola exhaustiva: {$res['reason']}"
+                    );
+                    $this->ctx->decisionLog->record(
+                        'candidate_fallback_next',
+                        "Candidato [{$tG}:{$tS}:{$tP}] falló ({$res['reason']}). Cooldown de 15m aplicado; pasando al siguiente candidato de la cola.",
+                        array('target' => $t, 'reason' => $res['reason']),
+                        "fallback_{$tG}_{$tS}_{$tP}",
+                        3000.0
+                    );
                 }
+            }
+
+            // If ALL candidates in the radar were attempted/exhausted and none could be attacked:
+            if (!$targetLocked && $candidateAttempted > 0) {
+                // Engage 1-hour global scan cooldown!
+                BotTargetBlacklist::setGlobalScanCooldown(
+                    $this->ctx->botId,
+                    3600,
+                    "Todos los candidatos del radar ({$candidateAttempted} evaluados) fallaron por fuerza, combustible o slots. Cooldown de 1 hora."
+                );
+                $this->ctx->decisionLog->record(
+                    'global_scan_cooldown_engaged',
+                    "Todos los candidatos del radar ({$candidateAttempted} objetivos) evaluados exhaustivamente; ninguno es atacable en este momento. Entrando en enfriamiento estratégico de 1 hora antes de reintentar el ciclo militar.",
+                    array('candidates_evaluated' => $candidateAttempted),
+                    "global_cooldown_{$this->ctx->botId}",
+                    5000.0
+                );
             }
         }
 
@@ -516,6 +523,290 @@ class BotStrikePlanner
         $farmStrikes = $this->executeParallelFarming($world, $basePlanet, $targetCandidates);
 
         return $campaignStrikes + $farmStrikes;
+    }
+
+    /**
+     * Locks a candidate as the active campaign target in the bot table.
+     */
+    private function lockCandidateTarget(array $candTarget)
+    {
+        $t = $candTarget['target'];
+        $cat = $candTarget['category'];
+        $initMse = (float)($candTarget['initial_mse'] ?? 0.0);
+        $bestFobId = (int)($candTarget['fob_id'] ?? 0);
+        $tG = (int)$t['galaxy'];
+        $tS = (int)$t['system'];
+        $tP = (int)$t['planet'];
+
+        $this->ctx->updateBotRow(array(
+            'target_galaxy'      => $tG,
+            'target_system'      => $tS,
+            'target_planet'      => $tP,
+            'target_type'        => $cat,
+            'target_initial_mse' => $initMse,
+            'target_lock_time'   => TIMESTAMP,
+            'siege_cycles'       => 0,
+            'fob_planet_id'      => $bestFobId,
+            'siege_spent_mse'    => 0.0,
+        ));
+
+        $this->ctx->decisionLog->record(
+            'target_locked',
+            "Campaign target locked at [{$tG}:{$tS}:{$tP}] classified as {$cat} (Initial Value: " . number_format($initMse) . " MSE). Designated FOB colony #{$bestFobId}",
+            array('galaxy' => $tG, 'system' => $tS, 'planet' => $tP, 'type' => $cat, 'mse' => $initMse, 'fob_id' => $bestFobId),
+            "lock_{$tG}_{$tS}_{$tP}",
+            5000.0
+        );
+    }
+
+    /**
+     * Attempts execution of a campaign target (active or candidate).
+     *
+     * @param BotWorldModel $world
+     * @param array $activeTarget
+     * @param array $basePlanet
+     * @param bool $isCandidate True if evaluating an uncommitted candidate from queue
+     * @return array ['success' => bool, 'strikes' => int, 'reason' => string]
+     */
+    private function tryExecuteCampaignTarget(
+        BotWorldModel $world,
+        array $activeTarget,
+        array $basePlanet,
+        $isCandidate = false
+    ) {
+        global $resource, $reslist;
+        $db = Database::get();
+
+        $t = $activeTarget['target'];
+        $tG = (int)$t['galaxy'];
+        $tS = (int)$t['system'];
+        $tP = (int)$t['planet'];
+        $tId = isset($t['planet_id']) ? (int)$t['planet_id'] : (int)($t['id'] ?? 0);
+        $ownerId = (int)$t['owner_id'];
+
+        if ($ownerId === 1) {
+            if (!$isCandidate) {
+                $this->releaseLock("Administrador protegido de ataques de IA", "{$tG}:{$tS}:{$tP}");
+            }
+            return array('success' => false, 'strikes' => 0, 'reason' => 'Administrador protegido');
+        }
+
+        if (!$isCandidate && BotTargetBlacklist::isPlayerBlacklisted($this->ctx->botId, $ownerId)) {
+            $this->releaseLock("Objetivo en lista negra de 24 horas (Anti-Bashing)", "{$tG}:{$tS}:{$tP}");
+            return array('success' => false, 'strikes' => 0, 'reason' => 'Objetivo en lista negra o tregua');
+        } elseif ($isCandidate && BotTargetBlacklist::isBlacklisted($this->ctx->botId, $ownerId, $tId, $tG, $tS, $tP)) {
+            return array('success' => false, 'strikes' => 0, 'reason' => 'Candidato en lista negra o enfriamiento temporal');
+        }
+
+        $cat = $activeTarget['category'];
+        $fobId = !empty($activeTarget['fob_id']) ? (int)$activeTarget['fob_id'] : (int)$basePlanet['id'];
+
+        $fobBody = $world->empire->getPlanet($fobId);
+        if (empty($fobBody)) {
+            $fobBody = $basePlanet;
+            $fobId = (int)$fobBody['id'];
+        }
+
+        $fobData = $fobBody['data'];
+
+        // Gather available combat fleet on FOB
+        $availableFleet = array();
+        $fleetList = (isset($reslist['fleet']) && is_array($reslist['fleet'])) ? $reslist['fleet'] : array();
+        foreach ($fleetList as $shipId) {
+            if ($shipId == 210 || $shipId == 212 || in_array($shipId, array(208, 209, 219))) continue;
+            $qty = isset($fobData[$resource[$shipId]]) ? (int)$fobData[$resource[$shipId]] : 0;
+            if ($qty > 0) {
+                $availableFleet[$shipId] = $qty;
+            }
+        }
+
+        // Fetch target intel
+        $intelHalfLife = isset($this->ctx->difficulty->intelMaxAgeHours) ? (float)$this->ctx->difficulty->intelMaxAgeHours : 16.0;
+        $intel = $world->intel->getIntel($tG, $tS, $tP, 1, $intelHalfLife);
+        $targetDefense = (isset($intel['defense']) && is_array($intel['defense'])) ? $intel['defense'] : array();
+        $targetFleet   = (isset($intel['fleet']) && is_array($intel['fleet'])) ? $intel['fleet'] : array();
+        $targetDefenders = $targetDefense + $targetFleet;
+
+        // Check if strike or missiles are already in flight towards this target (Missions 1: Attack, 2: ACS Attack)
+        $activeStrikes = $db->selectSingle("SELECT COUNT(*) as cnt, SUM(fleet_amount) as total_ships FROM %%FLEETS%% 
+            WHERE fleet_owner = :botId 
+              AND fleet_end_galaxy = :g 
+              AND fleet_end_system = :s 
+              AND fleet_end_planet = :p 
+              AND fleet_mission IN (1, 2) 
+              AND fleet_mess = 0;", array(
+            ':botId' => $this->ctx->botId,
+            ':g'     => $tG,
+            ':s'     => $tS,
+            ':p'     => $tP
+        ));
+
+        // Detect active in-flight missile salvos (Mission 10: Missile Attack)
+        $activeMissiles = $db->selectSingle("SELECT COUNT(*) as cnt, MAX(fleet_start_time) as max_impact, SUM(fleet_amount) as total_mips FROM %%FLEETS%% 
+            WHERE fleet_owner = :botId 
+              AND fleet_end_galaxy = :g 
+              AND fleet_end_system = :s 
+              AND fleet_end_planet = :p 
+              AND fleet_mission = 10 
+              AND fleet_mess = 0;", array(
+            ':botId' => $this->ctx->botId,
+            ':g'     => $tG,
+            ':s'     => $tS,
+            ':p'     => $tP
+        ));
+
+        $hasScheduledSalvo = BotScheduler::hasPendingTaskForTarget(
+            $this->ctx->botId,
+            array('staggered_mip_salvo', 'staggered_fleet_assault', 'staggered_recycler_dispatch'),
+            $tG,
+            $tS,
+            $tP
+        );
+
+        $hasAssaultInFlight = (!empty($activeStrikes) && (int)$activeStrikes['cnt'] > 0);
+        $hasMissilesInFlight = (!empty($activeMissiles) && (int)$activeMissiles['cnt'] > 0);
+
+        // Check if armada deployment (Mission 4) is currently en route to this FOB
+        $inboundDeployment = $db->selectSingle("SELECT COUNT(*) as cnt, SUM(fleet_amount) as total_ships FROM %%FLEETS%% 
+            WHERE fleet_owner = :botId 
+              AND fleet_end_id = :fobId 
+              AND fleet_mission = 4 
+              AND fleet_mess = 0;", array(
+            ':botId' => $this->ctx->botId,
+            ':fobId' => $fobId,
+        ));
+        $hasDeploymentInFlight = (!empty($inboundDeployment) && (int)$inboundDeployment['cnt'] > 0);
+
+        // If assault fleet is already in flight, OR if missiles are in flight AND assault is already scheduled:
+        if ($hasAssaultInFlight || ($hasMissilesInFlight && $hasScheduledSalvo)) {
+            $totalOrdnance = (int)($activeStrikes['total_ships'] ?? 0) + (int)($activeMissiles['total_mips'] ?? 0);
+            $this->ctx->decisionLog->record(
+                'strike_in_progress',
+                "Operación táctica en curso (" . number_format($totalOrdnance) . " naves/misiles en vuelo/programados) hacia [{$tG}:{$tS}:{$tP}]. Esperando sincronización e impacto.",
+                array('target' => $t, 'ships' => (int)($activeStrikes['total_ships'] ?? 0), 'mips' => (int)($activeMissiles['total_mips'] ?? 0)),
+                "inflight_{$tG}_{$tS}_{$tP}",
+                5000.0
+            );
+            return array('success' => true, 'strikes' => 0, 'reason' => 'Ataque ya en vuelo o programado hacia el objetivo');
+        }
+
+        // Check local FOB firepower win probability; if under 80%, rally armada to this FOB
+        $needStagingRally = false;
+        $localWinProb = 1.0;
+        if (!empty($targetDefenders)) {
+            $simLocal = !empty($availableFleet) ? BotCombatOracle::evaluate(
+                $availableFleet,
+                $targetDefenders,
+                array('id' => $this->ctx->botId, 'factor' => $this->ctx->user['factor'] ?? array()),
+                array('id' => $ownerId, 'factor' => BotCombatOracle::resolveDefenderFactors($ownerId, is_array($intel) ? $intel : array())),
+                1
+            ) : array('win_probability' => 0.0);
+
+            $localWinProb = (float)($simLocal['win_probability'] ?? 0.0);
+        } elseif (empty($availableFleet)) {
+            $localWinProb = 0.0;
+        }
+
+        if (in_array($cat, array('fleet_crash', 'farming', 'siege')) && $localWinProb < 0.80) {
+            // Validar viabilidad del imperio entero antes de comprometer flotas en Misión 4
+            $empireCombatFleet = array();
+            if (isset($world->empire)) {
+                foreach ($world->empire->getAllBodies() as $b) {
+                    if (empty($b['data'])) continue;
+                    foreach ($reslist['fleet'] as $sId) {
+                        if ($sId == 210 || $sId == 212 || in_array($sId, array(208, 209, 219))) continue;
+                        $cnt = isset($b['data'][$resource[$sId]]) ? (int)$b['data'][$resource[$sId]] : 0;
+                        if ($cnt > 0) {
+                            $empireCombatFleet[$sId] = isset($empireCombatFleet[$sId]) ? $empireCombatFleet[$sId] + $cnt : $cnt;
+                        }
+                    }
+                }
+            }
+            $simEmpire = !empty($empireCombatFleet) ? BotCombatOracle::evaluate(
+                $empireCombatFleet,
+                $targetDefenders,
+                array('id' => $this->ctx->botId, 'factor' => $this->ctx->user['factor'] ?? array()),
+                array('id' => $ownerId, 'factor' => BotCombatOracle::resolveDefenderFactors($ownerId, is_array($intel) ? $intel : array())),
+                1
+            ) : array('win_probability' => 0.0);
+            $empireWin = (float)($simEmpire['win_probability'] ?? 0.0);
+
+            $deployedEmpireMSE = 0.0;
+            foreach ($empireCombatFleet as $sId => $cnt) {
+                $deployedEmpireMSE += BotEconomyValuator::getElementPriceMSE($sId, $cnt);
+            }
+
+            $minRoiReq = isset($this->ctx->difficulty->minRoiRequired) ? (float)$this->ctx->difficulty->minRoiRequired : 0.20;
+            $maxLossAllowed = isset($this->ctx->difficulty->maxOwnFleetLossRatioAllowed) ? (float)$this->ctx->difficulty->maxOwnFleetLossRatioAllowed : 0.40;
+
+            $finEmpire = BotCombatOracle::evaluateFinancialBalance(
+                $simEmpire,
+                $deployedEmpireMSE,
+                0.0,
+                500000000000.0,
+                0.0
+            );
+
+            $isViableStaging = ($empireWin >= 0.70) || (
+                $finEmpire['is_net_profitable'] &&
+                $finEmpire['roi'] >= $minRoiReq &&
+                $finEmpire['att_loss_pct'] <= $maxLossAllowed
+            );
+
+            if (!$isViableStaging) {
+                $reason = "Fuerza militar/financiera del imperio insuficiente para vencer al objetivo (" . round($empireWin * 100, 1) . "% win, ROI: " . round($finEmpire['roi'] * 100, 1) . "%).";
+                if (!$isCandidate) {
+                    BotTargetBlacklist::addCooldown($this->ctx->botId, $ownerId, $tId, $tG, $tS, $tP, 1800, $reason);
+                    $this->releaseLock($reason, "{$tG}:{$tS}:{$tP}");
+                }
+                return array('success' => false, 'strikes' => 0, 'reason' => $reason);
+            }
+
+            // Intentar desplegar refuerzos desde las colonias disponibles hacia la FOB
+            if (isset($world->empire)) {
+                require_once 'includes/classes/bot/Forces/StagingPlanner.class.php';
+                $stagingPlanner = new BotStagingPlanner($this->ctx, $this->gateway);
+                $rallied = $stagingPlanner->rallyFleets($world->empire, $fobId, $targetDefenders);
+                if ($rallied > 0) {
+                    $this->ctx->decisionLog->record(
+                        'campaign_staging_dispatched',
+                        "Desplegada armada de refuerzo desde las colonias hacia la FOB frontera #{$fobId} para alcanzar superioridad militar contra [{$tG}:{$tS}:{$tP}].",
+                        array('target' => $t, 'fob_id' => $fobId, 'rallied_fleets' => $rallied),
+                        "stage_fob_{$fobId}",
+                        5000.0
+                    );
+                    return array('success' => true, 'strikes' => 0, 'reason' => 'Refuerzos de armada desplegados hacia la FOB');
+                }
+            }
+
+            // Si no se pudieron enviar nuevos rallies, pero ya hay despliegues en curso, esperar aterrizaje
+            if ($hasDeploymentInFlight) {
+                $this->ctx->decisionLog->record(
+                    'staging_in_transit',
+                    "Armada expedicionaria en vuelo de despliegue (Misión 4: " . number_format((int)($inboundDeployment['total_ships'] ?? 0)) . " naves) aproximándose a la FOB frontera #{$fobId}. Manteniendo objetivo y esperando aterrizaje para alcanzar superioridad militar sobre [{$tG}:{$tS}:{$tP}].",
+                    array('target' => $t, 'fob_id' => $fobId, 'ships' => (int)($inboundDeployment['total_ships'] ?? 0)),
+                    "staging_fob_{$fobId}",
+                    5000.0
+                );
+                return array('success' => true, 'strikes' => 0, 'reason' => 'Despliegue a la FOB en vuelo necesario para alcanzar victoria local');
+            }
+        }
+
+        // Execute campaign operation locally from FOB
+        $campaignStrikes = 0;
+        if ($cat === 'siege') {
+            $campaignStrikes = $this->executeSiegeCampaign($world, $t, $activeTarget, $targetDefense, $targetDefenders, $intel, $fobData, $fobId);
+        } elseif ($cat === 'fleet_crash') {
+            $campaignStrikes = $this->executeFleetCrashCampaign($world, $t, $activeTarget, $targetDefense, $targetFleet, $targetDefenders, $intel, $fobData, $fobId, $availableFleet);
+        } elseif ($cat === 'farming') {
+            $campaignStrikes = $this->executeFarmingCampaign($world, $t, $activeTarget, $targetDefense, $targetDefenders, $intel, $fobData, $fobId);
+        }
+
+        if ($campaignStrikes > 0) {
+            return array('success' => true, 'strikes' => $campaignStrikes, 'reason' => 'Ataque de campaña lanzado exitosamente');
+        }
+
+        return array('success' => false, 'strikes' => 0, 'reason' => 'No se pudo lanzar el ataque (combustible, slots, o condiciones locales no satisfechas)');
     }
 
     /**
@@ -531,14 +822,26 @@ class BotStrikePlanner
         array $fobData,
         $fobId
     ) {
-        $currentSiege = (int)$activeTarget['siege_cycles'] + 1;
-        if ($currentSiege >= 80) {
-            $reason = "Límite de horizonte de asedio alcanzado (80 ciclos sin brecha defensiva)";
-            BotTargetBlacklist::addCooldown($this->ctx->botId, (int)$t['owner_id'], (int)($t['planet_id'] ?? 0), (int)$t['galaxy'], (int)$t['system'], (int)$t['planet'], 21600, $reason);
-            $this->releaseLock($reason, "{$t['galaxy']}:{$t['system']}:{$t['planet']}");
-            return 0;
+        $isTargetActuallyLocked = (
+            !empty($this->ctx->botRow['target_galaxy']) &&
+            (int)$this->ctx->botRow['target_galaxy'] === (int)$t['galaxy'] &&
+            (int)$this->ctx->botRow['target_system'] === (int)$t['system'] &&
+            (int)$this->ctx->botRow['target_planet'] === (int)$t['planet']
+        );
+
+        $currentSiege = isset($activeTarget['siege_cycles']) ? (int)$activeTarget['siege_cycles'] : 0;
+        if ($isTargetActuallyLocked) {
+            $currentSiege++;
+            if ($currentSiege >= 3) {
+                $reason = "Fail-Fast: Límite de horizonte de asedio alcanzado (3 ciclos sin brecha defensiva)";
+                BotTargetBlacklist::addCooldown($this->ctx->botId, (int)$t['owner_id'], (int)($t['planet_id'] ?? 0), (int)$t['galaxy'], (int)$t['system'], (int)$t['planet'], 1800, $reason);
+                $this->releaseLock($reason, "{$t['galaxy']}:{$t['system']}:{$t['planet']}");
+                return 0;
+            }
+            $this->ctx->updateBotRow(array('siege_cycles' => $currentSiege));
+        } else {
+            $currentSiege = max(1, $currentSiege);
         }
-        $this->ctx->updateBotRow(array('siege_cycles' => $currentSiege));
 
         // 1. Calculate Comprehensive Missile Model (Sections 1.1 - 1.5)
         $mModel = $this->calculateMissileModel($world, $t, $targetDefense, $intel);
@@ -572,6 +875,149 @@ class BotStrikePlanner
             'crystal'   => isset($intel['crystal']) ? (float)$intel['crystal'] * 0.50 : 0.0,
             'deuterium' => isset($intel['deuterium']) ? (float)$intel['deuterium'] * 0.50 : 0.0
         );
+
+        // -------------------------------------------------------------
+        // Sección 1.0: Detección y Sincronización Estricta (+2s) de Misiles en Vuelo
+        // -------------------------------------------------------------
+        $db = Database::get();
+        $inFlightMips = $db->selectSingle("
+            SELECT COUNT(*) as cnt, MAX(fleet_start_time) as max_impact, SUM(fleet_amount) as total_mips 
+            FROM %%FLEETS%% 
+            WHERE fleet_owner = :botId 
+              AND fleet_end_galaxy = :g 
+              AND fleet_end_system = :s 
+              AND fleet_end_planet = :p 
+              AND fleet_mission = 10 
+              AND fleet_mess = 0;
+        ", array(
+            ':botId' => $this->ctx->botId,
+            ':g'     => $t['galaxy'],
+            ':s'     => $t['system'],
+            ':p'     => $t['planet']
+        ));
+        $hasMipsInFlight = (!empty($inFlightMips['cnt']) && (int)$inFlightMips['cnt'] > 0);
+
+        if ($hasMipsInFlight) {
+            $lastMipImpact = (int)$inFlightMips['max_impact'];
+
+            // Comprobar si ya existe asalto de flota en vuelo o programado
+            $inFlightAssault = $db->selectSingle("
+                SELECT COUNT(*) as cnt, MIN(fleet_start_time) as arrival_time 
+                FROM %%FLEETS%% 
+                WHERE fleet_owner = :botId 
+                  AND fleet_end_galaxy = :g 
+                  AND fleet_end_system = :s 
+                  AND fleet_end_planet = :p 
+                  AND fleet_mission IN (1, 2) 
+                  AND fleet_mess = 0;
+            ", array(
+                ':botId' => $this->ctx->botId,
+                ':g'     => $t['galaxy'],
+                ':s'     => $t['system'],
+                ':p'     => $t['planet']
+            ));
+
+            $hasScheduledAssault = BotScheduler::hasPendingTaskForTarget(
+                $this->ctx->botId,
+                array('staggered_fleet_assault'),
+                $t['galaxy'],
+                $t['system'],
+                $t['planet']
+            );
+
+            if ((!empty($inFlightAssault['cnt']) && (int)$inFlightAssault['cnt'] > 0) || $hasScheduledAssault) {
+                $this->ctx->decisionLog->record(
+                    'siege_awaiting_coordinated_impact',
+                    "Tactical siege: Salva de misiles en vuelo (" . number_format((int)$inFlightMips['total_mips']) . " MIPs) impactando a las " . date('H:i:s', $lastMipImpact) . " con asalto de flota coordinado en marcha hacia [{$t['galaxy']}:{$t['system']}:{$t['planet']}]. Esperando arribo.",
+                    array('target' => $t, 'impact_time' => $lastMipImpact, 'mips' => (int)$inFlightMips['total_mips']),
+                    "siege_coord_{$t['galaxy']}_{$t['system']}_{$t['planet']}",
+                    4500.0
+                );
+                return 0;
+            }
+
+            // Los misiles vuelan pero falta la flota de asalto (por reanudación o cancelación previa):
+            // Sincronizar armada atacante para arribar EXACTAMENTE a lastMipImpact + 2 segundos
+            $strikeFleet = $this->buildTacticalStrikeFleet($fobData, $targetDefenders, $lootNeeded, 'siege');
+            if (empty($strikeFleet)) {
+                return 0;
+            }
+
+            $fleetSpeed = FleetFunctions::GetFleetMaxSpeed($strikeFleet, $this->ctx->user);
+            $fobCoords  = array($fobData['galaxy'], $fobData['system'], $fobData['planet']);
+            $tCoords    = array($t['galaxy'], $t['system'], $t['planet']);
+            $fDist      = FleetFunctions::GetTargetDistance($fobCoords, $tCoords);
+            $gameSpeed  = FleetFunctions::GetGameSpeedFactor();
+            $fleetDuration = FleetFunctions::GetMissionDuration(10, $fleetSpeed, $fDist, $gameSpeed, $this->ctx->user);
+            $fuelConsumption = FleetFunctions::GetFleetConsumption($strikeFleet, $fleetDuration, $fDist, $this->ctx->user, 10);
+
+            if ((float)$fobData['deuterium'] < (float)$fuelConsumption) {
+                return 0;
+            }
+
+            $fleetArrival = $lastMipImpact + 2;
+            $fleetDelay = $fleetArrival - $fleetDuration - TIMESTAMP;
+            $selectedSpeedFactor = 10;
+
+            if ($fleetDelay > 5) {
+                for ($sp = 9; $sp >= 1; $sp--) {
+                    $spDur = FleetFunctions::GetMissionDuration($sp, $fleetSpeed, $fDist, $gameSpeed, $this->ctx->user);
+                    $spArrival = TIMESTAMP + $spDur;
+                    if ($spArrival >= ($lastMipImpact + 2) && $spArrival <= ($lastMipImpact + 3)) {
+                        $selectedSpeedFactor = $sp;
+                        $fleetArrival = $spArrival;
+                        $fleetDuration = $spDur;
+                        $fleetDelay = 0;
+                        break;
+                    }
+                }
+            }
+
+            if ($fleetDelay <= 3) {
+                if ($fleetDelay > 0) {
+                    sleep($fleetDelay);
+                }
+                $this->gateway->launchFleet(
+                    $strikeFleet,
+                    1,
+                    $fobId,
+                    $t['planet_id'],
+                    $t['owner_id'],
+                    $t['galaxy'],
+                    $t['system'],
+                    $t['planet'],
+                    1,
+                    array(),
+                    $selectedSpeedFactor
+                );
+            } else {
+                BotScheduler::scheduleTask(
+                    $this->ctx->botId,
+                    'staggered_fleet_assault',
+                    array(
+                        'fleet'            => $strikeFleet,
+                        'fob_id'           => $fobId,
+                        'target_planet_id' => $t['planet_id'],
+                        'target_owner_id'  => $t['owner_id'],
+                        'target_galaxy'    => $t['galaxy'],
+                        'target_system'    => $t['system'],
+                        'target_planet'    => $t['planet'],
+                        'speed'            => $selectedSpeedFactor,
+                    ),
+                    TIMESTAMP + $fleetDelay
+                );
+            }
+
+            $this->ctx->decisionLog->record(
+                'siege_salvo_fleet_synchronized',
+                "Tactical siege: Armada sincronizada con misiles en vuelo (" . number_format(array_sum($strikeFleet)) . " naves a velocidad {$selectedSpeedFactor}0%) hacia [{$t['galaxy']}:{$t['system']}:{$t['planet']}]. Arribo fijado a las " . date('H:i:s', $fleetArrival) . " (T_impacto_misil + 2s).",
+                array('target' => $t, 'fleet' => $strikeFleet, 'arrival' => $fleetArrival, 'delay' => $fleetDelay),
+                "siege_sync_assault_{$t['galaxy']}_{$t['system']}_{$t['planet']}",
+                6000.0
+            );
+
+            return 1;
+        }
 
         if ($ipmRequerido > 0) {
             // Section 1.1: Global Stock Check & Direct Assault Bypass
@@ -657,7 +1103,7 @@ class BotStrikePlanner
                 if (!$canDirectAssault) {
                     $this->ctx->decisionLog->record(
                         'siege_accumulating_mips',
-                        "Tactical siege (Paso {$currentSiege}/80): Stock de misiles en silos en rango ({$totalStock} MIPs) < IPM_requerido ({$ipmRequerido} MIPs). Asalto directo no rentable (ROI < 30%). ESPERANDO acumulación en silos.",
+                        "Tactical siege (Paso {$currentSiege}/3): Stock de misiles en silos en rango ({$totalStock} MIPs) < IPM_requerido ({$ipmRequerido} MIPs). Asalto directo no rentable (ROI < 30%). ESPERANDO acumulación en silos.",
                         array('target' => $t, 'available_mips' => $totalStock, 'required_mips' => $ipmRequerido, 'step' => $currentSiege),
                         "siege_accumulate_{$t['galaxy']}_{$t['system']}_{$t['planet']}",
                         2500.0
@@ -723,26 +1169,35 @@ class BotStrikePlanner
                     }
                 }
 
-                // Desired missile impact time: 20 seconds before fleet arrival
+                // REGLA ESTRICTA DE SINCRONIZACIÓN MILITAR:
+                // La armada atacante debe arribar EXACTAMENTE T_impacto_último_misil + 2 segundos.
                 $selectedSpeedFactor = 10;
-                if ($fleetDuration >= ($maxMipDuration + 20)) {
-                    $targetImpactTime = TIMESTAMP + $fleetDuration - 20;
+                if ($fleetDuration >= ($maxMipDuration + 2)) {
+                    // La flota es más lenta que los misiles:
+                    // Despegue inmediato de la flota (T_arribo = TIMESTAMP + fleetDuration)
+                    // Los misiles se calibran para impactar exactamente 2 segundos antes del arribo de la flota:
                     $fleetArrival = TIMESTAMP + $fleetDuration;
+                    $targetImpactTime = $fleetArrival - 2;
                     $fleetDelay = 0;
                 } else {
+                    // Los misiles tardan más que la flota:
+                    // Los misiles despegan inmediatamente (T_impacto = TIMESTAMP + maxMipDuration)
+                    // La flota DEBE arribar exactamente a targetImpactTime + 2 segundos:
                     $targetImpactTime = TIMESTAMP + $maxMipDuration;
-                    $fleetArrival = $targetImpactTime + 20;
+                    $fleetArrival = $targetImpactTime + 2;
                     $fleetDelay = max(0, $fleetArrival - $fleetDuration - TIMESTAMP);
 
-                    // Speed sync: Adjust speedFactor to launch immediately without relying on cron latency
+                    // Speed sync: Intentar reducir velocidad (90% a 10%) para despegar de inmediato
+                    // si y solo si el arribo cae exactamente en [targetImpactTime + 2, targetImpactTime + 3]
                     if ($fleetDelay > 5) {
                         for ($sp = 9; $sp >= 1; $sp--) {
                             $spDur = FleetFunctions::GetMissionDuration($sp, $fleetSpeed, $fDist, $gameSpeed, $this->ctx->user);
                             $spArrival = TIMESTAMP + $spDur;
-                            if ($spArrival >= ($targetImpactTime + 15) && $spArrival <= ($targetImpactTime + 35)) {
+                            if ($spArrival >= ($targetImpactTime + 2) && $spArrival <= ($targetImpactTime + 3)) {
                                 $selectedSpeedFactor = $sp;
                                 $fleetArrival = $spArrival;
-                                $fleetDelay = 0; // Launch immediately at lower speed!
+                                $fleetDuration = $spDur;
+                                $fleetDelay = 0; // Despegue inmediato a menor velocidad
                                 break;
                             }
                         }
@@ -757,7 +1212,7 @@ class BotStrikePlanner
                     $dispDelay = max(0, $targetImpactTime - $disp['duration'] - TIMESTAMP);
                     $totalFiredMips += $disp['count'];
 
-                    if ($dispDelay <= 5) {
+                    if ($dispDelay <= 3) {
                         $ok = $this->gateway->launchMissileStrike(
                             $disp['colony_id'],
                             $t['planet_id'],
@@ -790,8 +1245,11 @@ class BotStrikePlanner
                     }
                 }
 
-                // Launch coordinated siege fleet timed to arrive 20s post-missile impact
-                if ($fleetDelay <= 5) {
+                // Launch coordinated siege fleet timed to arrive +2s post-missile impact
+                if ($fleetDelay <= 3) {
+                    if ($fleetDelay > 0) {
+                        sleep($fleetDelay);
+                    }
                     $this->gateway->launchFleet(
                         $strikeFleet,
                         1, // Attack
@@ -817,6 +1275,7 @@ class BotStrikePlanner
                             'target_galaxy'    => $t['galaxy'],
                             'target_system'    => $t['system'],
                             'target_planet'    => $t['planet'],
+                            'speed'            => $selectedSpeedFactor,
                         ),
                         TIMESTAMP + $fleetDelay
                     );
@@ -833,8 +1292,8 @@ class BotStrikePlanner
 
                 $this->ctx->decisionLog->record(
                     'siege_bombardment',
-                    "Tactical siege: Salva coordinada única de {$totalFiredMips}x MIPs ejecutada desde " . count($dispatches) . " bases contra [{$t['galaxy']}:{$t['system']}:{$t['planet']}] apuntando a {$targetName} sincronizada con arribo de armada (" . number_format(array_sum($strikeFleet)) . " naves a velocidad {$selectedSpeedFactor}0%) a T+" . ($fleetArrival - TIMESTAMP) . "s (Inmediatos: {$firedImmediate}, Escalonados: {$scheduledCount})",
-                    array('target' => $t, 'total_mips' => $totalFiredMips, 'primary' => $primaryTarget, 'step' => $currentSiege, 'spent_mse' => $spentSalvoMSE, 'fleet_ships' => array_sum($strikeFleet)),
+                    "Tactical siege: Salva coordinada única de {$totalFiredMips}x MIPs ejecutada desde " . count($dispatches) . " bases contra [{$t['galaxy']}:{$t['system']}:{$t['planet']}] apuntando a {$targetName} sincronizada con arribo de armada (" . number_format(array_sum($strikeFleet)) . " naves a velocidad {$selectedSpeedFactor}0%) a las " . date('H:i:s', $fleetArrival) . " (T_impacto_misiles: " . date('H:i:s', $targetImpactTime) . ", Arribo_flota: +2s | Inmediatos: {$firedImmediate}, Escalonados: {$scheduledCount})",
+                    array('target' => $t, 'total_mips' => $totalFiredMips, 'primary' => $primaryTarget, 'step' => $currentSiege, 'spent_mse' => $spentSalvoMSE, 'fleet_ships' => array_sum($strikeFleet), 'impact_time' => $targetImpactTime, 'fleet_arrival' => $fleetArrival),
                     "siege_salvo_{$t['galaxy']}_{$t['system']}_{$t['planet']}_{$currentSiege}",
                     5500.0
                 );
@@ -844,6 +1303,11 @@ class BotStrikePlanner
         }
 
         // Section 3: If no missiles needed (bunker already broken or none present), execute mop-up fleet assault
+        // PRECAUCIÓN ESTRICTA: Si hay misiles en vuelo hacia este objetivo, NUNCA lanzar ataque de limpieza por adelantado
+        if ($hasMipsInFlight) {
+            return 0;
+        }
+
         $strikeFleet = $this->buildTacticalStrikeFleet($fobData, $targetDefenders, $lootNeeded, 'siege');
         if (!empty($strikeFleet)) {
             $targetFactors = BotCombatOracle::resolveDefenderFactors((int)$t['owner_id'], is_array($intel) ? $intel : array());
@@ -1000,20 +1464,48 @@ class BotStrikePlanner
             (float)($intel['deuterium'] ?? 0) * 0.50
         );
 
-        $netReplacementCost = ($attLossMSE * (1.0 - $fCdr));
-        $grossRevenue = $lootMSE + $realizableDebris;
-        $netProfit = $grossRevenue - $netReplacementCost;
+        $fin = BotCombatOracle::evaluateFinancialBalance(
+            $sim,
+            $deployedFleetMSE,
+            0.0,
+            $availableRecCap,
+            $lootMSE
+        );
 
-        if ($winProb < $winThreshold || $netProfit <= 0) {
-            $currentHold = isset($this->ctx->botRow['siege_cycles']) ? (int)$this->ctx->botRow['siege_cycles'] : 0;
-            $newHold = $currentHold + 1;
-            if ($newHold >= 80) {
-                $reason = "Fuerza en FOB insuficiente o batalla no rentable (" . round($winProb * 100, 1) . "% victoria, ganancia neta: " . number_format($netProfit) . " MSE). Límite de 80 ciclos alcanzado.";
-                BotTargetBlacklist::addCooldown($this->ctx->botId, (int)$t['owner_id'], (int)($t['planet_id'] ?? 0), (int)$t['galaxy'], (int)$t['system'], (int)$t['planet'], 21600, $reason);
-                $this->releaseLock($reason, "{$t['galaxy']}:{$t['system']}:{$t['planet']}");
-                return 0;
+        $netProfit = $fin['net_profit_mse'];
+        $roi       = $fin['roi'];
+
+        $minRoiReq      = isset($this->ctx->difficulty->minRoiRequired) ? (float)$this->ctx->difficulty->minRoiRequired : 0.20;
+        $maxLossAllowed = isset($this->ctx->difficulty->maxOwnFleetLossRatioAllowed) ? (float)$this->ctx->difficulty->maxOwnFleetLossRatioAllowed : 0.40;
+        $minRecCov      = isset($this->ctx->difficulty->minRecyclerCoverageRequired) ? (float)$this->ctx->difficulty->minRecyclerCoverageRequired : 0.70;
+
+        // Operación viable si:
+        // A) Victoria convencional (>=80%) con ganancia neta positiva
+        // B) O trade financiero rentable que cumpla ROI, cobertura de reciclaje y tolerancia de bajas según dificultad
+        $isViableExecution = ($netProfit > 0 && (
+            ($winProb >= 0.80) ||
+            ($roi >= $minRoiReq && $fin['att_loss_pct'] <= $maxLossAllowed && $fin['recycler_coverage'] >= $minRecCov)
+        ));
+
+        if (!$isViableExecution) {
+            $isTargetActuallyLocked = (
+                !empty($this->ctx->botRow['target_galaxy']) &&
+                (int)$this->ctx->botRow['target_galaxy'] === (int)$t['galaxy'] &&
+                (int)$this->ctx->botRow['target_system'] === (int)$t['system'] &&
+                (int)$this->ctx->botRow['target_planet'] === (int)$t['planet']
+            );
+
+            if ($isTargetActuallyLocked) {
+                $currentHold = isset($this->ctx->botRow['siege_cycles']) ? (int)$this->ctx->botRow['siege_cycles'] : 0;
+                $newHold = $currentHold + 1;
+                if ($newHold >= 3) {
+                    $reason = "Fail-Fast: Fuerza en FOB insuficiente o batalla no rentable (" . round($winProb * 100, 1) . "% victoria, ROI: " . round($roi * 100, 1) . "%, ganancia neta: " . number_format($netProfit) . " MSE). Límite de 3 ciclos alcanzado.";
+                    BotTargetBlacklist::addCooldown($this->ctx->botId, (int)$t['owner_id'], (int)($t['planet_id'] ?? 0), (int)$t['galaxy'], (int)$t['system'], (int)$t['planet'], 1800, $reason);
+                    $this->releaseLock($reason, "{$t['galaxy']}:{$t['system']}:{$t['planet']}");
+                    return 0;
+                }
+                $this->ctx->updateBotRow(array('siege_cycles' => $newHold));
             }
-            $this->ctx->updateBotRow(array('siege_cycles' => $newHold));
             return 0;
         }
 
@@ -1079,15 +1571,24 @@ class BotStrikePlanner
             );
             $winProb = isset($sim['win_probability']) ? (float)$sim['win_probability'] : 0.0;
             if ($winProb < 0.80) {
-                $currentHold = isset($this->ctx->botRow['siege_cycles']) ? (int)$this->ctx->botRow['siege_cycles'] : 0;
-                $newHold = $currentHold + 1;
-                if ($newHold >= 80) {
-                    $reason = "Límite de horizonte de campaña farming alcanzado (80 ciclos con probabilidad de victoria < 80%)";
-                    BotTargetBlacklist::addCooldown($this->ctx->botId, (int)$t['owner_id'], (int)($t['planet_id'] ?? 0), (int)$t['galaxy'], (int)$t['system'], (int)$t['planet'], 21600, $reason);
-                    $this->releaseLock($reason, "{$t['galaxy']}:{$t['system']}:{$t['planet']}");
-                    return 0;
+                $isTargetActuallyLocked = (
+                    !empty($this->ctx->botRow['target_galaxy']) &&
+                    (int)$this->ctx->botRow['target_galaxy'] === (int)$t['galaxy'] &&
+                    (int)$this->ctx->botRow['target_system'] === (int)$t['system'] &&
+                    (int)$this->ctx->botRow['target_planet'] === (int)$t['planet']
+                );
+
+                if ($isTargetActuallyLocked) {
+                    $currentHold = isset($this->ctx->botRow['siege_cycles']) ? (int)$this->ctx->botRow['siege_cycles'] : 0;
+                    $newHold = $currentHold + 1;
+                    if ($newHold >= 3) {
+                        $reason = "Fail-Fast: Límite de horizonte de campaña farming alcanzado (3 ciclos con probabilidad de victoria < 80%)";
+                        BotTargetBlacklist::addCooldown($this->ctx->botId, (int)$t['owner_id'], (int)($t['planet_id'] ?? 0), (int)$t['galaxy'], (int)$t['system'], (int)$t['planet'], 1800, $reason);
+                        $this->releaseLock($reason, "{$t['galaxy']}:{$t['system']}:{$t['planet']}");
+                        return 0;
+                    }
+                    $this->ctx->updateBotRow(array('siege_cycles' => $newHold));
                 }
-                $this->ctx->updateBotRow(array('siege_cycles' => $newHold));
                 return 0;
             }
         }
@@ -1097,6 +1598,16 @@ class BotStrikePlanner
         if ($actualFleets >= $maxSlots) {
             return 0;
         }
+
+        $fCoords = array($fobData['galaxy'], $fobData['system'], $fobData['planet']);
+        $tCoords = array($t['galaxy'], $t['system'], $t['planet']);
+        $fDist   = FleetFunctions::GetTargetDistance($fCoords, $tCoords);
+        $lootMSE = BotEconomyValuator::toMSE($lootNeeded['metal'], $lootNeeded['crystal'], $lootNeeded['deuterium']);
+        $optSpeed = $this->determineOptimalAttackSpeed($strikeFleet, $fobData, $t, 'farming', !empty($intel['is_inactive']), $fDist, $lootMSE);
+        if ($optSpeed === null) {
+            return 0;
+        }
+        $speedToSend = (int)$optSpeed['speed'];
 
         $ok = $this->gateway->launchFleet(
             $strikeFleet,
@@ -1109,14 +1620,14 @@ class BotStrikePlanner
             $t['planet'],
             1,
             array(),
-            10
+            $speedToSend
         );
 
         if ($ok) {
             $this->ctx->decisionLog->record(
                 'farming_campaign_launched',
-                "Farming campaign strike dispatched from FOB #{$fobId} against [{$t['galaxy']}:{$t['system']}:{$t['planet']}] with " . number_format(array_sum($strikeFleet)) . " ships (Loot capacity focused, Win prob: " . round($winProb * 100, 1) . "%)",
-                array('target' => $t, 'fleet' => $strikeFleet, 'loot_needed' => $lootNeeded),
+                "Farming campaign strike dispatched from FOB #{$fobId} against [{$t['galaxy']}:{$t['system']}:{$t['planet']}] at {$speedToSend}0% speed with " . number_format(array_sum($strikeFleet)) . " ships (Loot capacity focused, Win prob: " . round($winProb * 100, 1) . "%)",
+                array('target' => $t, 'fleet' => $strikeFleet, 'loot_needed' => $lootNeeded, 'speed' => $speedToSend),
                 "farm_campaign_{$t['galaxy']}_{$t['system']}_{$t['planet']}",
                 6000.0
             );
@@ -1186,15 +1697,33 @@ class BotStrikePlanner
             $priorities[$u] = $firepower_contrib / max(1, $shots);
         }
 
-        // Sort descending by priority
-        arsort($priorities);
-        $primaryTarget = !empty($priorities) ? key($priorities) : 401;
+        // Selección quirúrgica de blanco primario según doctrina de flota en NovaRush
+        $doctrineFleet = isset($target['fleet']) && is_array($target['fleet']) ? $target['fleet'] : array();
+        $surgicalTarget = BotCombatOracle::selectSurgicalPrimaryTarget($targetDefense, $doctrineFleet);
+        if ($surgicalTarget > 0 && isset($targetDefense[$surgicalTarget])) {
+            $primaryTarget = $surgicalTarget;
+        } else {
+            arsort($priorities);
+            $primaryTarget = !empty($priorities) ? key($priorities) : 401;
+        }
 
-        // Section 1.4: Single salvo calculation + margin ONLY on ABM
+        // Section 1.4: Single optimal surgical salvo calculation
         $abm = isset($targetDefense[502]) ? (int)$targetDefense[502] : 0;
         $abmMargin = ($spyTech_atk >= 8) ? 0 : (int)ceil(0.15 * $abm);
         $totalShotsDefs = array_sum($shotsNeeded);
-        $ipmRequerido = $abm + $abmMargin + $totalShotsDefs;
+        $shotsPrimary = isset($shotsNeeded[$primaryTarget]) ? (int)$shotsNeeded[$primaryTarget] : 1;
+
+        // Disparos requeridos para erradicar unidades de alta letalidad (Plasma 406, Gauss 404, Láser Pesado 403)
+        $lethalShots = 0;
+        foreach (array(406, 404, 405, 403) as $lId) {
+            if (!empty($shotsNeeded[$lId])) {
+                $lethalShots += (int)$shotsNeeded[$lId];
+            }
+        }
+
+        // Salva quirúrgica: anula ABMs + blanco primario / letal sin forzar la demolición de todo el forraje
+        $shotsToBreach = max($shotsPrimary, min($totalShotsDefs, $lethalShots > 0 ? $lethalShots : (int)ceil($totalShotsDefs * 0.4)));
+        $ipmRequerido = $abm + $abmMargin + $shotsToBreach;
 
         // Section 1.5: Pooling of all silos in range
         $impulse = isset($this->ctx->user[$resource[117]]) ? (int)$this->ctx->user[$resource[117]] : 0;
@@ -1500,13 +2029,21 @@ class BotStrikePlanner
     }
 
     /**
-     * Section 2.5: Pre-impact confirmation check. Recalls in-flight fleets if ninja or anomaly detected.
+     * Section 2.5: Pre-impact confirmation & Anti-Bait / Anti-Ninja Engine.
+     * Uses Live Tactical Snapshot in MariaDB (zero fog-of-war for live defense)
+     * and evaluates financial balance (War NAV / ROI) modulated by difficulty.
      */
     public function verifyInFlightStrikes(BotWorldModel $world)
     {
-        $db = Database::get();
+        // 0. If difficulty has anti-bait disabled (EASY), skip check (novice bot falls for traps)
+        if (empty($this->ctx->difficulty->antiBaitEnabled)) {
+            return;
+        }
 
-        $inFlight = $db->select("SELECT fleet_id, fleet_end_id, fleet_end_galaxy, fleet_end_system, fleet_end_planet, fleet_start_time, fleet_array 
+        $db = Database::get();
+        global $resource, $reslist;
+
+        $inFlight = $db->select("SELECT fleet_id, fleet_end_id, fleet_end_galaxy, fleet_end_system, fleet_end_planet, fleet_end_type, fleet_start_time, fleet_array 
             FROM %%FLEETS%% 
             WHERE fleet_owner = :botId AND fleet_mission = 1 AND fleet_mess = 0;", array(
             ':botId' => $this->ctx->botId
@@ -1516,135 +2053,259 @@ class BotStrikePlanner
             return;
         }
 
+        $window = isset($this->ctx->difficulty->antiBaitWindowSeconds) ? (int)$this->ctx->difficulty->antiBaitWindowSeconds : 120;
+        $accuracy = isset($this->ctx->difficulty->antiBaitAccuracy) ? (float)$this->ctx->difficulty->antiBaitAccuracy : 0.85;
+
         foreach ($inFlight as $fleet) {
             $timeToImpact = (int)$fleet['fleet_start_time'] - TIMESTAMP;
-            // Pre-impact tactical window: between 10 and 900 seconds (up to 15 min flights)
-            if ($timeToImpact >= 10 && $timeToImpact <= 900) {
+            // Pre-impact tactical window: between 5 seconds and $window (e.g. 90s, 120s, 180s)
+            if ($timeToImpact >= 5 && $timeToImpact <= $window) {
                 $tG = (int)$fleet['fleet_end_galaxy'];
                 $tS = (int)$fleet['fleet_end_system'];
                 $tP = (int)$fleet['fleet_end_planet'];
+                $tType = (int)$fleet['fleet_end_type'];
 
                 // 1. Check if defender activated Vacation Mode during flight
-                $targetUserRow = $db->selectSingle("SELECT p.id_owner, u.urlaubs_modus FROM %%PLANETS%% p 
+                $targetUserRow = $db->selectSingle("SELECT p.id, p.id_owner, u.urlaubs_modus, u.authlevel FROM %%PLANETS%% p 
                     INNER JOIN %%USERS%% u ON u.id = p.id_owner 
-                    WHERE p.galaxy = :g AND p.system = :s AND p.planet = :p AND p.planet_type = 1 LIMIT 1;", array(
-                    ':g' => $tG, ':s' => $tS, ':p' => $tP
+                    WHERE p.galaxy = :g AND p.system = :s AND p.planet = :p AND p.planet_type = :t LIMIT 1;", array(
+                    ':g' => $tG, ':s' => $tS, ':p' => $tP, ':t' => $tType
                 ));
-                if (!empty($targetUserRow['urlaubs_modus'])) {
-                    $this->gateway->recallFleet((int)$fleet['fleet_id']);
-                    $this->ctx->decisionLog->record(
-                        'pre_impact_abort_vacation',
-                        "PRE-IMPACT ABORT: El jugador defensor activó Modo Vacaciones durante el vuelo hacia [{$tG}:{$tS}:{$tP}]. Retirando flota.",
-                        array('fleet_id' => $fleet['fleet_id'], 'target' => "{$tG}:{$tS}:{$tP}"),
-                        "abort_vacation_{$fleet['fleet_id']}",
-                        9999.0
-                    );
+
+                if (!empty($targetUserRow['urlaubs_modus']) || (!empty($targetUserRow['authlevel']) && (int)$targetUserRow['authlevel'] > 0)) {
+                    $this->executeTacticalRecall($fleet, "Defensor activó Modo Vacaciones o es Administrador");
                     continue;
                 }
 
-                $freshIntel = $world->intel->getIntel($tG, $tS, $tP, 1, 0.15); // 9 min freshness
-                if ($freshIntel === null || empty($freshIntel['defense_scouted'])) {
+                $targetPlanetId = !empty($targetUserRow['id']) ? (int)$targetUserRow['id'] : (int)$fleet['fleet_end_id'];
+                $targetOwnerId  = !empty($targetUserRow['id_owner']) ? (int)$targetUserRow['id_owner'] : 0;
+
+                // 2. LIVE TACTICAL SNAPSHOT (Zero Fog of War in Live Database):
+                $livePlanet = $db->selectSingle("SELECT * FROM %%PLANETS%% WHERE id = :pId LIMIT 1;", array(':pId' => $targetPlanetId));
+                if (empty($livePlanet)) {
+                    $this->executeTacticalRecall($fleet, "Planeta objetivo ya no existe");
                     continue;
                 }
 
+                // Query live defense & stationary fleet in ground
+                $liveDefenders = array();
+                $unitList = array_merge($reslist['fleet'], $reslist['defense'], $reslist['missile']);
+                foreach ($unitList as $uId) {
+                    if ($uId == 212) continue; // Skip solar satellites from threat calculation
+                    $qty = isset($livePlanet[$resource[$uId]]) ? (int)$livePlanet[$resource[$uId]] : 0;
+                    if ($qty > 0) {
+                        $liveDefenders[$uId] = $qty;
+                    }
+                }
+
+                // Query stationary ACS Defend (Mission 5 / SAC Defensivo) fleets currently stationed on target
+                $stayFleets = $db->select("SELECT fleet_array FROM %%FLEETS%% 
+                    WHERE fleet_end_id = :pId AND fleet_mission = 5 
+                      AND fleet_start_time <= :now AND fleet_end_stay >= :now;", array(
+                    ':pId' => $targetPlanetId,
+                    ':now' => TIMESTAMP
+                ));
+                if (!empty($stayFleets) && is_array($stayFleets)) {
+                    foreach ($stayFleets as $sf) {
+                        if (!empty($sf['fleet_array'])) {
+                            $sfShips = FleetFunctions::unserialize($sf['fleet_array']);
+                            if (is_array($sfShips)) {
+                                foreach ($sfShips as $sfId => $sfQty) {
+                                    if ($sfId == 212) continue;
+                                    $liveDefenders[$sfId] = isset($liveDefenders[$sfId]) ? $liveDefenders[$sfId] + $sfQty : $sfQty;
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // 3. Reconstruct dispatched strike fleet
                 $dispatchedShips = array();
                 $rawShips = explode(';', $fleet['fleet_array']);
+                $deployedFleetMSE = 0.0;
+                $warshipCount = 0;
+                $cargoCount   = 0;
                 foreach ($rawShips as $rs) {
                     if (empty($rs)) continue;
                     list($sId, $cnt) = explode(',', $rs);
-                    $dispatchedShips[(int)$sId] = (int)$cnt;
-                }
-
-                $curDefenders = (isset($freshIntel['defense']) && is_array($freshIntel['defense']) ? $freshIntel['defense'] : array())
-                              + (isset($freshIntel['fleet']) && is_array($freshIntel['fleet']) ? $freshIntel['fleet'] : array());
-
-                $freshTargetId = isset($freshIntel['target_user_id']) ? (int)$freshIntel['target_user_id'] : 0;
-                $targetFactors = BotCombatOracle::resolveDefenderFactors($freshTargetId, $freshIntel);
-                $sim = BotCombatOracle::evaluate(
-                    $dispatchedShips,
-                    $curDefenders,
-                    array('id' => $this->ctx->botId, 'factor' => $this->ctx->user['factor']),
-                    array('id' => $freshTargetId, 'factor' => $targetFactors),
-                    2
-                );
-
-                // 2. Identify cargo-heavy or cargo-only expedition
-                $warshipCount = 0;
-                $cargoCount   = 0;
-                foreach ($dispatchedShips as $sId => $cnt) {
-                    if (in_array($sId, array(206, 207, 211, 213, 214, 215, 216, 221, 222, 224, 225, 226, 227, 228))) {
-                        $warshipCount += $cnt;
-                    }
-                    if (in_array($sId, array(202, 203, 217))) {
-                        $cargoCount += $cnt;
+                    $sId = (int)$sId;
+                    $cnt = (int)$cnt;
+                    if ($cnt > 0) {
+                        $dispatchedShips[$sId] = $cnt;
+                        $deployedFleetMSE += BotEconomyValuator::getElementPriceMSE($sId, $cnt);
+                        if (in_array($sId, array(206, 207, 211, 213, 214, 215, 216, 221, 222, 224, 225, 226, 227, 228))) {
+                            $warshipCount += $cnt;
+                        }
+                        if (in_array($sId, array(202, 203, 217))) {
+                            $cargoCount += $cnt;
+                        }
                     }
                 }
+
+                // 3.1 Salvaguarda crítica para escuadras de cargueros
                 $isCargoHeavy = ($cargoCount > 0 && $warshipCount <= 5);
-
-                // SALVAGUARDA CRÍTICA PARA EXPEDICIONES DE CARGUEROS:
-                // Si la flota enviada es de solo cargueros (o con escolta ligera <= 5 naves), cualquier presencia de defensas
-                // o flota enemiga armada en destino dispara de inmediato la retirada (recallFleet) para evitar la masacre.
-                if ($isCargoHeavy && !empty($curDefenders)) {
+                if ($isCargoHeavy && !empty($liveDefenders)) {
                     $hasThreat = false;
-                    foreach ($curDefenders as $dId => $dCnt) {
-                        if ($dId == 212 || $dId == 502) continue; // Satélite solar o ABM
+                    foreach ($liveDefenders as $dId => $dCnt) {
+                        if ($dId == 212 || $dId == 502) continue;
                         if ($dCnt > 0) {
                             $hasThreat = true;
                             break;
                         }
                     }
+                    if ($hasThreat) {
+                        $this->executeTacticalRecall($fleet, "SALVAGUARDA DE CARGUEROS: Detectadas defensas o flota armada hostil en destino. Retirando cargueros.", true);
+                        continue;
+                    }
+                }
 
-                    if ($hasThreat || (isset($sim['win_probability']) && $sim['win_probability'] < 0.95) || (isset($sim['att_loss_pct']) && $sim['att_loss_pct'] > 0.005)) {
-                        $this->gateway->recallFleet((int)$fleet['fleet_id']);
+                // Defender technology factors
+                $targetFactors = BotCombatOracle::resolveDefenderFactors($targetOwnerId);
+
+                // 4. Live Combat Simulation (Simulación de impacto en tiempo real)
+                $simLive = BotCombatOracle::evaluate(
+                    $dispatchedShips,
+                    $liveDefenders,
+                    array('id' => $this->ctx->botId, 'factor' => $this->ctx->user['factor'] ?? array()),
+                    array('id' => $targetOwnerId, 'factor' => $targetFactors),
+                    2
+                );
+
+                // Projected loot in ground right now
+                $lootMetal = (float)($livePlanet['metal'] ?? 0) * 0.50;
+                $lootCry   = (float)($livePlanet['crystal'] ?? 0) * 0.50;
+                $lootDeut  = (float)($livePlanet['deuterium'] ?? 0) * 0.50;
+                $lootMSE   = BotEconomyValuator::toMSE($lootMetal, $lootCry, $lootDeut);
+
+                // Available recycler capacity
+                $recsCap = $this->estimateInFlightRecyclerCapacity($tG, $tS, $tP);
+
+                // 5. Evaluate War NAV / ROI Financial Balance
+                $finLive = BotCombatOracle::evaluateFinancialBalance(
+                    $simLive,
+                    $deployedFleetMSE,
+                    0.0,
+                    $recsCap,
+                    $lootMSE
+                );
+
+                $liveWinProb   = isset($finLive['win_probability']) ? (float)$finLive['win_probability'] : 0.0;
+                $liveNetProfit = isset($finLive['net_profit_mse']) ? (float)$finLive['net_profit_mse'] : 0.0;
+                $liveRoi       = isset($finLive['roi']) ? (float)$finLive['roi'] : 0.0;
+                $liveLossPct   = isset($finLive['att_loss_pct']) ? (float)$finLive['att_loss_pct'] : 0.0;
+
+                $minRoiReq      = isset($this->ctx->difficulty->minRoiRequired) ? (float)$this->ctx->difficulty->minRoiRequired : 0.20;
+                $maxLossAllowed = isset($this->ctx->difficulty->maxOwnFleetLossRatioAllowed) ? (float)$this->ctx->difficulty->maxOwnFleetLossRatioAllowed : 0.40;
+
+                // Detect if operation turned into an unprofitable ambush or trap:
+                // Regla estricta para misiones con botín/farming: un ataque a almacén ($lootMSE > 0) JAMÁS debe tolerar
+                // bajas significativas (>25%) ni baja probabilidad de victoria (<70%), ya que empates o derrotas dan 0 botín en NovaRush.
+                $isAmbush = ($liveNetProfit <= 0.0) ||
+                            ($liveRoi < $minRoiReq && $liveWinProb < 0.80) ||
+                            ($liveLossPct > $maxLossAllowed) ||
+                            ($lootMSE > 0 && ($liveWinProb < 0.70 || $liveLossPct > 0.25));
+
+                if ($isAmbush) {
+                    // Check difficulty accuracy (e.g. 100% in Nightmare, 85% in Hard, 50% in Normal)
+                    $roll = mt_rand(1, 100) / 100.0;
+                    if ($roll <= $accuracy) {
+                        $reason = "Emboscada ninja detectada a T-{$timeToImpact}s (Win: " . round($liveWinProb * 100, 1) . "%, ROI: " . round($liveRoi * 100, 1) . "%, Net: " . number_format($liveNetProfit) . " MSE). Armada retirada.";
+                        $this->executeTacticalRecall($fleet, $reason, true);
+
+                        // Cooldown on target (2 hours = 7200s)
+                        BotTargetBlacklist::addCooldown($this->ctx->botId, $targetOwnerId, $targetPlanetId, $tG, $tS, $tP, 7200, $reason);
+
                         $this->ctx->decisionLog->record(
-                            'pre_impact_cargo_safeguard_abort',
-                            "SALVAGUARDA DE CARGUEROS ACTIVADA: Detectadas defensas o flota hostil en destino [{$tG}:{$tS}:{$tP}]. Retirando escuadra de cargueros de inmediato para evitar emboscada sin escolta pesada.",
-                            array('fleet_id' => $fleet['fleet_id'], 'defenders' => $curDefenders, 'target' => "{$tG}:{$tS}:{$tP}"),
-                            "cargo_safeguard_{$fleet['fleet_id']}",
+                            'anti_bait_ninja_evaded',
+                            "ANTI-BAIT / TRAMPA EVADIDA: Live Tactical Snapshot a T-{$timeToImpact}s detectó refuerzos/ninja hostil en [{$tG}:{$tS}:{$tP}]. Rentabilidad colapsó a " . number_format($liveNetProfit) . " MSE. Retirando armada y recicladores sincronizados.",
+                            array(
+                                'fleet_id' => $fleet['fleet_id'],
+                                'target' => "{$tG}:{$tS}:{$tP}",
+                                'time_to_impact' => $timeToImpact,
+                                'live_win_prob' => $liveWinProb,
+                                'live_roi' => $liveRoi,
+                                'live_net_profit' => $liveNetProfit,
+                                'live_defenders_count' => count($liveDefenders)
+                            ),
+                            "anti_bait_{$fleet['fleet_id']}",
                             9999.0
                         );
                         continue;
                     }
                 }
+            }
+        }
+    }
 
-                // Check for "Flota Retirada" anomaly (Section 2.5)
-                $curFleetMSE = 0.0;
-                if (!empty($freshIntel['fleet']) && is_array($freshIntel['fleet'])) {
-                    foreach ($freshIntel['fleet'] as $sId => $cnt) {
-                        if ($sId == 212 || $cnt <= 0) continue;
-                        $curFleetMSE += BotEconomyValuator::getElementPriceMSE($sId, $cnt);
-                    }
-                }
+    /**
+     * Executes a tactical recall of the strike fleet and any associated in-flight recyclers
+     */
+    private function executeTacticalRecall(array $fleet, $reason, $recallRecyclers = false)
+    {
+        $fleetId = (int)$fleet['fleet_id'];
+        $ok = $this->gateway->recallFleet($fleetId);
 
-                $lockedType = isset($this->ctx->botRow['target_type']) ? $this->ctx->botRow['target_type'] : '';
-                $initialMse = isset($this->ctx->botRow['target_initial_mse']) ? (float)$this->ctx->botRow['target_initial_mse'] : 0.0;
-                $isFleetCrash = ($lockedType === 'fleet_crash' && $tG == (int)$this->ctx->botRow['target_galaxy'] && $tS == (int)$this->ctx->botRow['target_system'] && $tP == (int)$this->ctx->botRow['target_planet']);
+        if ($recallRecyclers) {
+            $db = Database::get();
+            $tG = (int)$fleet['fleet_end_galaxy'];
+            $tS = (int)$fleet['fleet_end_system'];
+            $tP = (int)$fleet['fleet_end_planet'];
 
-                if ($isFleetCrash && $initialMse > 500000.0 && $curFleetMSE < ($initialMse * 0.15)) {
-                    $this->gateway->recallFleet((int)$fleet['fleet_id']);
-                    $this->ctx->decisionLog->record(
-                        'pre_impact_abort_fleet_withdrawn',
-                        "PRE-IMPACT ABORT: Flota enemiga retirada o evacuada en destino [{$tG}:{$tS}:{$tP}] (MSE restante: " . number_format($curFleetMSE) . "). Retirando flota para evitar desperdicio de deuterio.",
-                        array('fleet_id' => $fleet['fleet_id'], 'target' => "{$tG}:{$tS}:{$tP}", 'current_fleet_mse' => $curFleetMSE),
-                        "abort_fleet_withdrawn_{$fleet['fleet_id']}",
-                        9999.0
-                    );
-                    continue;
-                }
+            $recFleets = $db->select("SELECT fleet_id FROM %%FLEETS%% 
+                WHERE fleet_owner = :botId AND fleet_mission = 8 
+                  AND fleet_end_galaxy = :g AND fleet_end_system = :s AND fleet_end_planet = :p 
+                  AND fleet_mess = 0;", array(
+                ':botId' => $this->ctx->botId,
+                ':g'     => $tG,
+                ':s'     => $tS,
+                ':p'     => $tP,
+            ));
 
-                // If win probability dropped below 70%, it is a ninja or heavy reinforcement!
-                if (isset($sim['win_probability']) && $sim['win_probability'] < 0.70) {
-                    $this->gateway->recallFleet((int)$fleet['fleet_id']);
-                    $this->ctx->decisionLog->record(
-                        'pre_impact_abort',
-                        "PRE-IMPACT ABORT: Ninja o refuerzos detectados en destino [{$tG}:{$tS}:{$tP}]. Probabilidad de victoria cayó a " . round($sim['win_probability'] * 100, 1) . "%. Flota retirada.",
-                        array('fleet_id' => $fleet['fleet_id'], 'eval' => $sim, 'target' => "{$tG}:{$tS}:{$tP}"),
-                        "abort_{$fleet['fleet_id']}",
-                        9999.0
-                    );
+            if (!empty($recFleets) && is_array($recFleets)) {
+                foreach ($recFleets as $rf) {
+                    $this->gateway->recallFleet((int)$rf['fleet_id']);
                 }
             }
         }
+
+        return $ok;
+    }
+
+    /**
+     * Estimates capacity of in-flight recyclers heading to destination
+     */
+    private function estimateInFlightRecyclerCapacity($g, $s, $p)
+    {
+        $db = Database::get();
+        $recFleets = $db->select("SELECT fleet_array FROM %%FLEETS%% 
+            WHERE fleet_owner = :botId AND fleet_mission = 8 
+              AND fleet_end_galaxy = :g AND fleet_end_system = :s AND fleet_end_planet = :p 
+              AND fleet_mess = 0;", array(
+            ':botId' => $this->ctx->botId,
+            ':g'     => (int)$g,
+            ':s'     => (int)$s,
+            ':p'     => (int)$p,
+        ));
+
+        $totalCap = 0.0;
+        if (!empty($recFleets) && is_array($recFleets)) {
+            foreach ($recFleets as $rf) {
+                if (!empty($rf['fleet_array'])) {
+                    $ships = FleetFunctions::unserialize($rf['fleet_array']);
+                    if (is_array($ships)) {
+                        $cnt219 = isset($ships[219]) ? (int)$ships[219] : 0;
+                        $cnt209 = isset($ships[209]) ? (int)$ships[209] : 0;
+                        $totalCap += ($cnt219 * 200000000.0) + ($cnt209 * 20000.0);
+                    }
+                }
+            }
+        }
+
+        if ($totalCap <= 0.0) {
+            $totalCap = 50000000000.0;
+        }
+
+        return $totalCap;
     }
 
     public function buildRecyclerFleet(array $fobData, $expectedDebris)
@@ -2281,31 +2942,8 @@ class BotStrikePlanner
                 $takeF = min($escortNeed, $fodderOnFob[204]);
                 $fodderToSend[204] = $takeF;
             }
-        } elseif ($category === 'siege') {
-            // Section 3: Siege: Bombers (211) con fuego rápido contra defensas + Destructores (213) y naves de línea pesadas
-            $siegePriorityWarships = array(211, 213, 215, 216, 227, 228, 207);
-            foreach ($siegePriorityWarships as $sWId) {
-                if (isset($warshipsOnFob[$sWId]) && $warshipsOnFob[$sWId] > 0) {
-                    $warshipsToSend[$sWId] = $warshipsOnFob[$sWId];
-                }
-            }
-            // Add remaining warships if needed
-            foreach ($warshipsOnFob as $wId => $qty) {
-                if (!isset($warshipsToSend[$wId]) && $qty > 0) {
-                    $warshipsToSend[$wId] = $qty;
-                }
-            }
-            // Fodder buffer up to 25% for siege
-            $maxFodder = (int)floor(array_sum($warshipsToSend) * 0.25);
-            $fodderRemaining = min($maxFodder, $totalFodderAvail);
-            foreach ($fodderOnFob as $fId => $qty) {
-                if ($fodderRemaining <= 0) break;
-                $take = min($qty, $fodderRemaining);
-                $fodderToSend[$fId] = $take;
-                $fodderRemaining -= $take;
-            }
         } else {
-            // Section 3: Fleet Crash - FMA (Fuerza Mínima Arrolladora)
+            // Section 3: Fleet Crash & Tactical Siege - FMA (Fuerza Mínima Arrolladora)
             // Dimensionada para superar contundentemente al defensor sin despilfarrar combustible.
             $defMSE = 0.0;
             if (!empty($targetDefenders) && is_array($targetDefenders)) {
@@ -2317,7 +2955,12 @@ class BotStrikePlanner
 
             // Target warship budget: 2.0x defender MSE (mínimo 50M MSE)
             $warshipBudgetMSE = max(50000000.0, $defMSE * 2.0);
-            $fleetCrashPriority = array(215, 213, 206, 207, 216, 227, 228);
+
+            // Prioridad de naves según rol táctico:
+            // En Siege: Bombarderos (#211) y Destructores (#213) primero por fuego rápido contra defensas, luego naves de línea pesadas
+            $fleetPriority = ($category === 'siege')
+                ? array(211, 213, 225, 215, 206, 207, 216, 227, 228)
+                : array(215, 213, 206, 207, 216, 225, 227, 228);
 
             // Calcular MSE total de naves de combate en FOB
             $totalFobWarshipMSE = 0.0;
@@ -2335,7 +2978,7 @@ class BotStrikePlanner
             } else {
                 // Dimensionamiento progresivo: incorporar naves prioritarias hasta alcanzar warshipBudgetMSE
                 $accumulatedMSE = 0.0;
-                foreach ($fleetCrashPriority as $fWId) {
+                foreach ($fleetPriority as $fWId) {
                     if (isset($warshipsOnFob[$fWId]) && $warshipsOnFob[$fWId] > 0) {
                         $unitPrice = BotEconomyValuator::getElementPriceMSE($fWId, 1);
                         if ($unitPrice <= 0) continue;
@@ -2488,6 +3131,24 @@ class BotStrikePlanner
 
     private function releaseLock($reason, $coords = '')
     {
+        $lockedG = (int)($this->ctx->botRow['target_galaxy'] ?? 0);
+        $lockedS = (int)($this->ctx->botRow['target_system'] ?? 0);
+        $lockedP = (int)($this->ctx->botRow['target_planet'] ?? 0);
+
+        if ($lockedG > 0 && $lockedS > 0 && $lockedP > 0) {
+            $db = Database::get();
+            $inFlight = $db->selectSingle("SELECT COUNT(*) as cnt FROM %%FLEETS%% WHERE fleet_owner = :botId AND fleet_end_galaxy = :g AND fleet_end_system = :s AND fleet_end_planet = :p AND fleet_mission IN (1, 2, 10) AND fleet_mess = 0;", array(
+                ':botId' => $this->ctx->botId,
+                ':g'     => $lockedG,
+                ':s'     => $lockedS,
+                ':p'     => $lockedP
+            ));
+            if (!empty($inFlight['cnt']) && (int)$inFlight['cnt'] > 0) {
+                // Ordnance or fleet currently traveling in space: abort release!
+                return;
+            }
+        }
+
         $this->ctx->updateBotRow(array(
             'target_galaxy'      => 0,
             'target_system'      => 0,
@@ -2499,6 +3160,10 @@ class BotStrikePlanner
             'fob_planet_id'      => 0,
             'siege_spent_mse'    => 0.0,
         ));
+
+        if ($lockedG > 0 && $lockedS > 0 && $lockedP > 0) {
+            BotScheduler::cancelPendingTasksForTarget($this->ctx->botId, $lockedG, $lockedS, $lockedP);
+        }
 
         $this->ctx->decisionLog->record(
             'target_released',

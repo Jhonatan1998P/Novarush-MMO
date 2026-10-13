@@ -35,11 +35,46 @@ class BotTargetBlacklist
             cooldown_until INT NOT NULL DEFAULT 0,
             reason VARCHAR(64) NOT NULL DEFAULT '',
             created_at INT NOT NULL DEFAULT 0,
-            UNIQUE KEY idx_bot_planet (bot_id, planet_id),
+            UNIQUE KEY idx_bot_planet_coords (bot_id, planet_id, galaxy, system, planet),
             KEY idx_bot_coords (bot_id, galaxy, system, planet),
             KEY idx_cooldown (cooldown_until)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;");
         $checked = true;
+    }
+
+    /**
+     * Checks if a target PLAYER is currently blacklisted under Anti-Bashing rules (6 wins in 24h).
+     * Strictly checks player-level blacklist only, ignoring planet-specific temporary cooldowns.
+     *
+     * @param int $botId
+     * @param int $targetUserId
+     * @param int|null $now
+     * @return bool
+     */
+    public static function isPlayerBlacklisted($botId, $targetUserId, $now = null)
+    {
+        $now = ($now === null) ? TIMESTAMP : (int)$now;
+        $botId = (int)$botId;
+        $targetUserId = (int)$targetUserId;
+
+        if ($botId <= 0 || $targetUserId <= 0) {
+            return false;
+        }
+
+        $db = Database::get();
+        $row = $db->selectSingle("SELECT blacklisted_until FROM %%BOT_TARGET_BLACKLIST%% 
+            WHERE target_user_id = :uId 
+              AND bot_id = :botId 
+              AND successful_wins >= :maxWins
+              AND blacklisted_until > :now 
+            LIMIT 1;", array(
+            ':uId'     => $targetUserId,
+            ':botId'   => $botId,
+            ':maxWins' => self::MAX_BOT_ATTACKS,
+            ':now'     => $now,
+        ));
+
+        return !empty($row);
     }
 
     /**
@@ -94,7 +129,7 @@ class BotTargetBlacklist
         if ($targetUserId > 0) {
             $row = $db->selectSingle("SELECT blacklisted_until FROM %%BOT_TARGET_BLACKLIST%% 
                 WHERE target_user_id = :uId 
-                  AND (bot_id = :botId OR bot_id = 0) 
+                  AND bot_id = :botId 
                   AND successful_wins >= :maxWins
                   AND blacklisted_until > :now 
                 LIMIT 1;", array(
@@ -311,56 +346,6 @@ class BotTargetBlacklist
             ));
         }
 
-        // Rule 2: Global cap across all bots (3 attacks per player within 24h)
-        $globalRow = $db->selectSingle("SELECT SUM(successful_wins) as total_wins FROM %%BOT_TARGET_BLACKLIST%% 
-            WHERE target_user_id = :uId AND bot_id > 0 AND (blacklisted_until > :now OR updated_at >= :dayAgo);", array(
-            ':uId'    => $targetUserId,
-            ':now'    => $now,
-            ':dayAgo' => $now - self::BLACKLIST_DURATION,
-        ));
-
-        $totalGlobalWins = !empty($globalRow['total_wins']) ? (int)$globalRow['total_wins'] : $currentWins;
-        if ($totalGlobalWins >= self::MAX_GLOBAL_ATTACKS) {
-            $sqlGlobal = "INSERT INTO %%BOT_TARGET_BLACKLIST%% (
-                bot_id, target_user_id, target_planet_id, galaxy, system, planet, successful_wins, total_attacks, blacklisted_until, created_at, updated_at
-            ) VALUES (
-                0, :uId, :pId, :g, :s, :p, :gWins, :gWins, :expireTime, :now, :now
-            ) ON DUPLICATE KEY UPDATE
-                target_planet_id  = :pId,
-                galaxy            = :g,
-                system            = :s,
-                planet            = :p,
-                successful_wins   = :gWins,
-                blacklisted_until = :expireTime,
-                updated_at        = :now;";
-
-            $db->insert($sqlGlobal, array(
-                ':uId'        => $targetUserId,
-                ':pId'        => $planetId,
-                ':g'          => $galaxy,
-                ':s'          => $system,
-                ':p'          => $planet,
-                ':gWins'      => $totalGlobalWins,
-                ':expireTime' => $expireTime,
-                ':now'        => $now,
-            ));
-
-            // Release target locks for ANY bot that targeted this player
-            self::releaseAllBotLocksOnPlayer($targetUserId);
-            if ($galaxy > 0 && $system > 0 && $planet > 0) {
-                self::releaseAllBotLocksOnPlanet($galaxy, $system, $planet);
-            }
-
-            $gLogMsg = "Jugador #{$targetUserId} alcanzó {$totalGlobalWins} ataques globales de IA en 24h. Entra en lista negra global de 24 horas para todos los bots.";
-            $db->insert("INSERT INTO %%BOT_LOGS%% (bot_id, action_type, details, timestamp) VALUES (0, 'global_blacklist', :details, :ts);", array(
-                ':details' => $gLogMsg,
-                ':ts'      => $now
-            ));
-
-            $isBlacklisted = true;
-            $blacklistedUntil = $expireTime;
-        }
-
         return array(
             'wins'        => $currentWins,
             'blacklisted' => $isBlacklisted,
@@ -518,5 +503,64 @@ class BotTargetBlacklist
             ':s' => (int)$system,
             ':p' => (int)$planet,
         ));
+    }
+
+    /**
+     * Sets a global scan cooldown for the bot (e.g. 1 hour when all radar candidates are exhausted)
+     */
+    public static function setGlobalScanCooldown($botId, $duration = 3600, $reason = '')
+    {
+        self::addCooldown($botId, 0, 0, 0, 0, 0, $duration, $reason);
+    }
+
+    /**
+     * Checks if the bot is currently under a global scan cooldown
+     */
+    public static function isGlobalScanOnCooldown($botId, $now = null)
+    {
+        $now = ($now === null) ? TIMESTAMP : (int)$now;
+        $botId = (int)$botId;
+        if ($botId <= 0) return false;
+
+        self::ensureCooldownTableExists();
+        $db = Database::get();
+        $cooldownTable = DB_PREFIX . 'bot_planet_cooldown';
+        $row = $db->selectSingle("SELECT cooldown_until FROM {$cooldownTable} 
+            WHERE bot_id = :botId AND planet_id = 0 AND galaxy = 0 AND system = 0 AND planet = 0 AND cooldown_until > :now 
+            LIMIT 1;", array(
+            ':botId' => $botId,
+            ':now'   => $now,
+        ));
+        return !empty($row);
+    }
+
+    /**
+     * Checks if specific coordinates or planet are currently on tactical cooldown.
+     *
+     * @param int $botId
+     * @param int $galaxy
+     * @param int $system
+     * @param int $planet
+     * @param int|null $now
+     * @return bool
+     */
+    public static function isOnCooldown($botId, $galaxy, $system, $planet, $now = null)
+    {
+        $now = ($now === null) ? TIMESTAMP : (int)$now;
+        self::ensureCooldownTableExists();
+        $db = Database::get();
+        $cooldownTable = DB_PREFIX . 'bot_planet_cooldown';
+        $row = $db->selectSingle("SELECT cooldown_until FROM {$cooldownTable} 
+            WHERE galaxy = :g AND system = :s AND planet = :p 
+              AND (bot_id = :botId OR bot_id = 0) 
+              AND cooldown_until > :now 
+            LIMIT 1;", array(
+            ':g'     => (int)$galaxy,
+            ':s'     => (int)$system,
+            ':p'     => (int)$planet,
+            ':botId' => (int)$botId,
+            ':now'   => $now,
+        ));
+        return !empty($row);
     }
 }

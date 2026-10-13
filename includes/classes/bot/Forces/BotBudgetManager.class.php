@@ -273,6 +273,9 @@ class BotBudgetManager
         $curResD = (float)($this->credits['research']['deuterium'] ?? 0.0) + $deltaResD;
         $this->credits['research']['deuterium'] = round(min($resCeilingD, $curResD), 2);
 
+        // Enforce Strict Physical Invariant Reconciliation (Conservation of Virtual Earmarks)
+        $this->reconcilePhysicalInvariant($empire, $ratios);
+
         $this->credits['last_updated'] = $now;
         $this->lastBudgetTime = $now;
         $this->saveState();
@@ -324,6 +327,12 @@ class BotBudgetManager
      * @param int $planetId
      * @param array $cargo
      */
+    /**
+     * Synchronize physical evacuation from an endangered planet (fleetsave)
+     *
+     * @param int $planetId
+     * @param array $cargo
+     */
     public function syncPlanetEvacuation($planetId, array $cargo)
     {
         $planetId = (int)$planetId;
@@ -331,12 +340,223 @@ class BotBudgetManager
         $c = (float)($cargo[902] ?? $cargo['crystal'] ?? 0.0);
         $d = (float)($cargo[903] ?? $cargo['deuterium'] ?? 0.0);
 
+        if ($m > 0.0 || $c > 0.0 || $d > 0.0) {
+            $this->deductCargoFromLocalPlanet($planetId, $m, $c, $d);
+        }
+
         if (isset($this->credits['last_physical'][$planetId])) {
             $this->credits['last_physical'][$planetId]['metal']     = max(0.0, (float)$this->credits['last_physical'][$planetId]['metal'] - $m);
             $this->credits['last_physical'][$planetId]['crystal']   = max(0.0, (float)$this->credits['last_physical'][$planetId]['crystal'] - $c);
             $this->credits['last_physical'][$planetId]['deuterium'] = max(0.0, (float)$this->credits['last_physical'][$planetId]['deuterium'] - $d);
         }
         $this->saveState();
+    }
+
+    /**
+     * Deduct fuel consumption and dispatched cargo from planet budget when a fleet launches
+     *
+     * @param int $planetId
+     * @param int $mission
+     * @param array $cargoResources [901 => M, 902 => C, 903 => D]
+     * @param float $fuelConsumption Deuterium consumed by fleet
+     */
+    public function deductDispatchedMission($planetId, $mission, array $cargoResources, $fuelConsumption = 0.0)
+    {
+        $planetId = (int)$planetId;
+        $fuelConsumption = max(0.0, (float)$fuelConsumption);
+
+        // 1. Deduct fuel consumption strictly from 'fleet' budget and physical baseline
+        if ($fuelConsumption > 0.0) {
+            if (isset($this->credits['planets'][$planetId]['fleet']['deuterium'])) {
+                $cur = (float)$this->credits['planets'][$planetId]['fleet']['deuterium'];
+                $this->credits['planets'][$planetId]['fleet']['deuterium'] = round(max(0.0, $cur - $fuelConsumption), 2);
+            }
+            if (isset($this->credits['last_physical'][$planetId]['deuterium'])) {
+                $this->credits['last_physical'][$planetId]['deuterium'] = round(max(0.0, (float)$this->credits['last_physical'][$planetId]['deuterium'] - $fuelConsumption), 2);
+            }
+        }
+
+        // 2. Deduct dispatched cargo proportionally from local categories
+        $mCargo = max(0.0, (float)($cargoResources[901] ?? $cargoResources['metal'] ?? 0.0));
+        $cCargo = max(0.0, (float)($cargoResources[902] ?? $cargoResources['crystal'] ?? 0.0));
+        $dCargo = max(0.0, (float)($cargoResources[903] ?? $cargoResources['deuterium'] ?? 0.0));
+
+        if ($mCargo > 0.0 || $cCargo > 0.0 || $dCargo > 0.0) {
+            $this->deductCargoFromLocalPlanet($planetId, $mCargo, $cCargo, $dCargo);
+            if (isset($this->credits['last_physical'][$planetId])) {
+                $this->credits['last_physical'][$planetId]['metal']     = round(max(0.0, (float)$this->credits['last_physical'][$planetId]['metal'] - $mCargo), 2);
+                $this->credits['last_physical'][$planetId]['crystal']   = round(max(0.0, (float)$this->credits['last_physical'][$planetId]['crystal'] - $cCargo), 2);
+                $this->credits['last_physical'][$planetId]['deuterium'] = round(max(0.0, (float)$this->credits['last_physical'][$planetId]['deuterium'] - $dCargo), 2);
+            }
+        }
+
+        $this->saveState();
+    }
+
+    /**
+     * Deduct dispatched cargo proportionally across local planet categories
+     */
+    public function deductCargoFromLocalPlanet($planetId, $mCargo, $cCargo, $dCargo)
+    {
+        $planetId = (int)$planetId;
+        if (!isset($this->credits['planets'][$planetId])) {
+            return;
+        }
+
+        $cats = array('mines', 'fleet', 'defense');
+        foreach (array('metal' => $mCargo, 'crystal' => $cCargo, 'deuterium' => $dCargo) as $resKey => $amount) {
+            if ($amount <= 0.0) continue;
+
+            $totalCat = 0.0;
+            foreach ($cats as $cat) {
+                $totalCat += (float)($this->credits['planets'][$planetId][$cat][$resKey] ?? 0.0);
+            }
+
+            if ($totalCat <= 0.0) continue;
+
+            $rem = $amount;
+            foreach ($cats as $cat) {
+                $cur = (float)($this->credits['planets'][$planetId][$cat][$resKey] ?? 0.0);
+                $share = ($cur / $totalCat) * $amount;
+                $deduct = min($cur, $share);
+                $this->credits['planets'][$planetId][$cat][$resKey] = round(max(0.0, $cur - $deduct), 2);
+                $rem -= $deduct;
+            }
+
+            if ($rem > 0.01) {
+                foreach ($cats as $cat) {
+                    $cur = (float)($this->credits['planets'][$planetId][$cat][$resKey] ?? 0.0);
+                    if ($cur > 0.0) {
+                        $deduct = min($cur, $rem);
+                        $this->credits['planets'][$planetId][$cat][$resKey] = round(max(0.0, $cur - $deduct), 2);
+                        $rem -= $deduct;
+                        if ($rem <= 0.01) break;
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * Strict Physical Invariant Reconciliation (Conservation of Virtual Earmarks)
+     *
+     * Invariants:
+     * 1. On every planet, Sum(Local Virtual Budgets) <= Physical Stock * (1 - r_research).
+     * 2. Global Research Budget <= Empire Total Physical Stock * r_research.
+     * 3. Overall Invariant: Sum(All Virtual Credits) <= Sum(All Physical Stock).
+     *
+     * @param BotEmpireState $empire
+     * @param array $ratios Macro category ratios [mines, fleet, defense, research]
+     */
+    public function reconcilePhysicalInvariant(BotEmpireState $empire, array $ratios)
+    {
+        $planets = $empire->getPlanets();
+        if (!is_array($planets) || empty($planets)) {
+            return;
+        }
+
+        $r_research = (float)($ratios['research'] ?? 0.20);
+        $localRatioSum = max(0.01, 1.0 - $r_research);
+
+        $totalEmpirePhysM = 0.0;
+        $totalEmpirePhysC = 0.0;
+        $totalEmpirePhysD = 0.0;
+
+        foreach ($planets as $pId => $pEntry) {
+            $pData = $pEntry['data'];
+            $pId   = (int)$pId;
+
+            if (!isset($this->credits['planets'][$pId])) {
+                $this->credits['planets'][$pId] = array(
+                    'mines'   => array('metal' => 0.0, 'crystal' => 0.0, 'deuterium' => 0.0),
+                    'fleet'   => array('metal' => 0.0, 'crystal' => 0.0, 'deuterium' => 0.0),
+                    'defense' => array('metal' => 0.0, 'crystal' => 0.0, 'deuterium' => 0.0),
+                );
+            }
+
+            $curM = max(0.0, (float)($pData['metal'] ?? 0.0));
+            $curC = max(0.0, (float)($pData['crystal'] ?? 0.0));
+            $curD = max(0.0, (float)($pData['deuterium'] ?? 0.0));
+
+            $totalEmpirePhysM += $curM;
+            $totalEmpirePhysC += $curC;
+            $totalEmpirePhysD += $curD;
+
+            $capM = max(10000.0, (float)($pData['metal_max'] ?? 10000.0));
+            $capC = max(10000.0, (float)($pData['crystal_max'] ?? 10000.0));
+            $capD = max(10000.0, (float)($pData['deuterium_max'] ?? 10000.0));
+
+            $maxLocalM = $curM * $localRatioSum;
+            $maxLocalC = $curC * $localRatioSum;
+            $maxLocalD = $curD * $localRatioSum;
+
+            // Compute current local sum of virtual budgets
+            $sumVirtM = (float)($this->credits['planets'][$pId]['mines']['metal'] ?? 0.0)
+                      + (float)($this->credits['planets'][$pId]['fleet']['metal'] ?? 0.0)
+                      + (float)($this->credits['planets'][$pId]['defense']['metal'] ?? 0.0);
+
+            $sumVirtC = (float)($this->credits['planets'][$pId]['mines']['crystal'] ?? 0.0)
+                      + (float)($this->credits['planets'][$pId]['fleet']['crystal'] ?? 0.0)
+                      + (float)($this->credits['planets'][$pId]['defense']['crystal'] ?? 0.0);
+
+            $sumVirtD = (float)($this->credits['planets'][$pId]['mines']['deuterium'] ?? 0.0)
+                      + (float)($this->credits['planets'][$pId]['fleet']['deuterium'] ?? 0.0)
+                      + (float)($this->credits['planets'][$pId]['defense']['deuterium'] ?? 0.0);
+
+            // Reconcile each resource (Metal, Crystal, Deuterium)
+            $this->reconcilePlanetResource($pId, 'metal', $sumVirtM, $maxLocalM, $capM, $ratios, $localRatioSum);
+            $this->reconcilePlanetResource($pId, 'crystal', $sumVirtC, $maxLocalC, $capC, $ratios, $localRatioSum);
+            $this->reconcilePlanetResource($pId, 'deuterium', $sumVirtD, $maxLocalD, $capD, $ratios, $localRatioSum);
+
+            // Keep last_physical locked to real physical stock
+            $this->credits['last_physical'][$pId] = array(
+                'metal'     => $curM,
+                'crystal'   => $curC,
+                'deuterium' => $curD,
+            );
+        }
+
+        // Reconcile Global Research against Empire-wide physical backing
+        $maxResM = $totalEmpirePhysM * $r_research;
+        $maxResC = $totalEmpirePhysC * $r_research;
+        $maxResD = $totalEmpirePhysD * $r_research;
+
+        if (isset($this->credits['research'])) {
+            $curResM = (float)($this->credits['research']['metal'] ?? 0.0);
+            $curResC = (float)($this->credits['research']['crystal'] ?? 0.0);
+            $curResD = (float)($this->credits['research']['deuterium'] ?? 0.0);
+
+            $this->credits['research']['metal']     = round(min($maxResM, $curResM), 2);
+            $this->credits['research']['crystal']   = round(min($maxResC, $curResC), 2);
+            $this->credits['research']['deuterium'] = round(min($maxResD, $curResD), 2);
+        }
+    }
+
+    private function reconcilePlanetResource($pId, $resKey, $sumVirt, $maxLocal, $cap, array $ratios, $localRatioSum)
+    {
+        $cats = array('mines', 'fleet', 'defense');
+
+        if ($sumVirt > $maxLocal && $sumVirt > 0.0) {
+            // Case A: Phantom inflation (Virtual > Physical). Scale down proportionally.
+            $scale = $maxLocal / $sumVirt;
+            foreach ($cats as $cat) {
+                if (isset($this->credits['planets'][$pId][$cat][$resKey])) {
+                    $cur = (float)$this->credits['planets'][$pId][$cat][$resKey];
+                    $this->credits['planets'][$pId][$cat][$resKey] = round($cur * $scale, 2);
+                }
+            }
+        } elseif ($sumVirt < $maxLocal) {
+            // Case B: Idle physical surplus not yet allocated to virtual buckets.
+            $surplus = $maxLocal - $sumVirt;
+            foreach ($cats as $cat) {
+                $r_k = (float)($ratios[$cat] ?? 0.0);
+                $weight = $r_k / $localRatioSum;
+                $catCeiling = $cap * $r_k;
+                $cur = (float)($this->credits['planets'][$pId][$cat][$resKey] ?? 0.0);
+                $newVal = min($catCeiling, $cur + ($surplus * $weight));
+                $this->credits['planets'][$pId][$cat][$resKey] = round($newVal, 2);
+            }
+        }
     }
 
     private function deductResourcePair(array &$catRef, $resourceKey, $amount)

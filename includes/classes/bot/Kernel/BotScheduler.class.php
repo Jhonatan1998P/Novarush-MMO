@@ -84,6 +84,55 @@ class BotScheduler
         return !empty($res['cnt']);
     }
 
+    /**
+     * Check if a pending task of specific type(s) exists for a bot targeting specific coordinates
+     *
+     * @param int $botId
+     * @param string|array $taskTypes
+     * @param int $galaxy
+     * @param int $system
+     * @param int $planet
+     * @return bool
+     */
+    public static function hasPendingTaskForTarget($botId, $taskTypes, $galaxy, $system, $planet)
+    {
+        $db = Database::get();
+        if (!is_array($taskTypes)) {
+            $taskTypes = array($taskTypes);
+        }
+        $placeholders = array();
+        $params = array(':bot_id' => (int)$botId);
+        foreach ($taskTypes as $idx => $tt) {
+            $key = ":tt_{$idx}";
+            $placeholders[] = $key;
+            $params[$key] = (string)$tt;
+        }
+        $inClause = implode(',', $placeholders);
+        $sql = "SELECT payload FROM " . DB_PREFIX . "bot_tasks 
+                WHERE bot_id = :bot_id 
+                  AND task_type IN ({$inClause}) 
+                  AND status = 'pending';";
+
+        $rows = $db->select($sql, $params);
+        if (empty($rows)) {
+            return false;
+        }
+
+        foreach ($rows as $row) {
+            $payload = json_decode($row['payload'], true);
+            if (!is_array($payload)) continue;
+            $pG = $payload['target_galaxy'] ?? ($payload['galaxy'] ?? null);
+            $pS = $payload['target_system'] ?? ($payload['system'] ?? null);
+            $pP = $payload['target_planet'] ?? ($payload['planet'] ?? null);
+            if ($pG !== null && (int)$pG === (int)$galaxy &&
+                $pS !== null && (int)$pS === (int)$system &&
+                $pP !== null && (int)$pP === (int)$planet) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     public static function markTaskComplete($taskId)
     {
         $db = Database::get();
@@ -98,5 +147,56 @@ class BotScheduler
         $db->update("UPDATE " . DB_PREFIX . "bot_tasks SET status = 'failed' WHERE task_id = :id;", array(
             ':id' => (int)$taskId,
         ));
+    }
+
+    /**
+     * Cancels any pending scheduled tasks matching target coordinates or planet ID.
+     */
+    public static function cancelPendingTasksForTarget($botId, $galaxy, $system, $planet, $planetId = 0)
+    {
+        $db = Database::get();
+        $botId = (int)$botId;
+        $galaxy = (int)$galaxy;
+        $system = (int)$system;
+        $planet = (int)$planet;
+        $planetId = (int)$planetId;
+
+        $rows = $db->select("SELECT task_id, payload FROM " . DB_PREFIX . "bot_tasks 
+            WHERE bot_id = :bot_id AND status = 'pending';", array(
+            ':bot_id' => $botId
+        ));
+
+        if (empty($rows)) {
+            return 0;
+        }
+
+        $cancelled = 0;
+        foreach ($rows as $row) {
+            $payload = json_decode($row['payload'], true);
+            if (!is_array($payload)) continue;
+
+            $pG = $payload['target_galaxy'] ?? ($payload['galaxy'] ?? null);
+            $pS = $payload['target_system'] ?? ($payload['system'] ?? null);
+            $pP = $payload['target_planet'] ?? ($payload['planet'] ?? null);
+            $pId = $payload['target_planet_id'] ?? ($payload['planet_id'] ?? 0);
+
+            $match = false;
+            if ($pG !== null && (int)$pG === $galaxy &&
+                $pS !== null && (int)$pS === $system &&
+                $pP !== null && (int)$pP === $planet) {
+                $match = true;
+            } elseif ($planetId > 0 && (int)$pId === $planetId) {
+                $match = true;
+            }
+
+            if ($match) {
+                $db->update("UPDATE " . DB_PREFIX . "bot_tasks SET status = 'cancelled' WHERE task_id = :id;", array(
+                    ':id' => (int)$row['task_id']
+                ));
+                $cancelled++;
+            }
+        }
+
+        return $cancelled;
     }
 }

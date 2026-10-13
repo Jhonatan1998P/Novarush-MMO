@@ -314,7 +314,7 @@ function formatDecisionInSpanish($decision)
             return "🛸 Despliegue Refuerzo: " . $summary;
 
         case 'strike_launched':
-            $summary = preg_replace('/Launched\s+(.+?)\s+strike from FOB\s+#(\d+)\s+against\s+\[(\d+:\d+:\d+)\]\s+with\s+(.+?)\s+warships\s+\((.+?)\s+win probability\)(?:\s+at\s+(.+?)%\s+speed)?(?:\s+\(ETA:\s+(.+?)s\))?(?:\s+\(Sincronizado:\s+Recicladores arriban T\+(\d+)s desde base #(\d+)\))?/i', 'Ofensiva lanzada desde Base FOB #$2 contra [$3] con $4 naves ($5 victoria). Recicladores arriban a T+$8s.', $summary);
+            $summary = preg_replace('/Launched\s+(.+?)\s+strike from FOB\s+#(\d+)\s+against\s+\[(\d+:\d+:\d+)\]\s+with\s+(.+?)\s+warships\s+\((.+?)\s+win probability\)(?:\s+at\s+(.+?)%\s+speed)?\s+\(Sincronizado:\s+Recicladores arriban T\+(\d+)s desde base #(\d+)\)/i', 'Ofensiva lanzada desde Base FOB #$2 contra [$3] con $4 naves ($5 victoria). Recicladores arriban a T+$7s.', $summary);
             $summary = preg_replace('/Launched\s+(.+?)\s+strike from FOB\s+#(\d+)\s+against\s+\[(\d+:\d+:\d+)\]\s+with\s+(.+?)\s+warships\s+\((.+?)\s+win probability\)(?:\s+at\s+(.+?)%\s+speed)?(?:\s+\(ETA:\s+(.+?)s\))?/i', 'Ofensiva lanzada desde Base FOB #$2 contra [$3] con $4 naves ($5 victoria).', $summary);
             return "⚔️ Ofensiva Militar: " . $summary;
 

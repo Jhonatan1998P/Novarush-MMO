@@ -129,11 +129,73 @@ class BotThreatResponder
                     $actionsExecuted++;
                 }
             } else {
-                // High-fidelity calibrated decision with the two strict conditions:
-                // Condition 1: Defenses alone suffer >= 80% destruction ($defenseLossRatio >= 0.80)
-                // Condition 2: Combined garrison achieves >= 80% win probability ($botWinProb >= 0.80)
-                if ($botWinProb < 0.80) {
-                    // Bot cannot reliably win (win prob < 80%). Fleetsave mobile fleet to avoid destruction!
+                // --- FINANCIAL UTILITY EVALUATION (HOLD / NINJA TRAP VS FLEETSAVE) ---
+                // Available local recycler capacity on planet
+                $localRecs219 = isset($pData[$resource[219]]) ? (int)$pData[$resource[219]] : 0;
+                $localRecs209 = isset($pData[$resource[209]]) ? (int)$pData[$resource[209]] : 0;
+                $localRecCap  = ($localRecs219 * 200000000.0) + ($localRecs209 * 20000.0);
+
+                // Ground resources exposed to raiding
+                $lootMetal = (float)($pData['metal'] ?? 0) * 0.50;
+                $lootCry   = (float)($pData['crystal'] ?? 0) * 0.50;
+                $lootDeut  = (float)($pData['deuterium'] ?? 0) * 0.50;
+                $lootStolenMSE = BotEconomyValuator::toMSE($lootMetal, $lootCry, $lootDeut);
+
+                // In simulation: threatFleet is attacker, bot is defender
+                $totalDebrisMse = isset($simCombined['debris_mse']) && (float)$simCombined['debris_mse'] > 0
+                    ? (float)$simCombined['debris_mse']
+                    : ((float)($simCombined['debris_metal'] ?? 0) * 1.0 + (float)($simCombined['debris_crystal'] ?? 0) * 1.5);
+
+                $localHarvestableDebris = ($localRecCap > 0 && $totalDebrisMse > 0) ? min($totalDebrisMse, $localRecCap) : 0.0;
+                $botGarrisonLossesMSE   = isset($simCombined['def_loss_mse']) ? (float)$simCombined['def_loss_mse'] : 0.0;
+
+                // Balance de pelear en casa (cosechando escombros en órbita local en < 45s)
+                $balancePelear = $localHarvestableDebris - $botGarrisonLossesMSE;
+
+                // Balance de evacuar (saqueo enemigo + daño a defensas estáticas)
+                $defLossAlone = isset($simDefOnly['def_loss_mse']) ? (float)$simDefOnly['def_loss_mse'] : 0.0;
+                $balanceEvacuar = 0.0 - ($lootStolenMSE + $defLossAlone);
+
+                $ninjaTrapAllowed = !empty($this->ctx->difficulty->ninjaTrapAllowed);
+                $minRecCoverageReq = isset($this->ctx->difficulty->minRecyclerCoverageRequired) ? (float)$this->ctx->difficulty->minRecyclerCoverageRequired : 0.70;
+                $recCoverage = ($totalDebrisMse > 0) ? ($localRecCap / $totalDebrisMse) : 0.0;
+
+                // Trampa Ninja es viable si pelear en casa arroja un balance superior a evacuar y es económicamente positivo o equilibrado
+                $isProfitableNinjaTrap = $ninjaTrapAllowed && (
+                    ($balancePelear > $balanceEvacuar && ($balancePelear > 0 || $botWinProb >= 0.50)) &&
+                    ($recCoverage >= $minRecCoverageReq || $localHarvestableDebris >= ($botGarrisonLossesMSE * 0.80))
+                );
+
+                if ($isProfitableNinjaTrap) {
+                    // TRAMPA NINJA / DEFENSIVE HOLD: Pelear en casa para cosechar la nube de escombros masiva
+                    $offsetDef = $this->ctx->difficulty->getRecyclerDefenseOffset();
+                    $expectedDebris = max($totalDebrisMse, 50000.0);
+
+                    $this->ctx->decisionLog->record(
+                        'threat_ninja_trap_hold',
+                        "Tactical Ninja Trap: Pelea en casa arroja balance contable superior (" . number_format($balancePelear) . " MSE vs pérdida por evacuación de " . number_format($balanceEvacuar) . " MSE). Win prob: " . round($botWinProb * 100, 1) . "%, Escombros locales cosechables: " . number_format($localHarvestableDebris) . " MSE. Reteniendo armada en tierra y desplegando recicladores locales que arriban a T+{$offsetDef}s post-impacto.",
+                        array(
+                            'threat' => $threat,
+                            'balance_pelear' => $balancePelear,
+                            'balance_evacuar' => $balanceEvacuar,
+                            'bot_win_prob' => $botWinProb,
+                            'local_debris' => $localHarvestableDebris,
+                            'offset_def' => $offsetDef
+                        ),
+                        'ninja_trap_hold',
+                        7000.0
+                    );
+
+                    $this->scheduleOrLaunchDefenseRecyclers(
+                        $world,
+                        $pData,
+                        (int)$threat['arrival_time'],
+                        $expectedDebris,
+                        $offsetDef
+                    );
+                    $actionsExecuted++;
+                } elseif ($botWinProb < 0.80) {
+                    // Bot cannot reliably win (win prob < 80%) y la trampa no es rentable. Fleetsave mobile fleet to avoid destruction!
                     $saved = $this->fleetsaver->executeFleetsave(
                         $world->empire,
                         $targetPlanetId,

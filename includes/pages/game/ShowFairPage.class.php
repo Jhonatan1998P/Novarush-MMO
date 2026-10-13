@@ -31,48 +31,20 @@ class ShowFairPage extends AbstractGamePage
 		$amount = max(1, min((int) ($pricelist[$Element]['max'] ?? 1), (int) HTTP::_GP('amount', 1)));
 		
 		if (in_array($Element, array(2301, 2302, 2303))) {
-			if (TIMESTAMP <= $USER[$resource[$Element]]) {
-				$this->printMessage(''.$LNG['bd_restart_no'].'', true, array('game.php?page=fair', 2));
-				return;
-			}
-			
 			$dailyKey = 'fair_res_' . $Element;
-			$dailyLimit = (int) PremiumEconomy::get('fair_daily_limit', 3);
+			$dailyLimit = 1;
 			$n = PremiumEconomy::dailyCount($USER['id'], $dailyKey);
 			
 			if ($n >= $dailyLimit) {
-				$this->printMessage("Has alcanzado el límite de {$dailyLimit} conversiones diarias para este recurso. Se reinicia a medianoche.", true, array('game.php?page=fair', 2));
+				$this->printMessage("Has alcanzado el límite de {$dailyLimit} conversión diaria para esta oferta. Se reinicia a medianoche.", true, array('game.php?page=fair', 2));
 				return;
 			}
 			
-			$amount = min($amount, $dailyLimit - $n);
-			
-			$H = PremiumEconomy::get('fair_hours', 6);
-			$P = PremiumEconomy::indexedHourlyMSE($USER['id']);
-			
-			$totalCost = 0;
-			$resId = 901;
-			if ($Element == 2301) {
-				$resId = 901; // Metal
-				for ($i = 0; $i < $amount; $i++) {
-					$mult = pow(PremiumEconomy::get('fair_growth', 1.25), $n + $i);
-					$totalCost += (float) ceil($H * $P * $mult);
-				}
-			} elseif ($Element == 2302) {
-				$resId = 902; // Cristal
-				for ($i = 0; $i < $amount; $i++) {
-					$mult = pow(PremiumEconomy::get('fair_growth', 1.25), $n + $i);
-					$totalCost += (float) ceil($H * $P * $mult / 2);
-				}
-			} else {
-				$resId = 903; // Deuterio
-				for ($i = 0; $i < $amount; $i++) {
-					$mult = pow(PremiumEconomy::get('fair_growth', 1.25), $n + $i);
-					$totalCost += (float) ceil($H * $P * $mult / 4);
-				}
-			}
-			
+			$amount = 1;
+			$totalCost = PremiumEconomy::getFairResourceCost($Element);
+			$resId = ($Element == 2301) ? 901 : (($Element == 2302) ? 902 : 903);
 			$col = $resource[$resId];
+			
 			if ($PLANET[$col] < $totalCost) {
 				$this->printMessage(''.$LNG['bd_notres'].'', true, array('game.php?page=fair', 2));
 				return;
@@ -87,20 +59,11 @@ class ShowFairPage extends AbstractGamePage
 			));
 			
 			// Credit MO (1.000 MO per unit)
-			$rewardMO = 1000 * $amount;
-			PremiumEconomy::credit($USER, 921, $rewardMO, 'fair_res', $Element, "n={$n};amt={$amount}");
+			$rewardMO = 1000;
+			PremiumEconomy::credit($USER, 921, $rewardMO, 'fair_res', $Element, "n={$n};amt=1");
 			
-			// Increment daily counter for each conversion
-			for ($k = 0; $k < $amount; $k++) {
-				PremiumEconomy::dailyIncrement($USER['id'], $dailyKey);
-			}
-			
-			// Cooldown
-			$USER[$resource[$Element]] = max($USER[$resource[$Element]], TIMESTAMP) + ($pricelist[$Element]['time']) * $amount;
-			$db->update("UPDATE %%USERS%% SET {$resource[$Element]} = :t WHERE id = :uid;", array(
-				':t'   => $USER[$resource[$Element]],
-				':uid' => $USER['id']
-			));
+			// Increment daily counter
+			PremiumEconomy::dailyIncrement($USER['id'], $dailyKey);
 			
 			$this->printMessage(''.$LNG['bd_buy_yes'].'', true, array('game.php?page=fair', 2));
 			return;
@@ -146,44 +109,51 @@ class ShowFairPage extends AbstractGamePage
 			return;
 		}
 		
-		// Currency trades (2304-2306)
-		if (TIMESTAMP <= $USER[$resource[$Element]]) {
-			$this->printMessage(''.$LNG['bd_restart_no'].'', true, array('game.php?page=fair', 2));
-			return;
-		}
-		
-		$costResources = BuildFunctions::getElementPrice($USER, $PLANET, $Element);
-		$costCur = 0;
-		$costVal = 0;
-		foreach ($costResources as $cCur => $cVal) {
-			if ($cVal > 0) {
-				$costCur = $cCur;
-				$costVal = $cVal * $amount;
-				break;
-			}
-		}
-		
-		if ($costCur > 0) {
-			if (!PremiumEconomy::debit($USER, $costCur, $costVal, 'fair_trade', $Element, "amt={$amount}")) {
-				$this->printMessage(''.$LNG['bd_notres'].'', true, array('game.php?page=fair', 2));
+		// Currency trades (2304: AM -> Stardust, 2305: Stardust -> AM, 2306: MO -> AM)
+		// Límite: Máximo 3 por día
+		if (in_array($Element, array(2304, 2305, 2306))) {
+			$dailyKey = 'fair_trade_' . $Element;
+			$dailyLimit = 3;
+			$n = PremiumEconomy::dailyCount($USER['id'], $dailyKey);
+			
+			if ($n >= $dailyLimit) {
+				$this->printMessage("Has alcanzado el límite de {$dailyLimit} compras diarias para esta oferta. Se reinicia a medianoche.", true, array('game.php?page=fair', 2));
 				return;
 			}
-		}
-		
-		if (isset($BonusElement[$Element])) {
-			foreach ($BonusElement[$Element] as $rCur => $rVal) {
-				PremiumEconomy::credit($USER, $rCur, $rVal * $amount, 'fair_trade', $Element, "amt={$amount}");
+			
+			$amount = max(1, min($amount, $dailyLimit - $n));
+			
+			$costResources = BuildFunctions::getElementPrice($USER, $PLANET, $Element);
+			$costCur = 0;
+			$costVal = 0;
+			foreach ($costResources as $cCur => $cVal) {
+				if ($cVal > 0) {
+					$costCur = $cCur;
+					$costVal = $cVal * $amount;
+					break;
+				}
 			}
+			
+			if ($costCur > 0) {
+				if (!PremiumEconomy::debit($USER, $costCur, $costVal, 'fair_trade', $Element, "amt={$amount}")) {
+					$this->printMessage(''.$LNG['bd_notres'].'', true, array('game.php?page=fair', 2));
+					return;
+				}
+			}
+			
+			if (isset($BonusElement[$Element])) {
+				foreach ($BonusElement[$Element] as $rCur => $rVal) {
+					PremiumEconomy::credit($USER, $rCur, $rVal * $amount, 'fair_trade', $Element, "amt={$amount}");
+				}
+			}
+			
+			for ($k = 0; $k < $amount; $k++) {
+				PremiumEconomy::dailyIncrement($USER['id'], $dailyKey);
+			}
+			
+			$this->printMessage(''.$LNG['bd_buy_yes'].'', true, array('game.php?page=fair', 2));
+			return;
 		}
-		
-		$USER[$resource[$Element]] = max($USER[$resource[$Element]], TIMESTAMP) + ($pricelist[$Element]['time']) * $amount;
-		$db = Database::get();
-		$db->update("UPDATE %%USERS%% SET {$resource[$Element]} = :t WHERE id = :uid;", array(
-			':t'   => $USER[$resource[$Element]],
-			':uid' => $USER['id']
-		));
-		
-		$this->printMessage(''.$LNG['bd_buy_yes'].'', true, array('game.php?page=fair', 2));
 	}
 	
 	public function show()
@@ -205,36 +175,29 @@ class ShowFairPage extends AbstractGamePage
 		
 		if(isModuleAvailable(MODULE_FAIR)) 
 		{
-			$H = PremiumEconomy::get('fair_hours', 6);
-			$P = PremiumEconomy::indexedHourlyMSE($USER['id']);
-			$dailyLimit = (int) PremiumEconomy::get('fair_daily_limit', 3);
-			
 			foreach($reslist['fair'] as $Element)
 			{
-				if($USER[$resource[$Element]] > TIMESTAMP) {
-					$this->tplObj->execscript("GetOfficerTime(".$Element.", ".($USER[$resource[$Element]] - TIMESTAMP).");");
-				}
 				$bonusElementList = BuildFunctions::bonusElementList($Element);
 				
 				$dailyUsed = null;
 				$elementDailyLimit = null;
 				$mult = 1.0;
 				
+				// Ofertas de Recursos por 1.000 MO (2301: Metal, 2302: Cristal, 2303: Deuterio)
+				// Límite: 1 cambio al día
+				// Coste: 6 horas de producción horaria promedio del servidor
 				if (in_array($Element, array(2301, 2302, 2303))) {
-					$n = PremiumEconomy::dailyCount($USER['id'], 'fair_res_' . $Element);
-					$mult = pow(PremiumEconomy::get('fair_growth', 1.25), $n);
+					$dailyKey = 'fair_res_' . $Element;
+					$dailyLimit = 1;
+					$n = PremiumEconomy::dailyCount($USER['id'], $dailyKey);
 					
-					if ($Element == 2301) {
-						$costResources = array(901 => (float) ceil($H * $P * $mult));
-					} elseif ($Element == 2302) {
-						$costResources = array(902 => (float) ceil($H * $P * $mult / 2));
-					} else {
-						$costResources = array(903 => (float) ceil($H * $P * $mult / 4));
-					}
+					$cost = PremiumEconomy::getFairResourceCost($Element);
+					$resId = ($Element == 2301) ? 901 : (($Element == 2302) ? 902 : 903);
+					$costResources = array($resId => $cost);
 					
 					$remainingDaily = max(0, $dailyLimit - $n);
 					$buyable = ($remainingDaily > 0) && BuildFunctions::isElementBuyable($USER, $PLANET, $Element, $costResources);
-					$maxAllowed = min((int) ($pricelist[$Element]['max'] ?? 3), $remainingDaily);
+					$maxAllowed = min(1, $remainingDaily);
 					$dailyUsed = $n;
 					$elementDailyLimit = $dailyLimit;
 				} elseif (in_array($Element, array(2307, 2308))) {
@@ -252,6 +215,17 @@ class ShowFairPage extends AbstractGamePage
 					$maxAllowed = min(1, $remainingDaily);
 					$dailyUsed = $n;
 					$elementDailyLimit = $limitTrades;
+				} elseif (in_array($Element, array(2304, 2305, 2306))) {
+					$dailyKey = 'fair_trade_' . $Element;
+					$limitTrades = 3;
+					$n = PremiumEconomy::dailyCount($USER['id'], $dailyKey);
+					
+					$costResources = BuildFunctions::getElementPrice($USER, $PLANET, $Element);
+					$remainingDaily = max(0, $limitTrades - $n);
+					$buyable = ($remainingDaily > 0) && BuildFunctions::isElementBuyable($USER, $PLANET, $Element, $costResources);
+					$maxAllowed = min(1, $remainingDaily);
+					$dailyUsed = $n;
+					$elementDailyLimit = $limitTrades;
 				} else {
 					$costResources = BuildFunctions::getElementPrice($USER, $PLANET, $Element);
 					$buyable       = BuildFunctions::isElementBuyable($USER, $PLANET, $Element, $costResources);
@@ -263,7 +237,7 @@ class ShowFairPage extends AbstractGamePage
 				
 				$fairList[$Element] = array(
 					'maxLevel'             => $maxAllowed,
-					'timeLeft'             => in_array($Element, array(2307, 2308)) ? 0 : max($USER[$resource[$Element]] - TIMESTAMP, 0),
+					'timeLeft'             => 0,
 					'costResources'        => $costResources,
 					'buyable'              => $buyable,
 					'costOverflow'         => $costOverflow,

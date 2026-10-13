@@ -32,7 +32,7 @@ class FleetFunctions
 		}
 
 		$reduction = isset($Player['factor']['FuelConsum']) ? (float)$Player['factor']['FuelConsum'] : 0.0;
-		return max(1, round($baseConsumption * max(0.05, 1.0 - $reduction)));
+		return max(0.001, $baseConsumption * max(0.05, 1.0 - $reduction));
 	}
 
 	private static function OnlyShipByID($Ships, $ShipID)

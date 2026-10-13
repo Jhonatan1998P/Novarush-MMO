@@ -142,7 +142,7 @@ class BotCombatOracle
         $debrisMse = ((float)$mc['avg_debris_met'] * 1.0) + ((float)$mc['avg_debris_cry'] * 1.5);
         $expectedGainMse = $debrisMse * 0.70; // 70% typical debris recovery
         $netEvMse = $expectedGainMse - (float)$mc['avg_att_loss_mse'];
-        $isProfitable = ($netEvMse > 0.0 && (float)$mc['win_rate'] >= 0.70);
+        $isProfitable = ($netEvMse > 0.0);
 
         return array(
             'win_probability'    => $mc['win_rate'],
@@ -166,4 +166,223 @@ class BotCombatOracle
             'ratio'              => isset($surrogate['ratio']) ? $surrogate['ratio'] : 1.0,
         );
     }
+
+    /**
+     * Comprehensive Financial Balance (NAV / ROI / Delta MSE) Evaluator
+     *
+     * Evaluates battle outcome in real economic terms (MSE):
+     * Profit = (Loot + Realizable Debris) - (Own Losses + Deuterium Fuel)
+     *
+     * @param array $simResult Result from evaluate()
+     * @param float $deployedFleetMSE Total MSE of attacker/defender mobile fleet
+     * @param float $fuelMSE Fuel cost of fleet and recyclers in MSE
+     * @param float $availableRecCap Total capacity of available recyclers (MSE)
+     * @param float $lootMSE Projected loot from ground storage
+     * @param float|null $customDebrisRate Optional universe debris rate
+     * @return array
+     */
+    public static function evaluateFinancialBalance(
+        array $simResult,
+        $deployedFleetMSE,
+        $fuelMSE = 0.0,
+        $availableRecCap = 0.0,
+        $lootMSE = 0.0,
+        $customDebrisRate = null
+    ) {
+        $cfg = class_exists('Config') ? Config::get() : null;
+        $fCdr = ($customDebrisRate !== null)
+            ? (float)$customDebrisRate
+            : ($cfg && isset($cfg->Fleet_Cdr) ? ((float)$cfg->Fleet_Cdr / 100.0) : 0.70);
+
+        // Losses
+        $attLossPct = isset($simResult['att_loss_pct']) ? (float)$simResult['att_loss_pct'] : 0.0;
+        $ownLossMSE = isset($simResult['att_loss_mse']) && (float)$simResult['att_loss_mse'] > 0
+            ? (float)$simResult['att_loss_mse']
+            : ((float)$deployedFleetMSE * $attLossPct);
+
+        $defLossMSE = isset($simResult['def_loss_mse']) ? (float)$simResult['def_loss_mse'] : 0.0;
+
+        // Total Debris
+        $debrisMse = isset($simResult['debris_mse']) && (float)$simResult['debris_mse'] > 0
+            ? (float)$simResult['debris_mse']
+            : ((float)($simResult['debris_metal'] ?? 0) * 1.0 + (float)($simResult['debris_crystal'] ?? 0) * 1.5);
+
+        if ($debrisMse <= 0.0 && ($ownLossMSE > 0 || $defLossMSE > 0)) {
+            $debrisMse = ($ownLossMSE + $defLossMSE) * $fCdr;
+        }
+
+        // Recycler Coverage
+        $availableRecCap = max(0.0, (float)$availableRecCap);
+        $recyclerCoverage = ($debrisMse > 0.0) ? min(1.0, $availableRecCap / $debrisMse) : 1.0;
+        $realizableDebris = ($availableRecCap > 0.0) ? min($debrisMse, $availableRecCap) : 0.0;
+
+        // Revenues & Costs
+        $winProb = isset($simResult['win_probability']) ? (float)$simResult['win_probability'] : 0.0;
+
+        // In NovaRush/2Moons combat engine, loot is strictly conditional on attacker victory.
+        // A draw or defeat yields 0 loot. Thus, realizable loot must be weighted by win probability.
+        // This prevents suicidal bait runs into lethal defenses where bots expect guaranteed loot.
+        $realizableLoot  = max(0.0, (float)$lootMSE) * $winProb;
+        $grossRevenue    = $realizableLoot + $realizableDebris;
+        $actualCosts     = (float)$ownLossMSE + (float)$fuelMSE;
+        $netProfitMSE    = $grossRevenue - $actualCosts;
+        $costDenominator = max(1.0, $actualCosts);
+        $roi             = $netProfitMSE / $costDenominator;
+
+        $isMutualSacrifice = ($attLossPct >= 0.50 && $netProfitMSE > 0.0);
+
+        return array(
+            'net_profit_mse'       => round($netProfitMSE, 2),
+            'roi'                  => round($roi, 4),
+            'realizable_loot'      => round($realizableLoot, 2),
+            'gross_revenue'        => round($grossRevenue, 2),
+            'recycler_coverage'    => round($recyclerCoverage, 4),
+            'realizable_debris'    => round($realizableDebris, 2),
+            'total_debris_mse'     => round($debrisMse, 2),
+            'own_losses_mse'       => round($ownLossMSE, 2),
+            'def_losses_mse'       => round($defLossMSE, 2),
+            'total_costs_mse'      => round($actualCosts, 2),
+            'win_probability'      => $winProb,
+            'att_loss_pct'         => round($attLossPct, 4),
+            'is_net_profitable'    => ($netProfitMSE > 0.0),
+            'is_mutual_sacrifice'  => $isMutualSacrifice,
+        );
+    }
+
+    /**
+     * Virtual simulation of NovaRush MIP attack using the exact engine algorithm from calculateMIPAttack.php.
+     *
+     * @param array $targetDefense Defenses map [unitId => count]
+     * @param int $mipsCount Available interplanetary missiles to fire
+     * @param int $abmCount Defender interceptor missiles (ABM #502)
+     * @param int $attackerMilitaryTech Attacker military technology level
+     * @param int $defenderShieldTech Defender shield/armor technology level
+     * @param int $primaryTarget Chosen primary target unit ID (e.g. 406 Plasma, 404 Gauss)
+     * @return array ['remaining' => array, 'destroyed' => array, 'effective_mips' => int]
+     */
+    public static function simulateMIPBreach(
+        array $targetDefense,
+        $mipsCount,
+        $abmCount,
+        $attackerMilitaryTech = 0,
+        $defenderShieldTech = 0,
+        $primaryTarget = 0
+    ) {
+        global $pricelist, $CombatCaps;
+
+        $mipsCount = (int)$mipsCount;
+        $abmCount  = (int)$abmCount;
+        $countMissiles = max(0, $mipsCount - $abmCount);
+
+        $destroyed = array();
+        $remaining = $targetDefense;
+        unset($remaining[502]); // Exclude ABMs from ground defense
+
+        if ($countMissiles <= 0 || empty($remaining)) {
+            return array(
+                'remaining'      => $remaining,
+                'destroyed'      => $destroyed,
+                'effective_mips' => 0,
+            );
+        }
+
+        $baseAttack = isset($CombatCaps[503]['attack']) ? (float)$CombatCaps[503]['attack'] : 12000.0;
+        $totalAttack = $countMissiles * $baseAttack * (1.0 + 0.1 * (int)$attackerMilitaryTech);
+
+        // Put primary target first if specified and present
+        if ($primaryTarget > 0 && isset($remaining[$primaryTarget])) {
+            $firstData = array($primaryTarget => $remaining[$primaryTarget]);
+            unset($remaining[$primaryTarget]);
+            $remaining = $firstData + $remaining;
+        }
+
+        foreach ($remaining as $element => $count) {
+            if ($count <= 0) continue;
+            $costM = isset($pricelist[$element]['cost'][901]) ? (float)$pricelist[$element]['cost'][901] : 0.0;
+            $costC = isset($pricelist[$element]['cost'][902]) ? (float)$pricelist[$element]['cost'][902] : 0.0;
+            $elementStructurePoints = ($costM + $costC) * (1.0 + 0.1 * (int)$defenderShieldTech) / 10.0;
+            if ($elementStructurePoints <= 0.0) continue;
+
+            $destroyCount = (int)min($count, floor($totalAttack / $elementStructurePoints));
+            if ($destroyCount > 0) {
+                $destroyed[$element] = $destroyCount;
+                $remaining[$element] -= $destroyCount;
+                $totalAttack -= ($destroyCount * $elementStructurePoints);
+            }
+
+            if ($totalAttack <= 0) {
+                break;
+            }
+        }
+
+        $remaining = array_filter($remaining);
+
+        return array(
+            'remaining'      => $remaining,
+            'destroyed'      => $destroyed,
+            'effective_mips' => $countMissiles,
+        );
+    }
+
+    /**
+     * Selects surgical primary target for MIP attack based on attacker fleet doctrine in NovaRush.
+     *
+     * @param array $targetDefense
+     * @param array $attackerFleet
+     * @return int Primary target element ID (e.g. 406, 404, 403, 401)
+     */
+    public static function selectSurgicalPrimaryTarget(array $targetDefense, array $attackerFleet = array())
+    {
+        // Calculate attacker fleet composition: heavy capital vs light/swarm
+        $heavyCapitalCount = 0;
+        $lightSwarmCount   = 0;
+
+        foreach ($attackerFleet as $sId => $cnt) {
+            if ($cnt <= 0) continue;
+            // Heavy capital: 207 Battleship, 213 Destructor, 214 Deathstar, 215 Battlecruiser, 216, 224, 225 Galleon
+            if (in_array($sId, array(207, 213, 214, 215, 216, 224, 225, 226))) {
+                $heavyCapitalCount += $cnt;
+            }
+            // Light / Cruiser: 202/203/217 Cargo, 204 Light Fighter, 205 Heavy Fighter, 206 Cruiser
+            if (in_array($sId, array(202, 203, 204, 205, 206, 217))) {
+                $lightSwarmCount += $cnt;
+            }
+        }
+
+        $hasPlasma = !empty($targetDefense[406]);
+        $hasGauss  = !empty($targetDefense[404]);
+        $hasHeavyL = !empty($targetDefense[403]);
+        $hasRocket = !empty($targetDefense[401]) && (int)$targetDefense[401] >= 1000;
+
+        // Doctrine 1: Capital fleet -> neutralize armor-piercing lethal weapons
+        if ($heavyCapitalCount >= 20 || $heavyCapitalCount >= $lightSwarmCount) {
+            if ($hasPlasma) return 406; // Plasma Turret
+            if ($hasGauss)  return 404; // Gauss Cannon
+            if ($hasHeavyL) return 403; // Heavy Laser
+        }
+
+        // Doctrine 2: Swarm / Cruisers -> neutralize shield domes and heavy lasers
+        if ($lightSwarmCount > $heavyCapitalCount) {
+            if ($hasHeavyL) return 403; // Heavy Laser
+            if (!empty($targetDefense[408])) return 408; // Large Shield Dome
+            if ($hasPlasma) return 406;
+            if ($hasGauss)  return 404;
+        }
+
+        // Doctrine 3: Screening fodder clear if defender has massive rocket wall
+        if ($hasRocket) {
+            return 401; // Rocket Launcher
+        }
+
+        // Fallback: highest tech unit present
+        foreach (array(406, 404, 405, 403, 402, 401) as $candidate) {
+            if (!empty($targetDefense[$candidate])) {
+                return $candidate;
+            }
+        }
+
+        return 401;
+    }
 }
+
+

@@ -95,36 +95,24 @@ class BotPremiumStrategist
             return 0;
         }
 
-        $dailyLimit = (int)PremiumEconomy::get('fair_daily_limit', 3);
-        $H = PremiumEconomy::get('fair_hours', 6);
-        $P = PremiumEconomy::indexedHourlyMSE($botId);
-        $growth = PremiumEconomy::get('fair_growth', 1.25);
+        $dailyLimit = 1;
 
         foreach ($fairElements as $elId => $resId) {
-            $colName = $resource[$elId];
-            $userCooldown = isset($this->ctx->user[$colName]) ? (int)$this->ctx->user[$colName] : 0;
-            if ($now <= $userCooldown) {
-                continue;
-            }
-
             $dailyKey = 'fair_res_' . $elId;
             $n = PremiumEconomy::dailyCount($botId, $dailyKey);
             if ($n >= $dailyLimit) {
                 continue;
             }
 
-            // Calculate cost for conversion
-            $mult = pow($growth, $n);
+            // Calculate cost for conversion based on 6h server active empires average
+            $cost = PremiumEconomy::getFairResourceCost($elId);
             if ($elId == 2301) {
-                $cost = (float)ceil($H * $P * $mult);
                 $resCol = 'metal';
                 $mineElement = 1; // Metal Mine
             } elseif ($elId == 2302) {
-                $cost = (float)ceil($H * $P * $mult / 2.0);
                 $resCol = 'crystal';
                 $mineElement = 2; // Crystal Mine
             } else {
-                $cost = (float)ceil($H * $P * $mult / 4.0);
                 $resCol = 'deuterium';
                 $mineElement = 3; // Deuterium Synthesizer
             }
@@ -165,15 +153,6 @@ class BotPremiumStrategist
 
                     // Increment daily counter
                     PremiumEconomy::dailyIncrement($botId, $dailyKey);
-
-                    // Update cooldown
-                    $cooldownDuration = isset($pricelist[$elId]['time']) ? (int)$pricelist[$elId]['time'] : 3600;
-                    $newCooldown = $now + $cooldownDuration;
-                    $this->ctx->user[$colName] = $newCooldown;
-                    $db->update("UPDATE %%USERS%% SET {$colName} = :t WHERE id = :uid;", array(
-                        ':t'   => $newCooldown,
-                        ':uid' => $botId,
-                    ));
 
                     // Synchronize physical baseline in BotBudgetManager to avoid phantom windfall
                     if (isset($this->ctx->budgetManager)) {
@@ -913,14 +892,15 @@ class BotPremiumStrategist
             return 0;
         }
 
-        $now = BotClock::get();
-        $cooldown = (int)($this->ctx->user['fair_5'] ?? 0);
-        if ($now <= $cooldown) {
+        $botId = (int)$this->ctx->botId;
+        $dailyKey = 'fair_trade_2305';
+        $dailyLimit = 3;
+        $n = PremiumEconomy::dailyCount($botId, $dailyKey);
+        if ($n >= $dailyLimit) {
             return 0;
         }
 
-        $botId = (int)$this->ctx->botId;
-        $amount = min($stardust, 5);
+        $amount = min($stardust, $dailyLimit - $n);
 
         // Debit Stardust
         if (!PremiumEconomy::debit($this->ctx->user, 923, $amount, 'fair_trade', 2305, "stardust_transmute;amt={$amount}")) {
@@ -931,15 +911,10 @@ class BotPremiumStrategist
         $rewardAM = 900 * $amount;
         PremiumEconomy::credit($this->ctx->user, 922, $rewardAM, 'fair_trade', 2305, "stardust_transmute;amt={$amount}");
 
-        // Update cooldown: 24h cooldown
-        $newCooldown = $now + 86400;
-        $this->ctx->user['fair_5'] = $newCooldown;
-
-        $db = Database::get();
-        $db->update("UPDATE %%USERS%% SET fair_5 = :t WHERE id = :uid;", array(
-            ':t'   => $newCooldown,
-            ':uid' => $botId,
-        ));
+        // Increment daily counter
+        for ($k = 0; $k < $amount; $k++) {
+            PremiumEconomy::dailyIncrement($botId, $dailyKey);
+        }
 
         $this->ctx->decisionLog->record(
             'stardust_transmute',
@@ -1108,17 +1083,14 @@ class BotPremiumStrategist
         }
 
         // --- 3. MO -> AM (2306 - Pirate Emitter): Si sobreacumula MO (> 12,000 MO) ---
-        $cooldown2306 = (int)($this->ctx->user['fair_6'] ?? 0);
-        if ($now > $cooldown2306 && $userMO >= 12000.0 && $userAM < 2000.0) {
+        $dailyKey2306 = 'fair_trade_2306';
+        $dailyLimit2306 = 3;
+        $n2306 = PremiumEconomy::dailyCount($botId, $dailyKey2306);
+        if ($n2306 < $dailyLimit2306 && $userMO >= 12000.0 && $userAM < 2000.0) {
             $costMO = 9375.0;
             if (PremiumEconomy::debit($this->ctx->user, 921, $costMO, 'fair_trade', 2306, "mo_to_am")) {
                 PremiumEconomy::credit($this->ctx->user, 922, 750, 'fair_trade', 2306, "mo_to_am");
-                $newCooldown = $now + 86400;
-                $this->ctx->user['fair_6'] = $newCooldown;
-                $db->update("UPDATE %%USERS%% SET fair_6 = :t WHERE id = :uid;", array(
-                    ':t'   => $newCooldown,
-                    ':uid' => $botId,
-                ));
+                PremiumEconomy::dailyIncrement($botId, $dailyKey2306);
 
                 $this->ctx->decisionLog->record(
                     'supply_chain_mo_to_am',

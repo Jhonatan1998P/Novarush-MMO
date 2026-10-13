@@ -761,7 +761,7 @@ class MessageTemplateHelper
     /**
      * Build Tactical Alert Card (Defensive Sensor Alert when enemy spied on player)
      */
-    public static function buildSpyAlertCard($attackerCoords, $targetInfo, $LNG)
+    public static function buildSpyAlertCard($attackerInfo, $targetInfo, $LNG)
     {
         $dpath = self::getThemePath();
 
@@ -778,13 +778,18 @@ class MessageTemplateHelper
             $tGalaxy, $tSystem, $targetName, $tGalaxy, $tSystem, $tPlanet, $typeShort
         );
 
-        $aGalaxy = (int) $attackerCoords['galaxy'];
-        $aSystem = (int) $attackerCoords['system'];
-        $aPlanet = (int) $attackerCoords['planet'];
+        $attackerPlayer = htmlspecialchars($attackerInfo['player_name'] ?? ($attackerInfo['username'] ?? ''), ENT_QUOTES, 'UTF-8');
+        $attackerPlanet = htmlspecialchars($attackerInfo['planet_name'] ?? ($attackerInfo['name'] ?? ''), ENT_QUOTES, 'UTF-8');
+        $aGalaxy        = (int) ($attackerInfo['galaxy'] ?? 1);
+        $aSystem        = (int) ($attackerInfo['system'] ?? 1);
+        $aPlanet        = (int) ($attackerInfo['planet'] ?? 1);
+        $aType          = (int) ($attackerInfo['planet_type'] ?? 1);
+        $aTypeShort     = $LNG['type_planet_short_' . $aType] ?? ($aType == 3 ? 'Luna' : 'Planeta');
 
+        $attackerPlanetDisplay = !empty($attackerPlanet) ? ($attackerPlanet . ' ') : '';
         $attackerCoordsLink = sprintf(
-            '<a href="game.php?page=galaxy&amp;galaxy=%d&amp;system=%d" class="spy-planet-link"><span class="spy-coords">[%d:%d:%d]</span></a>',
-            $aGalaxy, $aSystem, $aGalaxy, $aSystem, $aPlanet
+            '<a href="game.php?page=galaxy&amp;galaxy=%d&amp;system=%d" class="spy-planet-link"><strong style="color: #60a5fa;">%s</strong><span class="spy-coords">[%d:%d:%d] (%s)</span></a>',
+            $aGalaxy, $aSystem, $attackerPlanetDisplay, $aGalaxy, $aSystem, $aPlanet, $aTypeShort
         );
 
         $html = '<div class="spy-report-card combat-report-card msg-card" style="border-color: rgba(239, 68, 68, 0.4);">';
@@ -798,7 +803,7 @@ class MessageTemplateHelper
         $html .= '<div class="spy-title-row">' . $targetCoordsLink . '</div>';
         $html .= '<div class="spy-meta-row">';
         $html .= '<span class="spy-meta-player" style="color:#fca5a5;">';
-        $html .= self::getSvg('radar', 13, 13) . ' ' . ($LNG['sys_mess_spy_control'] ?? 'Control de Espionaje');
+        $html .= self::getSvg('radar', 13, 13) . ' ' . ($LNG['sys_mess_spy_control'] ?? 'Vigilancia Espacial');
         $html .= '</span>';
         $html .= '</div>';
         $html .= '</div>';
@@ -808,10 +813,11 @@ class MessageTemplateHelper
         $html .= '</div>';
 
         // Sensor Alert Body
-        $alertDesc = sprintf(
-            $LNG['sys_mess_spy_seen_at'] ?? 'Una flota enemiga de reconocimiento procedente de %s fue detectada en las proximidades de tu colonia.',
-            $attackerCoordsLink
-        );
+        if (!empty($attackerPlayer)) {
+            $alertDesc = 'Una flota enemiga de reconocimiento del comandante <strong style="color: #f87171;">' . $attackerPlayer . '</strong> procedente del planeta ' . $attackerCoordsLink . ' fue detectada en las proximidades de tu colonia.';
+        } else {
+            $alertDesc = 'Una flota enemiga de reconocimiento procedente de ' . $attackerCoordsLink . ' fue detectada en las proximidades de tu colonia.';
+        }
 
         $html .= '<div class="spy-section" style="border-color: rgba(239, 68, 68, 0.3); background: rgba(20, 8, 12, 0.6);">';
         $html .= '<div class="spy-section-head" style="background: rgba(35, 10, 15, 0.8); border-bottom-color: rgba(239, 68, 68, 0.3);">';

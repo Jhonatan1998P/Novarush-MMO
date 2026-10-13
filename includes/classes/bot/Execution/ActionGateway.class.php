@@ -536,6 +536,16 @@ class BotActionGateway
                 ));
             }
 
+            // Synchronize Virtual Budget for fuel consumption and dispatched cargo
+            if (isset($this->ctx->budgetManager)) {
+                $this->ctx->budgetManager->deductDispatchedMission(
+                    $startPlanet['id'],
+                    $mission,
+                    array(901 => $mCargo, 902 => $cCargo, 903 => $dCargo),
+                    $consumption
+                );
+            }
+
             if (isset($this->ctx->telemetry)) {
                 $sName   = $startPlanet['name'] ?? "Planeta #{$startPlanetId}";
                 $sCoords = "[{$startPlanet['galaxy']}:{$startPlanet['system']}:{$startPlanet['planet']}]";

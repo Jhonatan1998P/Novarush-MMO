@@ -73,6 +73,91 @@ class PremiumEconomy
     }
 
     /**
+     * Retorna la producción horaria de imperio promedio de todos los jugadores activos
+     * del servidor (humanos y bots) para Metal, Cristal y Deuterio.
+     * Criterio de activo: no baneado (bana = 0), no vacaciones (urlaubs_modus = 0),
+     * no administrador pasivo (authlevel < 3).
+     *
+     * @return array ['metal' => float, 'crystal' => float, 'deuterium' => float, 'count' => int]
+     */
+    public static function serverActiveEmpireAverageProduction()
+    {
+        static $cachedAvg = null;
+        if ($cachedAvg !== null) {
+            return $cachedAvg;
+        }
+
+        $db = Database::get();
+        $cfg = Config::get();
+        $rows = $db->select(
+            "SELECT u.id,
+                    COALESCE(SUM(p.metal_perhour), 0) as m,
+                    COALESCE(SUM(p.crystal_perhour), 0) as c,
+                    COALESCE(SUM(p.deuterium_perhour), 0) as d,
+                    COUNT(p.id) as n
+             FROM %%USERS%% u
+             JOIN %%PLANETS%% p ON u.id = p.id_owner AND p.planet_type = 1 AND p.destruyed = 0
+             WHERE u.bana = 0 AND u.urlaubs_modus = 0 AND u.authlevel < 3
+             GROUP BY u.id;"
+        );
+
+        $baseM = (float) $cfg->metal_basic_income * (float) $cfg->resource_multiplier;
+        $baseC = (float) $cfg->crystal_basic_income * (float) $cfg->resource_multiplier;
+        $baseD = (float) $cfg->deuterium_basic_income * (float) $cfg->resource_multiplier;
+
+        if (empty($rows)) {
+            $cachedAvg = array(
+                'metal'     => max(1000.0, $baseM),
+                'crystal'   => max(500.0, $baseC),
+                'deuterium' => max(250.0, $baseD),
+                'count'     => 1
+            );
+            return $cachedAvg;
+        }
+
+        $totalM = 0.0;
+        $totalC = 0.0;
+        $totalD = 0.0;
+        $count = count($rows);
+
+        foreach ($rows as $r) {
+            $n = (int)$r['n'];
+            $totalM += (float)$r['m'] + ($n * $baseM);
+            $totalC += (float)$r['c'] + ($n * $baseC);
+            $totalD += (float)$r['d'] + ($n * $baseD);
+        }
+
+        $cachedAvg = array(
+            'metal'     => $totalM / $count,
+            'crystal'   => $totalC / $count,
+            'deuterium' => $totalD / $count,
+            'count'     => $count
+        );
+        return $cachedAvg;
+    }
+
+    /**
+     * Calcula el coste de recursos para comprar 1.000 MO en la tienda Regular (Feria).
+     * Fórmula oficial: 6 horas de producción horaria promedio de todos los imperios
+     * activos del servidor para el tipo de recurso correspondiente.
+     *
+     * @param int $elementId 2301 (Metal), 2302 (Cristal), 2303 (Deuterio)
+     * @return float Coste en unidades de recurso
+     */
+    public static function getFairResourceCost($elementId)
+    {
+        $avg = self::serverActiveEmpireAverageProduction();
+        if ($elementId == 2301) {
+            return (float) ceil(6.0 * $avg['metal']);
+        } elseif ($elementId == 2302) {
+            return (float) ceil(6.0 * $avg['crystal']);
+        } elseif ($elementId == 2303) {
+            return (float) ceil(6.0 * $avg['deuterium']);
+        }
+        return 0.0;
+    }
+
+    /**
      * Tope suave asintótico: crece linealmente al inicio y satura en $cap.
      * Fórmula: Cap * (1 - e^(-raw / Cap))
      */

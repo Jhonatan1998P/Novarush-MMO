@@ -152,7 +152,8 @@ class BotKernel
                 // Fetch known defenders if target is locked
                 $targetDefenders = array();
                 if ($targetCoord !== null) {
-                    $lockedIntel = $world->intel->getIntel($lockedGalaxy, $lockedSystem, $lockedPlanet, 1, 4.0);
+                    $intelHalfLife = isset($ctx->difficulty->intelMaxAgeHours) ? (float)$ctx->difficulty->intelMaxAgeHours : 16.0;
+                    $lockedIntel = $world->intel->getIntel($lockedGalaxy, $lockedSystem, $lockedPlanet, 1, $intelHalfLife);
                     if ($lockedIntel !== null) {
                         $targetDefenders = (isset($lockedIntel['defense']) ? $lockedIntel['defense'] : array()) + (isset($lockedIntel['fleet']) ? $lockedIntel['fleet'] : array());
                     }
