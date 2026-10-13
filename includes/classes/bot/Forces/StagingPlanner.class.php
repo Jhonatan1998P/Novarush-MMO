@@ -94,7 +94,7 @@ class BotStagingPlanner
      * @param array $targetDefenders Known enemy ships and defenses
      * @return int Number of fleets deployed
      */
-    public function rallyFleets(BotEmpireState $empire, $stagingBaseId, array $targetDefenders = array())
+    public function rallyFleets(BotEmpireState $empire, $stagingBaseId, array $targetDefenders = array(), $isUrgent = false)
     {
         global $resource, $reslist, $pricelist;
         if (empty($pricelist)) {
@@ -206,14 +206,24 @@ class BotStagingPlanner
                 $prod2h = 100000.0;
             }
 
-            // 1. Calculate minimum transporters to retain to move >= 2h production
+            // Real physical stock on the colony (Metal + Crystal + Deuterium)
+            $stockFisicoTotalActual = (float)($pData['metal'] ?? 0.0) +
+                                      (float)($pData['crystal'] ?? 0.0) +
+                                      (float)($pData['deuterium'] ?? 0.0);
+
+            // 1. Calculate minimum transporters to retain to move >= max(2h production, real physical stock)
+            // guaranteeing FleetsaveCalculator can evacuate 100% of real stock
             $keepTrans = array(217 => 0, 203 => 0, 202 => 0);
-            $remTransCap = $prod2h;
+            $remTransCap = max($prod2h, $stockFisicoTotalActual);
             foreach (array(217, 203, 202) as $tId) {
                 if ($remTransCap <= 0) break;
                 $avail = isset($pData[$resource[$tId]]) ? (int)$pData[$resource[$tId]] : 0;
                 if ($avail <= 0) continue;
                 $cap = max(1.0, (float)($pricelist[$tId]['capacity'] ?? 5000));
+                if (class_exists('FleetFunctions')) {
+                    $calcCap = FleetFunctions::GetFleetRoom(array($tId => 1), $this->ctx->user);
+                    if ($calcCap > 0) $cap = $calcCap;
+                }
                 $needed = (int)ceil($remTransCap / $cap);
                 $take = min($avail, $needed);
                 $keepTrans[$tId] = $take;
@@ -343,12 +353,20 @@ class BotStagingPlanner
                 $selectedShips = $candidateShips;
             }
 
-            // Determine optimal speed factor (10 down to 1) that fits within fuelBudget
+            // Check tactical urgency: if FOB has target lock / siege or incoming threat
+            $hasUrgency = $isUrgent ||
+                          (!empty($this->ctx->botRow['offensive_urgency'])) ||
+                          (!empty($this->ctx->botRow['target_lock_time']) && (int)$this->ctx->botRow['target_lock_time'] > 0 && !empty($this->ctx->botRow['siege_cycles']) && (int)$this->ctx->botRow['siege_cycles'] > 0) ||
+                          (!empty($this->ctx->botRow['target_galaxy']) && !empty($this->ctx->botRow['target_system']));
+
+            // Economic speed selector: if no offensive urgency, test speed 6 down to 1 (50%-60%); if urgent, test 10 down to 1
+            $maxSpdCandidate = $hasUrgency ? 10 : 6;
+
             $fleetSpeed = FleetFunctions::GetFleetMaxSpeed($selectedShips, $this->ctx->user);
             $chosenSpeed = 0;
             $chosenConsumption = 0;
 
-            for ($spd = 10; $spd >= 1; $spd--) {
+            for ($spd = $maxSpdCandidate; $spd >= 1; $spd--) {
                 $dur = FleetFunctions::GetMissionDuration($spd, $fleetSpeed, $dist, $gameSpeed, $this->ctx->user);
                 $cons = FleetFunctions::GetFleetConsumption($selectedShips, $dur, $dist, $this->ctx->user, $gameSpeed);
                 if ($cons <= $fuelBudget) {
@@ -374,7 +392,7 @@ class BotStagingPlanner
                     if (!empty($scaled) && array_sum($scaled) >= 25) {
                         $selectedShips = $scaled;
                         $fleetSpeed = FleetFunctions::GetFleetMaxSpeed($selectedShips, $this->ctx->user);
-                        for ($spd = 10; $spd >= 1; $spd--) {
+                        for ($spd = $maxSpdCandidate; $spd >= 1; $spd--) {
                             $dur = FleetFunctions::GetMissionDuration($spd, $fleetSpeed, $dist, $gameSpeed, $this->ctx->user);
                             $cons = FleetFunctions::GetFleetConsumption($selectedShips, $dur, $dist, $this->ctx->user, $gameSpeed);
                             if ($cons <= $fuelBudget) {
@@ -391,6 +409,48 @@ class BotStagingPlanner
                 continue;
             }
 
+            // Piggybacking of excess fuel to FOB in Mission 4 (Deploy)
+            $totalFleetRoom = FleetFunctions::GetFleetRoom($selectedShips, $this->ctx->user);
+            $netCargo = max(0.0, (float)$totalFleetRoom - (float)$chosenConsumption);
+
+            // Calculate untouchable local fleetsave reserve for remaining ships at 10% speed
+            $remainingShips = array();
+            foreach ($fleetList as $sId) {
+                $avail = isset($pData[$resource[$sId]]) ? (int)$pData[$resource[$sId]] : 0;
+                $taken = isset($selectedShips[$sId]) ? (int)$selectedShips[$sId] : 0;
+                $left  = max(0, $avail - $taken);
+                if ($left > 0) {
+                    $remainingShips[$sId] = $left;
+                }
+            }
+
+            $localFsReserve = 0.0;
+            if (!empty($remainingShips)) {
+                $remSpeed = FleetFunctions::GetFleetMaxSpeed($remainingShips, $this->ctx->user);
+                $durFs = FleetFunctions::GetMissionDuration(1, $remSpeed, $dist, $gameSpeed, $this->ctx->user);
+                $localFsReserve = FleetFunctions::GetFleetConsumption($remainingShips, $durFs, $dist, $this->ctx->user, $gameSpeed);
+            }
+            $localFsReserve = max(5000.0, $localFsReserve);
+
+            // Calculate committed deuterium in local queues or active savings lock on this colony
+            $localCommittedDeut = 0.0;
+            if (isset($this->ctx->budgetManager)) {
+                $lock = $this->ctx->budgetManager->getSavingsLock();
+                if (!empty($lock) && isset($lock['planet_id']) && (int)$lock['planet_id'] === (int)$pId) {
+                    $localCommittedDeut += max(0.0, (float)($lock['cost'][903] ?? $lock['cost']['deuterium'] ?? 0.0));
+                }
+            }
+
+            // Colony deuterium after flight fuel deduction, fleetsave reserve, and local committed queues
+            $colonyDeut = (float)($pData['deuterium'] ?? 0.0);
+            $excessDeut = max(0.0, $colonyDeut - (float)$chosenConsumption - $localFsReserve - $localCommittedDeut);
+            $cargoDeut = floor(min($netCargo, $excessDeut));
+
+            $cargoResources = array();
+            if ($cargoDeut > 0.0) {
+                $cargoResources[903] = (float)$cargoDeut;
+            }
+
             // Launch Deploy (Mission 4)
             $ok = $this->gateway->launchFleet(
                 $selectedShips,
@@ -402,7 +462,7 @@ class BotStagingPlanner
                 $target['system'],
                 $target['planet'],
                 $target['planet_type'],
-                array(),
+                $cargoResources,
                 $chosenSpeed
             );
 
@@ -414,8 +474,8 @@ class BotStagingPlanner
                 }
                 $this->ctx->decisionLog->record(
                     'fleet_staging',
-                    "Rallied combat fleet from colony #{$pId} to FOB #{$stagingBaseId} to consolidate firepower (Speed: {$chosenSpeed}0%, Ships: " . number_format(array_sum($selectedShips)) . ", Fuel: " . number_format($chosenConsumption) . " Deut)",
-                    array('from' => $pId, 'to' => $stagingBaseId, 'ships' => $selectedShips, 'speed' => $chosenSpeed, 'fuel' => $chosenConsumption),
+                    "Rallied combat fleet from colony #{$pId} to FOB #{$stagingBaseId} to consolidate firepower (Speed: {$chosenSpeed}0%, Ships: " . number_format(array_sum($selectedShips)) . ", Fuel: " . number_format($chosenConsumption) . " Deut, Piggyback Deut: " . number_format($cargoDeut) . ")",
+                    array('from' => $pId, 'to' => $stagingBaseId, 'ships' => $selectedShips, 'speed' => $chosenSpeed, 'fuel' => $chosenConsumption, 'cargo_deut' => $cargoDeut),
                     "rally_{$pId}_to_{$stagingBaseId}",
                     array_sum($selectedShips)
                 );

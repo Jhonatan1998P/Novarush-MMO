@@ -766,7 +766,7 @@ class BotStrikePlanner
             if (isset($world->empire)) {
                 require_once 'includes/classes/bot/Forces/StagingPlanner.class.php';
                 $stagingPlanner = new BotStagingPlanner($this->ctx, $this->gateway);
-                $rallied = $stagingPlanner->rallyFleets($world->empire, $fobId, $targetDefenders);
+                $rallied = $stagingPlanner->rallyFleets($world->empire, $fobId, $targetDefenders, true);
                 if ($rallied > 0) {
                     $this->ctx->decisionLog->record(
                         'campaign_staging_dispatched',

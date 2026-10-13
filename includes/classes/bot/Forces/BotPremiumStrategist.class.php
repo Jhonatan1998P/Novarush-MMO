@@ -185,34 +185,32 @@ class BotPremiumStrategist
     }
 
     /**
-     * Rebalance Planet Resources into 50% Metal, 35% Crystal, 15% Deuterium (MSE)
-     * using the minimum number of bilateral exchanges (at most 2).
+     * Exact Delta Merchant Trade (BotSupplyChain v3.2)
+     *
+     * Displaces rigid 50/35/15 ratio with exact missing delta calculation (Delta_M, Delta_C, Delta_D)
+     * for targetCost or Warehouse Compression (Case D).
+     *
+     * Trigger Conditions (only spends 50 MO if one holds):
+     * 1. Tactical Emergency: fuel shortage for FS / Strike, or Anti-Farm Watchdog liquidation.
+     * 2. High Value Unlock: physical MSE covers 100% of target MSE, level 1/2 cannot solve, >= 2h imperial prod.
+     * 3. Warehouse Compression (Case D): warehouse >= 98% full, sells 50% saturated resource into C/D (Delta_MSE = 0).
+     *
+     * Single Bilateral Transaction: Uses highest surplus resource as currency ($payResId)
+     * and acquires exact delta of deficit resources via $Charge matrix (Trader.php),
+     * debiting 50 MO once via PremiumEconomy::debit().
      *
      * @param int $planetId
-     * @param string $category 'fleet', 'defense', 'research', 'mines'
+     * @param array $targetCost [901 => M, 902 => C, 903 => D] or ['metal' => M, ...]
+     * @param string $contextReason 'tactical_emergency', 'high_value_unlock', 'warehouse_compression', etc.
+     * @param bool $isBatchMode
      * @return bool True if trade executed
      */
-    public function rebalancePlanet50_35_15($planetId, $category, $isBatchMode = false)
+    public function executeExactDeltaTrade($planetId, array $targetCost = array(), string $contextReason = 'tactical_emergency', $isBatchMode = false)
     {
         $planetId = (int)$planetId;
-        if (!in_array($category, array('fleet', 'defense', 'research', 'mines'))) {
-            $category = 'mines';
-        }
-
-        $now = BotClock::get();
         $db = Database::get();
 
-        // 1. Check Empire and Planet cooldowns
-        if (isset($this->ctx->budgetManager)) {
-            if (!$isBatchMode && $this->ctx->budgetManager->isEmpireTraderOnCooldown()) {
-                return false;
-            }
-            if ($this->ctx->budgetManager->isPlanetTraderOnCooldown($planetId)) {
-                return false;
-            }
-        }
-
-        // 2. Check Dark Matter fee (cost_trader, default 50 MO)
+        // 1. Fee and Dark Matter verification
         $costMO = (float)Config::get()->cost_trader;
         if ($costMO <= 0.0) $costMO = 50.0;
 
@@ -221,8 +219,31 @@ class BotPremiumStrategist
             return false;
         }
 
-        // 3. Fetch current physical resources
-        $planetRow = $db->selectSingle("SELECT metal, crystal, deuterium FROM %%PLANETS%% WHERE id = :pid LIMIT 1;", array(':pid' => $planetId));
+        // Cushion preservation (>= 2000 MO) unless tactical emergency / fleetsave / watchdog
+        $isEmergency = ($contextReason === 'tactical_emergency' || 
+                        $contextReason === 'fleetsave' || 
+                        strpos($contextReason, 'emergency') !== false || 
+                        strpos($contextReason, 'watchdog') !== false || 
+                        strpos($contextReason, 'strike') !== false);
+        if (!$isEmergency && ($userMO - $costMO) < 2000.0) {
+            return false;
+        }
+
+        // Check cooldowns for non-emergencies
+        if (isset($this->ctx->budgetManager) && !$isEmergency && $contextReason !== 'warehouse_compression' && $contextReason !== 'high_value_unlock') {
+            if (!$isBatchMode && $this->ctx->budgetManager->isEmpireTraderOnCooldown()) {
+                return false;
+            }
+            if ($this->ctx->budgetManager->isPlanetTraderOnCooldown($planetId)) {
+                return false;
+            }
+        }
+
+        // 2. Fetch planet physical state
+        $planetRow = $db->selectSingle(
+            "SELECT metal, crystal, deuterium, metal_max, crystal_max, deuterium_max FROM %%PLANETS%% WHERE id = :pid LIMIT 1;",
+            array(':pid' => $planetId)
+        );
         if (empty($planetRow)) {
             return false;
         }
@@ -230,126 +251,272 @@ class BotPremiumStrategist
         $curM = (float)$planetRow['metal'];
         $curC = (float)$planetRow['crystal'];
         $curD = (float)$planetRow['deuterium'];
+        $maxM = max(10000.0, (float)($planetRow['metal_max'] ?? 10000.0));
+        $maxC = max(10000.0, (float)($planetRow['crystal_max'] ?? 10000.0));
+        $maxD = max(10000.0, (float)($planetRow['deuterium_max'] ?? 10000.0));
 
-        $totalMSE = $curM + (2.0 * $curC) + (4.0 * $curD);
-        if ($totalMSE <= 0.0) {
-            return false;
-        }
+        // Rate matrix from Trader.php / self::CHARGE_RATES
+        global $Charge;
+        $chargeRates = !empty($Charge) ? $Charge : self::CHARGE_RATES;
 
-        // 4. Calculate target 50% Metal, 35% Crystal, 15% Deuterium (in MSE)
-        $targetM = round(0.50 * $totalMSE);
-        $targetC = round((0.35 * $totalMSE) / 2.0);
-        $targetD = round((0.15 * $totalMSE) / 4.0);
+        // -------------------------------------------------------------
+        // TRIGGER 3: Warehouse Compression (Case D / TEST 6)
+        // -------------------------------------------------------------
+        $isCompression = ($contextReason === 'warehouse_compression') ||
+                         ($curM >= 0.98 * $maxM) ||
+                         ($curC >= 0.98 * $maxC) ||
+                         ($curD >= 0.98 * $maxD);
 
-        // Exact MSE conservation adjustment (residual diff placed in metal)
-        $actualTargetMSE = $targetM + (2.0 * $targetC) + (4.0 * $targetD);
-        $residual = round($totalMSE - $actualTargetMSE);
-        $targetM += $residual;
+        if ($isCompression && (empty($targetCost) || $contextReason === 'warehouse_compression')) {
+            // Identify saturated resource
+            $satRes = 901;
+            $satRatio = $curM / $maxM;
 
-        // 5. Calculate MSE differences for each pool
-        $deltaM = $curM - $targetM;          // > 0 surplus, < 0 deficit
-        $deltaC = ($curC - $targetC) * 2.0;  // > 0 surplus, < 0 deficit
-        $deltaD = ($curD - $targetD) * 4.0;  // > 0 surplus, < 0 deficit
-
-        $surpluses = array();
-        $deficits  = array();
-
-        if ($deltaM > 0.01) $surpluses[901] = $deltaM;
-        elseif ($deltaM < -0.01) $deficits[901] = -$deltaM;
-
-        if ($deltaC > 0.01) $surpluses[902] = $deltaC;
-        elseif ($deltaC < -0.01) $deficits[902] = -$deltaC;
-
-        if ($deltaD > 0.01) $surpluses[903] = $deltaD;
-        elseif ($deltaD < -0.01) $deficits[903] = -$deltaD;
-
-        // 6. Compute minimum bilateral exchanges (at most 2 exchanges)
-        $exchanges = array();
-        foreach ($surpluses as $surplusRes => &$surplusAmount) {
-            foreach ($deficits as $deficitRes => &$deficitAmount) {
-                if ($surplusAmount <= 0.01 || $deficitAmount <= 0.01) {
-                    continue;
-                }
-
-                $transferMSE = min($surplusAmount, $deficitAmount);
-                $surplusAmount -= $transferMSE;
-                $deficitAmount -= $transferMSE;
-
-                $fromRate = ($surplusRes == 901) ? 1.0 : (($surplusRes == 902) ? 2.0 : 4.0);
-                $toRate   = ($deficitRes == 901) ? 1.0 : (($deficitRes == 902) ? 2.0 : 4.0);
-
-                $fromUnits = $transferMSE / $fromRate;
-                $toUnits   = $transferMSE / $toRate;
-
-                $exchanges[] = array(
-                    'from_res'   => $surplusRes,
-                    'to_res'     => $deficitRes,
-                    'mse'        => $transferMSE,
-                    'from_units' => $fromUnits,
-                    'to_units'   => $toUnits,
-                );
+            if (($curC / $maxC) > $satRatio) {
+                $satRes = 902;
+                $satRatio = $curC / $maxC;
             }
-        }
-        unset($surplusAmount, $deficitAmount);
+            if (($curD / $maxD) > $satRatio) {
+                $satRes = 903;
+                $satRatio = $curD / $maxD;
+            }
 
-        // 7. Debit Dark Matter fee (50 MO)
-        if (!PremiumEconomy::debit($this->ctx->user, 921, $costMO, 'trader_call', 0, "demand_rebalance;pid={$planetId};cat={$category}")) {
+            $newM = $curM;
+            $newC = $curC;
+            $newD = $curD;
+            $exchanges = array();
+
+            if ($satRes === 901) {
+                // Sell 50% of Metal into Crystal and Deuterium
+                $sellAmount = floor($curM * 0.50);
+                if ($sellAmount <= 0) return false;
+
+                $halfSell = $sellAmount / 2.0;
+                $gainC = $halfSell / $chargeRates[901][902];
+                $gainD = $halfSell / $chargeRates[901][903];
+
+                $newM = $curM - $sellAmount;
+                $newC = $curC + $gainC;
+                $newD = $curD + $gainD;
+
+                $exchanges[] = array('from_res' => 901, 'to_res' => 902, 'from_units' => $halfSell, 'to_units' => $gainC);
+                $exchanges[] = array('from_res' => 901, 'to_res' => 903, 'from_units' => $halfSell, 'to_units' => $gainD);
+            } elseif ($satRes === 902) {
+                // Sell 50% of Crystal into Metal and Deuterium
+                $sellAmount = floor($curC * 0.50);
+                if ($sellAmount <= 0) return false;
+
+                $halfSell = $sellAmount / 2.0;
+                $gainM = $halfSell / $chargeRates[902][901];
+                $gainD = $halfSell / $chargeRates[902][903];
+
+                $newM = $curM + $gainM;
+                $newC = $curC - $sellAmount;
+                $newD = $curD + $gainD;
+
+                $exchanges[] = array('from_res' => 902, 'to_res' => 901, 'from_units' => $halfSell, 'to_units' => $gainM);
+                $exchanges[] = array('from_res' => 902, 'to_res' => 903, 'from_units' => $halfSell, 'to_units' => $gainD);
+            } else {
+                // Sell 50% of Deuterium into Metal and Crystal
+                $sellAmount = floor($curD * 0.50);
+                if ($sellAmount <= 0) return false;
+
+                $halfSell = $sellAmount / 2.0;
+                $gainM = $halfSell / $chargeRates[903][901];
+                $gainC = $halfSell / $chargeRates[903][902];
+
+                $newM = $curM + $gainM;
+                $newC = $curC + $gainC;
+                $newD = $curD - $sellAmount;
+
+                $exchanges[] = array('from_res' => 903, 'to_res' => 901, 'from_units' => $halfSell, 'to_units' => $gainM);
+                $exchanges[] = array('from_res' => 903, 'to_res' => 902, 'from_units' => $halfSell, 'to_units' => $gainC);
+            }
+
+            // Debit MO
+            if (!PremiumEconomy::debit($this->ctx->user, 921, $costMO, 'trader_call', 0, "warehouse_compression;pid={$planetId}")) {
+                return false;
+            }
+
+            // Update physical DB
+            $db->update("UPDATE %%PLANETS%% SET metal = :m, crystal = :c, deuterium = :d WHERE id = :pid;", array(
+                ':m'   => $newM,
+                ':c'   => $newC,
+                ':d'   => $newD,
+                ':pid' => $planetId,
+            ));
+
+            if (isset($this->ctx->budgetManager)) {
+                $this->ctx->budgetManager->syncDemandTraderRebalance($planetId, 'mines', $newM, $newC, $newD, $exchanges, true, true);
+            }
+
+            $this->ctx->decisionLog->record(
+                'warehouse_compression_trade',
+                "Compresión de Almacén al >=98%: Venta de 50% de recurso #{$satRes} convertida a Deuterio/Cristal sin pérdida MSE (Coste: 50 MO)",
+                array('planet_id' => $planetId, 'saturated_res' => $satRes, 'sold' => $sellAmount, 'exchanges' => $exchanges),
+                "compress_{$planetId}",
+                4500.0
+            );
+
+            return true;
+        }
+
+        // -------------------------------------------------------------
+        // TRIGGERS 1 & 2: Exact Delta Trade for Target Cost (TEST 5)
+        // -------------------------------------------------------------
+        $costM = (float)($targetCost[901] ?? $targetCost['metal'] ?? 0.0);
+        $costC = (float)($targetCost[902] ?? $targetCost['crystal'] ?? 0.0);
+        $costD = (float)($targetCost[903] ?? $targetCost['deuterium'] ?? 0.0);
+
+        $defM = max(0.0, $costM - $curM);
+        $defC = max(0.0, $costC - $curC);
+        $defD = max(0.0, $costD - $curD);
+
+        if ($defM <= 0.0001 && $defC <= 0.0001 && $defD <= 0.0001) {
+            return true; // Already covers target cost
+        }
+
+        $planetMSE = $curM + (2.0 * $curC) + (4.0 * $curD);
+        $costMSE   = $costM + (2.0 * $costC) + (4.0 * $costD);
+
+        if ($planetMSE < $costMSE - 0.0001) {
+            return false; // Total MSE physically insufficient
+        }
+
+        // Calculate surplus above target cost for each resource
+        $surplusM = max(0.0, $curM - $costM);
+        $surplusC = max(0.0, $curC - $costC);
+        $surplusD = max(0.0, $curD - $costD);
+
+        $surplusMSE = array(
+            901 => $surplusM * 1.0,
+            902 => $surplusC * 2.0,
+            903 => $surplusD * 4.0,
+        );
+
+        // Find payment resource ($payResId) with highest surplus
+        $payResId = 901;
+        $maxSurplus = $surplusMSE[901];
+        if ($surplusMSE[902] > $maxSurplus) {
+            $payResId = 902;
+            $maxSurplus = $surplusMSE[902];
+        }
+        if ($surplusMSE[903] > $maxSurplus) {
+            $payResId = 903;
+            $maxSurplus = $surplusMSE[903];
+        }
+
+        // Calculate required payment amount using $chargeRates
+        $totalPayNeeded = 0.0;
+        $exchanges = array();
+
+        if ($payResId !== 901 && $defM > 0.0) {
+            $costInPay = $defM * $chargeRates[$payResId][901];
+            $totalPayNeeded += $costInPay;
+            $exchanges[] = array('from_res' => $payResId, 'to_res' => 901, 'from_units' => $costInPay, 'to_units' => $defM);
+        }
+        if ($payResId !== 902 && $defC > 0.0) {
+            $costInPay = $defC * $chargeRates[$payResId][902];
+            $totalPayNeeded += $costInPay;
+            $exchanges[] = array('from_res' => $payResId, 'to_res' => 902, 'from_units' => $costInPay, 'to_units' => $defC);
+        }
+        if ($payResId !== 903 && $defD > 0.0) {
+            $costInPay = $defD * $chargeRates[$payResId][903];
+            $totalPayNeeded += $costInPay;
+            $exchanges[] = array('from_res' => $payResId, 'to_res' => 903, 'from_units' => $costInPay, 'to_units' => $defD);
+        }
+
+        $availPay = ($payResId === 901 ? $curM : ($payResId === 902 ? $curC : $curD));
+        if ($availPay < $totalPayNeeded - 0.0001) {
+            return false; // Insufficient surplus in selected currency
+        }
+
+        // Debit 50 MO once
+        if (!PremiumEconomy::debit($this->ctx->user, 921, $costMO, 'trader_call', 0, "exact_delta_trade;pid={$planetId};reason={$contextReason}")) {
             return false;
         }
 
-        // 8. Update physical resources in database
-        $db->update("UPDATE %%PLANETS%% SET 
-            metal = :tm, 
-            crystal = :tc, 
-            deuterium = :td 
-            WHERE id = :pid;", array(
-            ':tm'  => $targetM,
-            ':tc'  => $targetC,
-            ':td'  => $targetD,
+        // Update physical resources
+        $newM = $curM;
+        $newC = $curC;
+        $newD = $curD;
+
+        if ($payResId === 901) {
+            $newM -= $totalPayNeeded;
+        } elseif ($payResId === 902) {
+            $newC -= $totalPayNeeded;
+        } else {
+            $newD -= $totalPayNeeded;
+        }
+
+        if ($payResId !== 901 && $defM > 0.0) $newM += $defM;
+        if ($payResId !== 902 && $defC > 0.0) $newC += $defC;
+        if ($payResId !== 903 && $defD > 0.0) $newD += $defD;
+
+        $db->update("UPDATE %%PLANETS%% SET metal = :m, crystal = :c, deuterium = :d WHERE id = :pid;", array(
+            ':m'   => $newM,
+            ':c'   => $newC,
+            ':d'   => $newD,
             ':pid' => $planetId,
         ));
 
-        // 9. Synchronize virtual budgets and apply cooldowns (1h empire, 2h planet)
+        // Synchronize virtual budgets in budgetManager
         if (isset($this->ctx->budgetManager)) {
-            $this->ctx->budgetManager->syncDemandTraderRebalance($planetId, $category, $targetM, $targetC, $targetD, $exchanges, true, !$isBatchMode);
+            $cat = 'mines';
+            if (strpos($contextReason, 'fleet') !== false || strpos($contextReason, 'strike') !== false || strpos($contextReason, 'emergency') !== false) {
+                $cat = 'fleet';
+            } elseif (strpos($contextReason, 'defense') !== false) {
+                $cat = 'defense';
+            } elseif (strpos($contextReason, 'research') !== false) {
+                $cat = 'research';
+            }
+
+            $this->ctx->budgetManager->syncDemandTraderRebalance($planetId, $cat, $newM, $newC, $newD, $exchanges, true, !$isBatchMode);
         }
 
-        // 10. Record telemetry in decisionLog
         $this->ctx->decisionLog->record(
-            'trader_demand_rebalance',
-            "Mercader Bajo Demanda ({$category}): Rebalanceo 50/35/15 MSE en planeta #{$planetId} (Total MSE: " . number_format($totalMSE, 0) . ", " . count($exchanges) . " intercambios mínimos)",
+            'exact_delta_trade',
+            "Mercader por Delta Exacto en planeta #{$planetId} ({$contextReason}): Pagados " . number_format($totalPayNeeded, 0) . " de res #{$payResId} para adquirir faltantes exactos (Coste: 50 MO)",
             array(
-                'planet_id'   => $planetId,
-                'category'    => $category,
-                'total_mse'   => $totalMSE,
-                'target_m'    => $targetM,
-                'target_c'    => $targetC,
-                'target_d'    => $targetD,
-                'exchanges'   => $exchanges,
-                'fee_mo'      => $costMO,
+                'planet_id'      => $planetId,
+                'target_cost'    => $targetCost,
+                'pay_res'        => $payResId,
+                'pay_spent'      => $totalPayNeeded,
+                'exchanges'      => $exchanges,
+                'resulting_m'    => $newM,
+                'resulting_c'    => $newC,
+                'resulting_d'    => $newD,
             ),
-            "demand_trader_{$category}_{$planetId}",
-            3500.0
+            "delta_trader_{$planetId}",
+            4000.0
         );
 
-        if (isset($this->ctx->telemetry)) {
-            $pInfo = $db->selectSingle("SELECT name, galaxy, system, planet FROM %%PLANETS%% WHERE id = :pid LIMIT 1;", array(':pid' => $planetId));
-            $pName = $pInfo['name'] ?? "Planeta #{$planetId}";
-            $coords = isset($pInfo['galaxy']) ? "[{$pInfo['galaxy']}:{$pInfo['system']}:{$pInfo['planet']}]" : '';
-            $traderReason = "Demanda prioritaria de recursos para " . strtoupper($category) . " (déficit balanceado a 50/35/15 MSE)";
-            $this->ctx->telemetry->logTrader(
-                $pName,
-                $coords,
-                $category,
-                $traderReason,
-                array('metal' => $curM, 'crystal' => $curC, 'deuterium' => $curD, 'mse' => $totalMSE),
-                array('metal' => $targetM, 'crystal' => $targetC, 'deuterium' => $targetD, 'mse' => $actualTargetMSE),
-                $exchanges,
-                $costMO
-            );
-        }
-
         return true;
+    }
+
+    /**
+     * Rebalance Planet Resources into 50% Metal, 35% Crystal, 15% Deuterium (MSE)
+     * (Backward-compatible adapter that delegates to executeExactDeltaTrade)
+     *
+     * @param int $planetId
+     * @param string $category 'fleet', 'defense', 'research', 'mines'
+     * @param bool $isBatchMode
+     * @return bool True if trade executed
+     */
+    public function rebalancePlanet50_35_15($planetId, $category, $isBatchMode = false)
+    {
+        $planetId = (int)$planetId;
+        $db = Database::get();
+        $pRow = $db->selectSingle("SELECT metal, crystal, deuterium FROM %%PLANETS%% WHERE id = :pid LIMIT 1;", array(':pid' => $planetId));
+        if (empty($pRow)) return false;
+
+        $totMSE = (float)$pRow['metal'] + (2.0 * (float)$pRow['crystal']) + (4.0 * (float)$pRow['deuterium']);
+        $tgtM = round(0.50 * $totMSE);
+        $tgtC = round((0.35 * $totMSE) / 2.0);
+        $tgtD = round((0.15 * $totMSE) / 4.0);
+        $targetCost = array(901 => $tgtM, 902 => $tgtC, 903 => $tgtD);
+
+        return $this->executeExactDeltaTrade($planetId, $targetCost, "demand_rebalance_{$category}", $isBatchMode);
     }
 
     /**
@@ -591,19 +758,66 @@ class BotPremiumStrategist
         $costC = (float)($cost[902] ?? $cost['crystal'] ?? 0.0);
         $costD = (float)($cost[903] ?? $cost['deuterium'] ?? 0.0);
 
-        // Calculate potential 50/35/15 target resources
-        $targetM = 0.50 * $totalMSE;
-        $targetC = 0.175 * $totalMSE;
-        $targetD = 0.0375 * $totalMSE;
+        $costMSE = $costM + (2.0 * $costC) + (4.0 * $costD);
+        if ($totalMSE < $costMSE - 0.0001) {
+            return false;
+        }
 
-        // If the rebalance produces enough resources for the cost, trade is viable
-        if ($targetM >= $costM && $targetC >= $costC && $targetD >= $costD) {
+        // Calculate exact missing deltas
+        $defM = max(0.0, $costM - $curM);
+        $defC = max(0.0, $costC - $curC);
+        $defD = max(0.0, $costD - $curD);
+
+        // If already covered without trade
+        if ($defM <= 0.0001 && $defC <= 0.0001 && $defD <= 0.0001) {
             return array(
+                'exact_delta_trade'  => true,
                 'rebalance_50_35_15' => true,
                 'total_mse'          => $totalMSE,
-                'target_m'           => $targetM,
-                'target_c'           => $targetC,
-                'target_d'           => $targetD,
+                'cost_mse'           => $costMSE,
+            );
+        }
+
+        // Rate matrix from Trader.php / self::CHARGE_RATES
+        global $Charge;
+        $chargeRates = !empty($Charge) ? $Charge : self::CHARGE_RATES;
+
+        // Surplus above cost
+        $surplusM = max(0.0, $curM - $costM);
+        $surplusC = max(0.0, $curC - $costC);
+        $surplusD = max(0.0, $curD - $costD);
+
+        $surplusMSE = array(
+            901 => $surplusM * 1.0,
+            902 => $surplusC * 2.0,
+            903 => $surplusD * 4.0,
+        );
+
+        $payResId = 901;
+        $maxSurplus = $surplusMSE[901];
+        if ($surplusMSE[902] > $maxSurplus) {
+            $payResId = 902;
+            $maxSurplus = $surplusMSE[902];
+        }
+        if ($surplusMSE[903] > $maxSurplus) {
+            $payResId = 903;
+            $maxSurplus = $surplusMSE[903];
+        }
+
+        $totalPayNeeded = 0.0;
+        if ($payResId !== 901 && $defM > 0.0) $totalPayNeeded += $defM * $chargeRates[$payResId][901];
+        if ($payResId !== 902 && $defC > 0.0) $totalPayNeeded += $defC * $chargeRates[$payResId][902];
+        if ($payResId !== 903 && $defD > 0.0) $totalPayNeeded += $defD * $chargeRates[$payResId][903];
+
+        $availPay = ($payResId === 901 ? $curM : ($payResId === 902 ? $curC : $curD));
+        if ($availPay >= $totalPayNeeded - 0.0001) {
+            return array(
+                'exact_delta_trade'  => true,
+                'rebalance_50_35_15' => true,
+                'total_mse'          => $totalMSE,
+                'cost_mse'           => $costMSE,
+                'pay_res'            => $payResId,
+                'pay_needed'         => $totalPayNeeded,
             );
         }
 
@@ -621,7 +835,7 @@ class BotPremiumStrategist
         }
 
         $strategist = new self($ctx, new BotActionGateway($ctx));
-        return $strategist->rebalancePlanet50_35_15($planetId, $category);
+        return $strategist->executeExactDeltaTrade($planetId, $cost, "demand_unlock_{$category}");
     }
 
     /**
