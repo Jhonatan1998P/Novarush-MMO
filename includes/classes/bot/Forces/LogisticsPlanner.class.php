@@ -205,8 +205,8 @@ class BotLogisticsPlanner
 
             // Anti-Drip Filter (Filtro Anti-Goteo):
             // Prohibir micro-convoyes por déficits insignificantes (< 5M MSE o < 30 mins producción local),
-            // a menos que sea Prioridad 1 (combustible militar de asalto para FOB).
-            if ((int)($demand['priority'] ?? 3) !== 1) {
+            // a menos que sea Prioridad 1 (combustible militar de asalto para FOB) o una Luna (planet_type = 3).
+            if ((int)($demand['priority'] ?? 3) !== 1 && (string)($tData['planet_type'] ?? '1') !== '3') {
                 $deficitMSE = BotEconomyValuator::toMSE((float)$netDeficit['metal'], (float)$netDeficit['crystal'], (float)$netDeficit['deuterium']);
                 $halfHourProdMSE = 0.5 * BotEconomyValuator::toMSE(
                     (float)($tData['metal_perhour'] ?? 0.0),
@@ -386,6 +386,22 @@ class BotLogisticsPlanner
         if (!empty($infraDemands)) {
             foreach ($infraDemands as $ind) {
                 $demands[] = $ind;
+            }
+        }
+
+        // --- Priority 3b: Lunar Infrastructure Demands & Phalanx Fuel ---
+        $lunarDemands = $this->estimateLunarDemands($empire);
+        if (!empty($lunarDemands)) {
+            foreach ($lunarDemands as $ld) {
+                $demands[] = $ld;
+            }
+        }
+
+        // --- Priority 3c: Constrained Colony Supply Demands ($freeFields <= 5) ---
+        $constrainedDemands = $this->estimateConstrainedColonyDemands($empire);
+        if (!empty($constrainedDemands)) {
+            foreach ($constrainedDemands as $cd) {
+                $demands[] = $cd;
             }
         }
 
@@ -697,6 +713,196 @@ class BotLogisticsPlanner
     }
 
     /**
+     * Priority 3b: Estimate Lunar Infrastructure and Phalanx Fuel Demand
+     */
+    public function estimateLunarDemands(BotEmpireState $empire)
+    {
+        global $resource;
+        $demands = array();
+        $moons = $empire->getMoons();
+
+        if (!is_array($moons) || empty($moons)) {
+            return $demands;
+        }
+
+        foreach ($moons as $mId => $moonEntry) {
+            $mId = (int)$mId;
+            if (!empty($moonEntry['building_queue']) && count($moonEntry['building_queue']) >= 2) {
+                continue;
+            }
+
+            $mData = $moonEntry['data'];
+            $freeMoonFields = CalculateMaxPlanetFields($mData) - ((int)$mData['field_current'] + count($moonEntry['building_queue']));
+
+            $curJumpGate = (int)($mData[$resource[43]] ?? 0);
+            $curRobots   = (int)($mData[$resource[14]] ?? 0);
+            $curNano     = (int)($mData[$resource[15]] ?? 0);
+            $curPhalanx  = (int)($mData[$resource[42]] ?? 0);
+            $curMondbasis= (int)($mData[$resource[41]] ?? 0);
+            $curHangar   = (int)($mData[$resource[21]] ?? 0);
+
+            // 1. Phalanx Deuterium Buffer (500,000 D for scans)
+            if ($curPhalanx >= 1) {
+                $curDeut = (float)($mData['deuterium'] ?? 0.0);
+                if ($curDeut < 500000.0) {
+                    $needD = 500000.0 - $curDeut;
+                    $demands[] = array(
+                        'target_planet_id' => $mId,
+                        'type'             => 'military_fuel',
+                        'priority'         => 1, // High priority military fuel for Phalanx
+                        'urgency_score'    => 4000.0,
+                        'required'         => array('metal' => 0.0, 'crystal' => 0.0, 'deuterium' => $needD),
+                        'reason'           => "Buffer operativo de Deuterio para escaneos de Sensor Phalanx en luna #{$mId}",
+                    );
+                }
+            }
+
+            // 2. Determine target building according to v4.5/v4.6 lunar doctrine
+            $targetElemId = null;
+            $urgency = 1500.0;
+
+            if ($freeMoonFields <= 1) {
+                $jumpAccessible = BuildFunctions::isTechnologieAccessible($this->ctx->user, $mData, 43, array());
+                if ($curJumpGate == 0 && $jumpAccessible) {
+                    $targetElemId = 43;
+                    $urgency = 3500.0;
+                } else {
+                    $targetElemId = 41;
+                    $urgency = 3200.0;
+                }
+            } else {
+                $jumpAccessible = BuildFunctions::isTechnologieAccessible($this->ctx->user, $mData, 43, array());
+                if ($curJumpGate == 0 && $jumpAccessible) {
+                    $targetElemId = 43;
+                    $urgency = 3500.0;
+                } elseif ($curRobots < 5) {
+                    $targetElemId = 14;
+                    $urgency = 2500.0;
+                } elseif ($curNano < 2 && BuildFunctions::isTechnologieAccessible($this->ctx->user, $mData, 15, array())) {
+                    $targetElemId = 15;
+                    $urgency = 2600.0;
+                } elseif ($curPhalanx < 6 && BuildFunctions::isTechnologieAccessible($this->ctx->user, $mData, 42, array())) {
+                    $targetElemId = 42;
+                    $urgency = 2200.0;
+                } elseif ($curRobots < 8) {
+                    $targetElemId = 14;
+                    $urgency = 1800.0;
+                } elseif ($curHangar < 4 && BuildFunctions::isTechnologieAccessible($this->ctx->user, $mData, 21, array())) {
+                    $targetElemId = 21;
+                    $urgency = 1600.0;
+                } elseif ($curMondbasis < 13) {
+                    $targetElemId = 41;
+                    $urgency = 2000.0;
+                } elseif ($curPhalanx < 12 && BuildFunctions::isTechnologieAccessible($this->ctx->user, $mData, 42, array())) {
+                    $targetElemId = 42;
+                    $urgency = 1800.0;
+                }
+            }
+
+            if ($targetElemId !== null && BuildFunctions::isTechnologieAccessible($this->ctx->user, $mData, $targetElemId, array())) {
+                $cost = BuildFunctions::getElementPrice($this->ctx->user, $mData, $targetElemId);
+                $reqM = (float)($cost[901] ?? $cost['metal'] ?? 0.0);
+                $reqC = (float)($cost[902] ?? $cost['crystal'] ?? 0.0);
+                $reqD = (float)($cost[903] ?? $cost['deuterium'] ?? 0.0);
+
+                // Multiply by 2 for cheap early levels to avoid repetitive trips
+                $costMSE = BotEconomyValuator::toMSE($reqM, $reqC, $reqD);
+                if ($costMSE < 10000000.0) {
+                    $reqM *= 2.0;
+                    $reqC *= 2.0;
+                    $reqD *= 2.0;
+                }
+
+                $curStockM = (float)($mData['metal'] ?? 0.0);
+                $curStockC = (float)($mData['crystal'] ?? 0.0);
+                $curStockD = (float)($mData['deuterium'] ?? 0.0);
+
+                if ($curStockM < $reqM || $curStockC < $reqC || $curStockD < $reqD) {
+                    $demands[] = array(
+                        'target_planet_id' => $mId,
+                        'type'             => 'building',
+                        'element_id'       => $targetElemId,
+                        'count'            => 1,
+                        'priority'         => 3,
+                        'urgency_score'    => $urgency,
+                        'required'         => array('metal' => $reqM, 'crystal' => $reqC, 'deuterium' => $reqD),
+                        'reason'           => "Abastecimiento lunar para {$resource[$targetElemId]} en luna #{$mId}",
+                    );
+                }
+            }
+        }
+
+        return $demands;
+    }
+
+    /**
+     * Priority 3c: Estimate supply demands for colonies with <= 5 free fields needing Terraformer or Stores
+     */
+    public function estimateConstrainedColonyDemands(BotEmpireState $empire)
+    {
+        global $resource;
+        $demands = array();
+        $planets = $empire->getPlanets();
+
+        if (!is_array($planets) || empty($planets)) {
+            return $demands;
+        }
+
+        foreach ($planets as $pId => $pEntry) {
+            $pId = (int)$pId;
+            if (!empty($pEntry['building_queue']) && count($pEntry['building_queue']) >= 2) {
+                continue;
+            }
+
+            $pData = $pEntry['data'];
+            $freeFields = CalculateMaxPlanetFields($pData) - ((int)$pData['field_current'] + count($pEntry['building_queue']));
+
+            if ($freeFields <= 5) {
+                $curTerra = (int)($pData[$resource[33]] ?? 0);
+                $nextTerraCost = BuildFunctions::getElementPrice($this->ctx->user, $pData, 33, false, $curTerra + 1);
+                $costC = (float)($nextTerraCost[902] ?? $nextTerraCost['crystal'] ?? 0.0);
+                $costD = (float)($nextTerraCost[903] ?? $nextTerraCost['deuterium'] ?? 0.0);
+                $maxC  = (float)($pData['crystal_max'] ?? 0.0);
+                $maxD  = (float)($pData['deuterium_max'] ?? 0.0);
+
+                $targetElement = 33;
+                $targetCost = $nextTerraCost;
+
+                if ($costC > 0.85 * $maxC && BuildFunctions::isTechnologieAccessible($this->ctx->user, $pData, 23, array())) {
+                    $targetElement = 23;
+                    $targetCost = BuildFunctions::getElementPrice($this->ctx->user, $pData, 23);
+                } elseif ($costD > 0.85 * $maxD && BuildFunctions::isTechnologieAccessible($this->ctx->user, $pData, 24, array())) {
+                    $targetElement = 24;
+                    $targetCost = BuildFunctions::getElementPrice($this->ctx->user, $pData, 24);
+                }
+
+                $reqM = (float)($targetCost[901] ?? $targetCost['metal'] ?? 0.0);
+                $reqC = (float)($targetCost[902] ?? $targetCost['crystal'] ?? 0.0);
+                $reqD = (float)($targetCost[903] ?? $targetCost['deuterium'] ?? 0.0);
+
+                $curM = (float)($pData['metal'] ?? 0.0);
+                $curC = (float)($pData['crystal'] ?? 0.0);
+                $curD = (float)($pData['deuterium'] ?? 0.0);
+
+                if ($curM < $reqM || $curC < $reqC || $curD < $reqD) {
+                    $demands[] = array(
+                        'target_planet_id' => $pId,
+                        'type'             => 'building',
+                        'element_id'       => $targetElement,
+                        'count'            => 1,
+                        'priority'         => 3,
+                        'urgency_score'    => 2800.0,
+                        'required'         => array('metal' => $reqM, 'crystal' => $reqC, 'deuterium' => $reqD),
+                        'reason'           => "Asistencia logística proactiva para {$resource[$targetElement]} en colonia saturada #{$pId} ({$freeFields} campos libres)",
+                    );
+                }
+            }
+        }
+
+        return $demands;
+    }
+
+    /**
      * Find candidate donor colonies sorted by ascending distance to destination
      */
     public function findBestDonorsForDemand(BotEmpireState $empire, $targetPlanetId, array $targetCoords, $category = 'mines')
@@ -755,6 +961,22 @@ class BotLogisticsPlanner
                 'cargos'    => array(217 => $cargos217, 203 => $cargos203, 202 => $cargos202),
                 'capacity'  => $totalCargoCap,
             );
+        }
+
+        $targetBody = $empire->getPlanet($targetPlanetId);
+        $targetIsMoon = ($targetBody && (string)($targetBody['data']['planet_type'] ?? '1') === '3');
+
+        if ($targetIsMoon) {
+            foreach ($candidateDonors as &$cd) {
+                // Parent planet has identical coords [galaxy, system, planet] and planet_type = 1
+                if ((string)($cd['data']['planet_type'] ?? '1') === '1'
+                    && (int)$cd['data']['galaxy'] === (int)$targetCoords[0]
+                    && (int)$cd['data']['system'] === (int)$targetCoords[1]
+                    && (int)$cd['data']['planet'] === (int)$targetCoords[2]) {
+                    $cd['distance'] = -1; // Top priority parent planet!
+                }
+            }
+            unset($cd);
         }
 
         usort($candidateDonors, function($a, $b) {

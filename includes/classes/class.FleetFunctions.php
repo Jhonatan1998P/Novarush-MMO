@@ -109,6 +109,9 @@ class FleetFunctions
 
 	public static function GetMissionDuration($SpeedFactor, $MaxFleetSpeed, $Distance, $GameSpeed, $USER)
 	{
+		$SpeedFactor	= max(1, (float)$SpeedFactor);
+		$MaxFleetSpeed	= max(1, (float)$MaxFleetSpeed);
+		$GameSpeed		= max(0.0001, (float)$GameSpeed);
 		$SpeedFactor	= (350 / ($SpeedFactor * 0.1));
 		$SpeedFactor	*= pow($Distance * 10 / $MaxFleetSpeed, 0.5);
 		$SpeedFactor	+= 10;
@@ -174,8 +177,8 @@ class FleetFunctions
 
 		foreach ($FleetArray as $Ship => $Count)
 		{
-			$ShipSpeed          = self::GetShipSpeed($Ship, $Player);
-			$ShipConsumption    = self::GetShipConsumption($Ship, $Player);
+			$ShipSpeed          = max(1, (float)self::GetShipSpeed($Ship, $Player));
+			$ShipConsumption    = (float)self::GetShipConsumption($Ship, $Player);
 			
 			$spd                = 35000 / max($MissionDuration * $GameSpeed - 10, 1) * sqrt($MissionDistance * 10 / $ShipSpeed);
 			$basicConsumption   = $ShipConsumption * $Count;

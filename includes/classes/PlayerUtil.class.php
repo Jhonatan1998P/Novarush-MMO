@@ -268,6 +268,8 @@ class PlayerUtil
 			}
 		}
 
+		$resourceMultiplier = max(1.0, (float)$config->resource_multiplier);
+
 		$params	= array(
 			':name'				=> $name,
 			':universe'			=> $universe,
@@ -282,9 +284,9 @@ class PlayerUtil
 			':maxFields'		=> $maxFields,
 			':minTemperature'	=> $minTemperature,
 			':maxTemperature'	=> $maxTemperature,
-			':metal_start'		=> $config->metal_start,
-			':crystal_start'	=> $config->crystal_start,
-			':deuterium_start'	=> $config->deuterium_start
+			':metal_start'		=> (float)$config->metal_start * $resourceMultiplier,
+			':crystal_start'	=> (float)$config->crystal_start * $resourceMultiplier,
+			':deuterium_start'	=> (float)$config->deuterium_start * $resourceMultiplier
 		);
 
 		$sql = 'INSERT INTO %%PLANETS%% SET

@@ -26,6 +26,8 @@ require_once 'includes/classes/bot/Kernel/BotClock.class.php';
  */
 class BotBudgetManager
 {
+    const MAX_SAVINGS_LOCK_ETA = 14400; // 4 hours maximum reasonable savings lock horizon
+
     private $ctx;
     private $credits = array();
     private $savingsLock = null;
@@ -252,6 +254,39 @@ class BotBudgetManager
                 'crystal'   => $curStockC,
                 'deuterium' => $curStockD,
             );
+        }
+
+        // Synchronize lunar bodies: moons have zero native production, so their virtual budget
+        // is directly backed by their physical stock (minus tactical buffer for phalanx)
+        $moons = $empire->getMoons();
+        if (is_array($moons)) {
+            foreach ($moons as $mId => $mEntry) {
+                $mData = $mEntry['data'];
+                $mId = (int)$mId;
+
+                if (!isset($this->credits['planets'][$mId])) {
+                    $this->credits['planets'][$mId] = array(
+                        'mines'   => array('metal' => 0.0, 'crystal' => 0.0, 'deuterium' => 0.0),
+                        'fleet'   => array('metal' => 0.0, 'crystal' => 0.0, 'deuterium' => 0.0),
+                        'defense' => array('metal' => 0.0, 'crystal' => 0.0, 'deuterium' => 0.0),
+                    );
+                }
+
+                $mStockM = (float)($mData['metal'] ?? 0.0);
+                $mStockC = (float)($mData['crystal'] ?? 0.0);
+                $mStockD = max(0.0, (float)($mData['deuterium'] ?? 0.0) - 50000.0);
+
+                // On moons, mines category covers lunar buildings (Base Lunar, Jump Gate, Phalanx, Robots, Nano)
+                $this->credits['planets'][$mId]['mines']['metal']     = max((float)($this->credits['planets'][$mId]['mines']['metal'] ?? 0.0), $mStockM);
+                $this->credits['planets'][$mId]['mines']['crystal']   = max((float)($this->credits['planets'][$mId]['mines']['crystal'] ?? 0.0), $mStockC);
+                $this->credits['planets'][$mId]['mines']['deuterium'] = max((float)($this->credits['planets'][$mId]['mines']['deuterium'] ?? 0.0), $mStockD);
+
+                $this->credits['last_physical'][$mId] = array(
+                    'metal'     => $mStockM,
+                    'crystal'   => $mStockC,
+                    'deuterium' => (float)($mData['deuterium'] ?? 0.0),
+                );
+            }
         }
 
         // Global research budget (empire-wide aggregate)
@@ -597,6 +632,30 @@ class BotBudgetManager
             return true;
         }
 
+        // On moons (planet_type = 3), synchronize directly with physical stock
+        if ($category === 'mines' && $planetId > 0) {
+            try {
+                $db = Database::get();
+                $pRow = $db->selectSingle("SELECT planet_type, metal, crystal, deuterium FROM %%PLANETS%% WHERE id = :id;", array(':id' => $planetId));
+                if ($pRow && (string)$pRow['planet_type'] === '3') {
+                    $physM = (float)$pRow['metal'];
+                    $physC = (float)$pRow['crystal'];
+                    $physD = max(0.0, (float)$pRow['deuterium'] - 50000.0);
+                    if ($physM >= $costM && $physC >= $costC && $physD >= $costD) {
+                        if (!isset($this->credits['planets'][$planetId]['mines'])) {
+                            $this->credits['planets'][$planetId]['mines'] = array('metal' => 0.0, 'crystal' => 0.0, 'deuterium' => 0.0);
+                        }
+                        $this->credits['planets'][$planetId]['mines']['metal']     = max((float)$this->credits['planets'][$planetId]['mines']['metal'], $physM);
+                        $this->credits['planets'][$planetId]['mines']['crystal']   = max((float)$this->credits['planets'][$planetId]['mines']['crystal'], $physC);
+                        $this->credits['planets'][$planetId]['mines']['deuterium'] = max((float)$this->credits['planets'][$planetId]['mines']['deuterium'], $physD);
+                        return true;
+                    }
+                }
+            } catch (Throwable $e) {
+                // Ignore DB error
+            }
+        }
+
         return $this->tryInternalBucketSwap($planetId, $category, $cost);
     }
 
@@ -690,33 +749,58 @@ class BotBudgetManager
             return false;
         }
 
-        // 3. Conversion Rates (4 Metal : 2 Crystal : 1 Deuterium)
-        $rate = array('metal' => 1.0, 'crystal' => 2.0, 'deuterium' => 4.0);
+        // 3. Step A: Check and absorb unallocated physical surplus on this planet
+        $sumVirtM = 0.0;
+        $sumVirtC = 0.0;
+        $sumVirtD = 0.0;
+        if (isset($this->credits['planets'][$planetId])) {
+            foreach (array('mines', 'fleet', 'defense') as $c) {
+                $sumVirtM += (float)($this->credits['planets'][$planetId][$c]['metal'] ?? 0.0);
+                $sumVirtC += (float)($this->credits['planets'][$planetId][$c]['crystal'] ?? 0.0);
+                $sumVirtD += (float)($this->credits['planets'][$planetId][$c]['deuterium'] ?? 0.0);
+            }
+        }
+        $idleM = max(0.0, $physM - $sumVirtM);
+        $idleC = max(0.0, $physC - $sumVirtC);
+        $idleD = max(0.0, $physD - $sumVirtD);
 
-        // Required MSE for the deficits
-        $defMSE = array(
-            'metal'     => $defM * $rate['metal'],
-            'crystal'   => $defC * $rate['crystal'],
-            'deuterium' => $defD * $rate['deuterium'],
-        );
-        $totalDefMSE = array_sum($defMSE);
+        if ($idleM > 0.0 || $idleC > 0.0 || $idleD > 0.0) {
+            $takeM = min($defM, $idleM);
+            $takeC = min($defC, $idleC);
+            $takeD = min($defD, $idleD);
 
-        // Calculate surplus in target category available to give up
-        $surplusTarget = array(
-            'metal'     => max(0.0, $curM - $needM),
-            'crystal'   => max(0.0, $curC - $needC),
-            'deuterium' => max(0.0, $curD - $needD),
-        );
-        $totalSurplusMSE = ($surplusTarget['metal'] * $rate['metal'])
-                         + ($surplusTarget['crystal'] * $rate['crystal'])
-                         + ($surplusTarget['deuterium'] * $rate['deuterium']);
+            $targetRef['metal']     = round($curM + $takeM, 2);
+            $targetRef['crystal']   = round($curC + $takeC, 2);
+            $targetRef['deuterium'] = round($curD + $takeD, 2);
 
-        if ($totalSurplusMSE < $totalDefMSE - 0.0001) {
-            // Target category cannot cover the MSE cost of the swap
-            return false;
+            $curM = (float)$targetRef['metal'];
+            $curC = (float)$targetRef['crystal'];
+            $curD = (float)$targetRef['deuterium'];
+
+            $defM = max(0.0, $needM - $curM);
+            $defC = max(0.0, $needC - $curC);
+            $defD = max(0.0, $needD - $curD);
+
+            if ($defM <= 0.0001 && $defC <= 0.0001 && $defD <= 0.0001) {
+                $this->saveState();
+                return true;
+            }
         }
 
-        // 4. Candidate Donor Categories (mines, fleet, defense excluding target and savings_lock)
+        // For research: if lab planet physically covers the cost, credit research bag directly
+        if ($targetCategory === 'research') {
+            $takeM = max(0.0, $needM - $curM);
+            $takeC = max(0.0, $needC - $curC);
+            $takeD = max(0.0, $needD - $curD);
+            $targetRef['metal']     = round($curM + $takeM, 2);
+            $targetRef['crystal']   = round($curC + $takeC, 2);
+            $targetRef['deuterium'] = round($curD + $takeD, 2);
+            $this->saveState();
+            return true;
+        }
+
+        // 4. Step B: Candidate Donor Categories (mines, fleet, defense excluding target and savings_lock)
+        $rate = array('metal' => 1.0, 'crystal' => 2.0, 'deuterium' => 4.0);
         $possibleDonors = array('mines', 'fleet', 'defense');
         $validDonors = array();
         foreach ($possibleDonors as $cat) {
@@ -735,83 +819,110 @@ class BotBudgetManager
             return false;
         }
 
-        // Verify that unlocked donors have enough of each deficit resource
+        // Check if target category has surplus of other resources in MSE to perform 4:2:1 swap
+        $surplusTarget = array(
+            'metal'     => max(0.0, $curM - $needM),
+            'crystal'   => max(0.0, $curC - $needC),
+            'deuterium' => max(0.0, $curD - $needD),
+        );
+        $totalSurplusMSE = ($surplusTarget['metal'] * $rate['metal'])
+                         + ($surplusTarget['crystal'] * $rate['crystal'])
+                         + ($surplusTarget['deuterium'] * $rate['deuterium']);
         $deficits = array('metal' => $defM, 'crystal' => $defC, 'deuterium' => $defD);
-        foreach ($deficits as $resKey => $amt) {
-            if ($amt <= 0.0001) continue;
-            $availInDonors = 0.0;
-            foreach ($validDonors as $dCat) {
-                $availInDonors += (float)($this->credits['planets'][$planetId][$dCat][$resKey] ?? 0.0);
-            }
-            if ($availInDonors < $amt - 0.0001) {
-                return false;
-            }
-        }
+        $totalDefMSE = ($defM * $rate['metal']) + ($defC * $rate['crystal']) + ($defD * $rate['deuterium']);
 
-        // 5. Execute 4:2:1 MSE Neutral Swap
-        foreach ($deficits as $resKey => $amtNeeded) {
-            if ($amtNeeded <= 0.0001) continue;
+        if ($totalSurplusMSE >= $totalDefMSE - 0.0001) {
+            // Target can cover via 4:2:1 MSE swap
+            foreach ($deficits as $resKey => $amtNeeded) {
+                if ($amtNeeded <= 0.0001) continue;
+                $remNeeded = $amtNeeded;
+                foreach ($validDonors as $dCat) {
+                    if ($remNeeded <= 0.0001) break;
+                    $dAvail = (float)($this->credits['planets'][$planetId][$dCat][$resKey] ?? 0.0);
+                    if ($dAvail <= 0.0001) continue;
+                    $takeUnits = min($remNeeded, $dAvail);
+                    $swapMSE = $takeUnits * $rate[$resKey];
 
-            $remNeeded = $amtNeeded;
-            foreach ($validDonors as $dCat) {
-                if ($remNeeded <= 0.0001) break;
+                    $remToPayMSE = $swapMSE;
+                    foreach (array('metal', 'crystal', 'deuterium') as $payKey) {
+                        if ($payKey === $resKey) continue;
+                        if ($remToPayMSE <= 0.0001) break;
+                        if ($surplusTarget[$payKey] <= 0.0001) continue;
 
-                $dAvail = (float)($this->credits['planets'][$planetId][$dCat][$resKey] ?? 0.0);
-                if ($dAvail <= 0.0001) continue;
+                        $payRate = $rate[$payKey];
+                        $availPayMSE = $surplusTarget[$payKey] * $payRate;
+                        $payMSE = min($remToPayMSE, $availPayMSE);
+                        $payUnits = $payMSE / $payRate;
 
-                $takeUnits = min($remNeeded, $dAvail);
-                $swapMSE = $takeUnits * $rate[$resKey];
+                        $surplusTarget[$payKey] -= $payUnits;
+                        $targetRef[$payKey] = max(0.0, round($targetRef[$payKey] - $payUnits, 2));
+                        $this->credits['planets'][$planetId][$dCat][$payKey] = max(0.0, round(
+                            $this->credits['planets'][$planetId][$dCat][$payKey] + $payUnits,
+                            2
+                        ));
+                        $remToPayMSE -= $payMSE;
+                    }
 
-                // Pay $swapMSE from targetCategory surplus to dCat
-                $remToPayMSE = $swapMSE;
-                foreach (array('metal', 'crystal', 'deuterium') as $payKey) {
-                    if ($payKey === $resKey) continue;
-                    if ($remToPayMSE <= 0.0001) break;
-                    if ($surplusTarget[$payKey] <= 0.0001) continue;
-
-                    $payRate = $rate[$payKey];
-                    $availPayMSE = $surplusTarget[$payKey] * $payRate;
-                    $payMSE = min($remToPayMSE, $availPayMSE);
-                    $payUnits = $payMSE / $payRate;
-
-                    $surplusTarget[$payKey] -= $payUnits;
-                    $targetRef[$payKey] = max(0.0, round($targetRef[$payKey] - $payUnits, 2));
-                    $this->credits['planets'][$planetId][$dCat][$payKey] = max(0.0, round(
-                        $this->credits['planets'][$planetId][$dCat][$payKey] + $payUnits,
+                    $this->credits['planets'][$planetId][$dCat][$resKey] = max(0.0, round(
+                        $this->credits['planets'][$planetId][$dCat][$resKey] - $takeUnits,
                         2
                     ));
-
-                    $remToPayMSE -= $payMSE;
+                    $targetRef[$resKey] = max(0.0, round($targetRef[$resKey] + $takeUnits, 2));
+                    $remNeeded -= $takeUnits;
                 }
+            }
+            $this->saveState();
+            return true;
+        }
 
-                // Transfer deficit resource to target
-                $this->credits['planets'][$planetId][$dCat][$resKey] = max(0.0, round(
-                    $this->credits['planets'][$planetId][$dCat][$resKey] - $takeUnits,
-                    2
-                ));
-                $targetRef[$resKey] = max(0.0, round($targetRef[$resKey] + $takeUnits, 2));
-
-                $remNeeded -= $takeUnits;
+        // Step C: Rebalance from unlocked donor virtual credits backed by real physical stock
+        $canCoverFromDonors = true;
+        foreach ($deficits as $resKey => $amt) {
+            if ($amt <= 0.0001) continue;
+            $avail = 0.0;
+            foreach ($validDonors as $dCat) {
+                $avail += (float)($this->credits['planets'][$planetId][$dCat][$resKey] ?? 0.0);
+            }
+            if ($avail < $amt - 0.0001) {
+                $canCoverFromDonors = false;
+                break;
             }
         }
 
-        // 6. Record and Save
-        if (isset($this->ctx->decisionLog)) {
-            $this->ctx->decisionLog->record(
-                'internal_bucket_swap',
-                "Internal Bucket Swap: rebalanceo neutral 4:2:1 MSE en planeta #{$planetId} para {$targetCategory} (Coste 0 MO, Delta MSE = 0)",
-                array(
-                    'planet_id'        => $planetId,
-                    'target_category'  => $targetCategory,
-                    'needed_resources' => $neededResources,
-                ),
-                "swap_{$targetCategory}_{$planetId}",
-                2500.0
-            );
+        if ($canCoverFromDonors) {
+            foreach ($deficits as $resKey => $amtNeeded) {
+                if ($amtNeeded <= 0.0001) continue;
+                $remNeeded = $amtNeeded;
+                foreach ($validDonors as $dCat) {
+                    if ($remNeeded <= 0.0001) break;
+                    $dAvail = (float)($this->credits['planets'][$planetId][$dCat][$resKey] ?? 0.0);
+                    if ($dAvail <= 0.0001) continue;
+                    $takeUnits = min($remNeeded, $dAvail);
+                    $this->credits['planets'][$planetId][$dCat][$resKey] = max(0.0, round($dAvail - $takeUnits, 2));
+                    $targetRef[$resKey] = max(0.0, round(($targetRef[$resKey] ?? 0.0) + $takeUnits, 2));
+                    $remNeeded -= $takeUnits;
+                }
+            }
+
+            if (isset($this->ctx->decisionLog)) {
+                $this->ctx->decisionLog->record(
+                    'internal_bucket_swap',
+                    "Internal Bucket Swap: rebalanceo neutral en planeta #{$planetId} para {$targetCategory} (Coste 0 MO)",
+                    array(
+                        'planet_id'        => $planetId,
+                        'target_category'  => $targetCategory,
+                        'needed_resources' => $neededResources,
+                    ),
+                    "swap_{$targetCategory}_{$planetId}",
+                    2500.0
+                );
+            }
+
+            $this->saveState();
+            return true;
         }
 
-        $this->saveState();
-        return true;
+        return false;
     }
 
     public function getCredits()
@@ -1424,7 +1535,10 @@ class BotBudgetManager
     /**
      * Engage or refresh Savings Lock for a priority element in a specific category
      */
-    public function setSavingsLock($planetId, $targetType, $elementId, array $cost, array $planetData, $category = null)
+    /**
+     * Engage or refresh Savings Lock for a priority element in a specific category
+     */
+    public function setSavingsLock($planetId, $targetType, $elementId, array $cost, array $planetData, $category = null, BotEmpireState $empire = null)
     {
         if ($category === null) {
             if ($targetType === 'tech' || $targetType === 'research') {
@@ -1471,6 +1585,26 @@ class BotBudgetManager
 
         $eta = $this->calculateSafeEta($cost, $stockMap, $prodMap);
 
+        // MAX_SAVINGS_LOCK_ETA enforcement: Never lock empire for unreachable targets
+        if ($eta > self::MAX_SAVINGS_LOCK_ETA) {
+            if ($empire !== null) {
+                $hasFreeFieldsElsewhere = false;
+                foreach ($empire->getPlanets() as $pCheckId => $pCheck) {
+                    if ((int)$pCheckId === (int)$planetId) continue;
+                    $f = CalculateMaxPlanetFields($pCheck['data']) - ((int)$pCheck['data']['field_current'] + count($pCheck['building_queue']));
+                    if ($f > 0) {
+                        $hasFreeFieldsElsewhere = true;
+                        break;
+                    }
+                }
+                if ($hasFreeFieldsElsewhere) {
+                    return false;
+                }
+            } else {
+                return false;
+            }
+        }
+
         $this->savingsLock = array(
             'planet_id'        => (int)$planetId,
             'target_type'      => $targetType,
@@ -1485,6 +1619,7 @@ class BotBudgetManager
         );
 
         $this->saveState();
+        return true;
     }
 
     /**
@@ -1493,6 +1628,13 @@ class BotBudgetManager
     public function isCategoryLocked($planetId, $category)
     {
         if (empty($this->savingsLock)) {
+            return false;
+        }
+
+        // Auto-expire lock if it exceeds maximum savings horizon
+        $eta = (float)($this->savingsLock['eta_seconds'] ?? 0.0);
+        if ($eta > self::MAX_SAVINGS_LOCK_ETA) {
+            $this->clearSavingsLock();
             return false;
         }
 
@@ -1574,6 +1716,20 @@ class BotBudgetManager
             return array('status' => 'invalid_planet');
         }
 
+        // Auto-expire savings lock exceeding MAX_SAVINGS_LOCK_ETA (14400s / 4h)
+        $currentEta = (float)($this->savingsLock['eta_seconds'] ?? 0.0);
+        if ($currentEta > self::MAX_SAVINGS_LOCK_ETA) {
+            $this->ctx->decisionLog->record(
+                'savings_lock_aborted_eta',
+                "Savings lock aborted: ETA ({$currentEta}s) exceeds MAX_SAVINGS_LOCK_ETA (" . self::MAX_SAVINGS_LOCK_ETA . "s). Unlocking empire.",
+                $this->savingsLock,
+                'abort_savings_eta',
+                12000.0
+            );
+            $this->clearSavingsLock();
+            return array('status' => 'aborted_eta_exceeded');
+        }
+
         $pData = $planetEntry['data'];
         $cost  = $this->savingsLock['cost'];
 
@@ -1583,6 +1739,8 @@ class BotBudgetManager
         $maxStockCap = (float)($pData[$colKey . '_max'] ?? 0.0);
         $currentStock = (float)($pData[$colKey] ?? 0.0);
         $lastStock    = (float)($this->savingsLock['last_stock'] ?? $currentStock);
+
+        $freeFields = CalculateMaxPlanetFields($pData) - ((int)$pData['field_current'] + count($planetEntry['building_queue']));
 
         // Warehouse corresponding to the current deficit resource
         $storeIdForDeficit = ($defRes === 901) ? 22 : (($defRes === 902) ? 23 : 24);
@@ -1599,10 +1757,22 @@ class BotBudgetManager
 
         // --- 1. Dynamic Storage Cap Guard ---
         // If cost of deficit resource exceeds 95% of storage capacity, the planet can never save enough!
-        // Immediately force warehouse construction funded directly by savings reserve.
         $storeNeeded = 0;
         if ($maxStockCap > 0 && $costDef > ($maxStockCap * 0.95)) {
             $storeNeeded = $storeIdForDeficit;
+        }
+
+        // If warehouse is needed but planet has <= 0 free fields, it cannot be built! Deadlock resolution:
+        if ($storeNeeded > 0 && $freeFields <= 0) {
+            $this->ctx->decisionLog->record(
+                'savings_storage_deadlock_aborted',
+                "Savings lock aborted on planet #{$pId}: target requires warehouse #{$storeNeeded} but colony has 0 free fields.",
+                $this->savingsLock,
+                'abort_storage_deadlock',
+                15000.0
+            );
+            $this->clearSavingsLock();
+            return array('status' => 'aborted_storage_deadlock');
         }
 
         if ($storeNeeded > 0 && !$isWarehouseBuilding) {
@@ -1685,7 +1855,7 @@ class BotBudgetManager
             $this->ctx->decisionLog->record(
                 'savings_target_achieved',
                 "Savings Lock fulfilled! Purchased {$targetType} #{$elementId} on planet #{$pId}",
-                $this->savingsLock,
+                is_array($this->savingsLock) ? $this->savingsLock : array(),
                 "achieved_{$elementId}",
                 10000.0
             );

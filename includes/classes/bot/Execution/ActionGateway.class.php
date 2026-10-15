@@ -65,6 +65,10 @@ class BotActionGateway
 
             if (isset($this->ctx->budgetManager)) {
                 $this->ctx->budgetManager->deductFromBudget($planetId, 'mines', $costResources);
+                $activeLock = $this->ctx->budgetManager->getSavingsLock();
+                if (!empty($activeLock) && (int)($activeLock['planet_id'] ?? 0) === (int)$planetId && (int)($activeLock['element_id'] ?? 0) === (int)$elementId) {
+                    $this->ctx->budgetManager->clearSavingsLock();
+                }
             }
 
             if (isset($this->ctx->telemetry)) {
@@ -74,6 +78,68 @@ class BotActionGateway
                 $lvlCol = $resource[$elementId] ?? '';
                 $curLvl = (!empty($lvlCol) && isset($planet[$lvlCol])) ? (int)$planet[$lvlCol] : 0;
                 $this->ctx->telemetry->logBuilding($pName, $coords, $elementId, $curLvl + 1, $costResources, $reason);
+            }
+
+            return true;
+        } catch (Throwable $e) {
+            if (!$isOuterTx && $db->inTransaction()) {
+                $db->rollBack();
+            }
+            return false;
+        }
+    }
+
+    /**
+     * Dismantle 1 level of a building on a planet to free up planet fields
+     */
+    public function dismantleBuilding($planetId, $elementId, $reason = '')
+    {
+        $db = Database::get();
+        $isOuterTx = $db->inTransaction();
+        if (!$isOuterTx) {
+            $db->beginTransaction();
+        }
+        try {
+            $planet = BotLockManager::lockPlanetRow($planetId);
+            if (empty($planet) || (int)$planet['id_owner'] !== (int)$this->ctx->botId) {
+                if (!$isOuterTx) $db->rollBack();
+                return false;
+            }
+
+            $updater = new ResourceUpdate();
+            list($u, $p) = $updater->CalcResource($this->ctx->user, $planet, true, BotClock::get());
+
+            global $resource;
+            $lvlCol = $resource[$elementId] ?? '';
+            $curLvl = (!empty($lvlCol) && isset($p[$lvlCol])) ? (int)$p[$lvlCol] : 0;
+            if ($curLvl <= 0) {
+                if (!$isOuterTx) $db->rollBack();
+                return false;
+            }
+
+            $costResources = BuildFunctions::getElementPrice($u, $p, $elementId, true, $curLvl);
+            if (!BuildFunctions::isElementBuyable($u, $p, $elementId, $costResources, true, $curLvl)) {
+                if (!$isOuterTx) $db->rollBack();
+                return false;
+            }
+
+            $ok = BotGameServices::enqueueBuilding($u, $p, $elementId, true);
+            if (!$ok) {
+                if (!$isOuterTx) $db->rollBack();
+                return false;
+            }
+
+            if (!$isOuterTx) $db->commit();
+            $this->ctx->user = $u;
+
+            if (isset($this->ctx->budgetManager)) {
+                $this->ctx->budgetManager->deductFromBudget($planetId, 'mines', $costResources);
+            }
+
+            if (isset($this->ctx->telemetry)) {
+                $pName  = $planet['name'] ?? "Planeta #{$planetId}";
+                $coords = isset($planet['galaxy']) ? "[{$planet['galaxy']}:{$planet['system']}:{$planet['planet']}]" : '';
+                $this->ctx->telemetry->logBuilding($pName, $coords, $elementId, $curLvl - 1, $costResources, "Dismantle: " . $reason);
             }
 
             return true;
@@ -247,6 +313,10 @@ class BotActionGateway
 
             if (isset($this->ctx->budgetManager)) {
                 $this->ctx->budgetManager->deductFromBudget($planetId, 'research', $costResources);
+                $activeLock = $this->ctx->budgetManager->getSavingsLock();
+                if (!empty($activeLock) && (int)($activeLock['element_id'] ?? 0) === (int)$techId) {
+                    $this->ctx->budgetManager->clearSavingsLock();
+                }
             }
 
             if (isset($this->ctx->telemetry)) {

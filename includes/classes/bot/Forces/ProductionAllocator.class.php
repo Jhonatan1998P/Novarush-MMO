@@ -4,13 +4,19 @@ require_once 'includes/classes/bot/Evaluation/EconomyValuator.class.php';
 require_once 'includes/classes/bot/Forces/BotPremiumStrategist.class.php';
 
 /**
- * NovaRush Bot AI v2 - Production Allocator
+ * NovaRush Bot AI v4.0 - Grandmaster Production & Research Engine
  *
- * Allocates infrastructure investments (Mines, Power, Nanite, Labs) across
- * all colonies based on Hours of Production (HP) payback period.
+ * Implements:
+ * 1. Multi-Colony & Lunar Autonomy with independent parallel execution
+ * 2. Prerequisite Recursive Resolution (Backward-Chaining Unlock Engine)
+ * 3. Payback Period with real construction times & inter-colony catch-up multipliers
+ * 4. High-tier science intelligence, dynamic Astro/IRN/Computer scaling & personality matrices
+ * 5. Deadlock breaker for 0-field saturated planets & proactive field/warehouse management
  */
 class BotProductionAllocator
 {
+    const MAX_SAVINGS_LOCK_ETA = 14400; // 4 hours maximum reasonable savings lock horizon
+
     private $ctx;
     private $gateway;
 
@@ -21,7 +27,203 @@ class BotProductionAllocator
     }
 
     /**
-     * Run an economic investment cycle across the empire
+     * Compute Strategic Personality Multipliers (0.85x to 1.45x) maintaining minimum floor
+     *
+     * @return array ['buildings' => array, 'techs' => array]
+     */
+    public function getPersonalityMultipliers()
+    {
+        $persName = isset($this->ctx->personality->name) ? strtolower($this->ctx->personality->name) : 'balanced';
+
+        $allBuildIds = array(1, 2, 3, 4, 6, 12, 14, 15, 21, 22, 23, 24, 31, 33, 41, 42, 43, 44, 81, 82, 83, 84);
+        $allTechIds  = array(106, 108, 109, 110, 111, 113, 114, 115, 117, 118, 120, 121, 122, 123, 124, 131, 132, 133, 134, 199);
+
+        $buildMults = array_fill_keys($allBuildIds, 0.85);
+        $techMults  = array_fill_keys($allTechIds, 0.85);
+
+        switch ($persName) {
+            case 'raider':
+            case 'aggressive':
+            case 'warlord':
+            case 'conqueror':
+                // Edificios (1.35x): Astillero (21), Módulo Militar (83), Nanobots (15), Sintetizador (3), Sensor Phalanx (42), Puerta de Salto (43)
+                foreach (array(21, 83, 15, 3, 42, 43) as $b) {
+                    $buildMults[$b] = 1.35;
+                }
+                // Tecnologías (1.35x): Armas (109), Escudos (110), Blindaje (111), Motores (115, 117, 118), Computación (108), Combustible (134), Astrofísica (124), ramas desbloqueo (114, 120, 121, 122, 199)
+                foreach (array(109, 110, 111, 114, 115, 117, 118, 108, 134, 124, 120, 121, 122, 199) as $t) {
+                    $techMults[$t] = 1.35;
+                }
+                break;
+
+            case 'bunker':
+            case 'turtle':
+            case 'defensive':
+            case 'fortress':
+            case 'guardian':
+                // Edificios (1.35x): Módulo Defensivo (82), Silo (44), Módulo Recursos (81), Fusión (12), Terraformer (33), Minas (1, 2)
+                foreach (array(82, 44, 81, 12, 33, 1, 2) as $b) {
+                    $buildMults[$b] = 1.35;
+                }
+                // Tecnologías (1.35x): Escudos (110), Blindaje (111), Armas (109), Gravitón (199), Plasma (122), Iónica (121), Procesamiento (131, 132, 133)
+                foreach (array(110, 111, 109, 199, 122, 121, 131, 132, 133) as $t) {
+                    $techMults[$t] = 1.35;
+                }
+                break;
+
+            case 'miner':
+            case 'economic':
+            case 'technocrat':
+                // Edificios (1.40x): Módulo Recursos (81), Minas (1, 2, 3), Universidad (6), Lab (31), Módulo Inv (84), Nanobots (15), Almacenes (22, 23, 24)
+                foreach (array(81, 1, 2, 3, 6, 31, 84, 15, 22, 23, 24) as $b) {
+                    $buildMults[$b] = 1.40;
+                }
+                // Tecnologías (1.40x): Procesamiento (131, 132, 133), IRN (123), Astrofísica (124), Energía (113), Espionaje (106), Hiperespacio (114)
+                foreach (array(131, 132, 133, 123, 124, 113, 106, 114) as $t) {
+                    $techMults[$t] = 1.40;
+                }
+                break;
+
+            case 'balanced':
+            default:
+                // Multiplicador 1.15x uniforme en economía (81, 1-3), aceleración (15, 6), expansión (33, 41-43)
+                foreach (array(81, 1, 2, 3, 15, 6, 33, 41, 42, 43) as $b) {
+                    if (isset($buildMults[$b])) {
+                        $buildMults[$b] = 1.15;
+                    }
+                }
+                // Multiplicador 1.15x en aceleración (123), expansión (124, 108), y militar/motores/desbloqueo (109-111, 114, 115, 117, 118, 120-122)
+                foreach (array(123, 124, 108, 109, 110, 111, 114, 115, 117, 118, 120, 121, 122) as $t) {
+                    if (isset($techMults[$t])) {
+                        $techMults[$t] = 1.15;
+                    }
+                }
+                break;
+        }
+
+        return array(
+            'buildings' => $buildMults,
+            'techs'     => $techMults,
+        );
+    }
+
+    /**
+     * Backward-Chaining Prerequisite Unlock Boost Engine
+     *
+     * Inspects $requeriments for high-tier strategic buildings, technologies,
+     * combat units, and defenses. If a strategic goal is locked due to missing
+     * requirements, recurses backwards and grants a Strategic Unlock Bonus
+     * (+3500 to +9000 points) to the prerequisite element that is currently accessible.
+     *
+     * @param BotEmpireState $empire
+     * @return array [elementId => float boost]
+     */
+    public function computePrerequisiteUnlockBoosts(BotEmpireState $empire)
+    {
+        global $requeriments, $resource;
+
+        if (!is_array($requeriments) || empty($requeriments)) {
+            return array();
+        }
+
+        $strategicTargets = array(
+            // Edificios Clave
+            81, 82, 83, 84, 15, 33, 6, 44, 41, 42, 43,
+            // Tecnologías Clave
+            199, 123, 124, 122, 121, 120, 118, 117, 114,
+            // Unidades Militares y Defensas Élite (series 200 y 400)
+            206, 207, 213, 214, 215, 216, 217, 219, 225, 226,
+            406, 407, 408, 410, 412, 418
+        );
+
+        $user = $this->ctx->user;
+        $planets = $empire->getPlanets();
+        $moons = $empire->getMoons();
+        $allBodies = (is_array($planets) ? $planets : array()) + (is_array($moons) ? $moons : array());
+
+        // Cache max building levels across empire
+        $maxBuildingLevels = array();
+        for ($bId = 1; $bId <= 84; $bId++) {
+            $col = $resource[$bId] ?? null;
+            if ($col) {
+                $maxLvl = 0;
+                foreach ($allBodies as $bEntry) {
+                    $lvl = (int)($bEntry['data'][$col] ?? 0);
+                    if ($lvl > $maxLvl) {
+                        $maxLvl = $lvl;
+                    }
+                }
+                $maxBuildingLevels[$bId] = $maxLvl;
+            }
+        }
+
+        $boosts = array();
+
+        $resolveReqs = function($elemId, $targetImportance = 1.0, $depth = 0) use (&$resolveReqs, &$boosts, $requeriments, $resource, $user, $maxBuildingLevels) {
+            if ($depth > 6 || !isset($requeriments[$elemId])) {
+                return;
+            }
+
+            foreach ($requeriments[$elemId] as $reqElem => $reqLvl) {
+                $reqLvl = (int)$reqLvl;
+                $isTech = ($reqElem >= 100 && $reqElem < 200);
+                $col = $resource[$reqElem] ?? null;
+                $curLvl = 0;
+
+                if ($isTech) {
+                    $curLvl = (int)($user[$col] ?? 0);
+                } else {
+                    $curLvl = (int)($maxBuildingLevels[$reqElem] ?? 0);
+                }
+
+                if ($curLvl < $reqLvl) {
+                    $missing = $reqLvl - $curLvl;
+                    // Closeness scale: +3500 to +9000
+                    $closeness = max(0.0, 1.0 - ($missing / 10.0));
+                    $boostVal = (3500.0 + (5500.0 * $closeness)) * $targetImportance;
+
+                    // Check if $reqElem itself has unmet prerequisites
+                    $hasUnmetPrereq = false;
+                    if (isset($requeriments[$reqElem])) {
+                        foreach ($requeriments[$reqElem] as $subReq => $subLvl) {
+                            $subIsTech = ($subReq >= 100 && $subReq < 200);
+                            $subCol = $resource[$subReq] ?? null;
+                            $subCur = $subIsTech ? (int)($user[$subCol] ?? 0) : (int)($maxBuildingLevels[$subReq] ?? 0);
+                            if ($subCur < (int)$subLvl) {
+                                $hasUnmetPrereq = true;
+                                break;
+                            }
+                        }
+                    }
+
+                    if (!$hasUnmetPrereq) {
+                        // $reqElem is immediately accessible to build or research!
+                        if (!isset($boosts[$reqElem]) || $boosts[$reqElem] < $boostVal) {
+                            $boosts[$reqElem] = round(min(9000.0, $boostVal), 2);
+                        }
+                    } else {
+                        // Recurse backward to the accessible root prerequisite
+                        $resolveReqs($reqElem, $targetImportance * 0.95, $depth + 1);
+                    }
+                }
+            }
+        };
+
+        foreach ($strategicTargets as $targetId) {
+            $importance = 1.0;
+            if (in_array($targetId, array(206, 213, 215, 216, 225, 406))) {
+                $importance = 1.25;
+            } elseif (in_array($targetId, array(123, 6, 120, 121, 122, 199))) {
+                $importance = 1.20;
+            }
+            $resolveReqs($targetId, $importance, 0);
+        }
+
+        return $boosts;
+    }
+
+    /**
+     * Run an economic investment cycle across all colonies and moons
      *
      * @param BotEmpireState $empire
      * @return int Number of building constructions queued
@@ -45,33 +247,79 @@ class BotProductionAllocator
             return 0;
         }
 
+        $hourlyEmpireMSE = $empire->getHourlyProductionMSE();
+        $persMults = $this->getPersonalityMultipliers();
+        $unlockBoosts = $this->computePrerequisiteUnlockBoosts($empire);
+
+        // Compute average mine levels across empire for catch-up calculations
+        $mineAverages = array(1 => 0.0, 2 => 0.0, 3 => 0.0, 81 => 0.0);
+        $planetCount = count($planets);
+        foreach ($planets as $pEntry) {
+            foreach (array(1, 2, 3, 81) as $mCheck) {
+                $col = $resource[$mCheck] ?? null;
+                if ($col) {
+                    $mineAverages[$mCheck] += (float)($pEntry['data'][$col] ?? 0.0);
+                }
+            }
+        }
+        foreach ($mineAverages as $mK => $mV) {
+            $mineAverages[$mK] = $planetCount > 0 ? ($mV / $planetCount) : 0.0;
+        }
+
+        // Rank lab colonies by effective research speed for IRN connected network
+        $irnLvl = (int)($this->ctx->user[$resource[123]] ?? 0);
+        $maxConnectedLabs = 1 + $irnLvl;
+        $empireLabSpeeds = array();
+        foreach ($planets as $pCandId => $pCandEntry) {
+            $pCandData = $pCandEntry['data'];
+            $candLab = (int)($pCandData[$resource[31]] ?? 0);
+            if ($candLab > 0) {
+                $spd = $candLab * 10;
+                if (!empty($pCandData[$resource[6]])) {
+                    $spd += 50 + ((int)$pCandData[$resource[6]] * 5);
+                }
+                if (!empty($pCandData[$resource[84]])) {
+                    $spd += 10 + ((int)$pCandData[$resource[84]] * 2);
+                }
+                $empireLabSpeeds[$pCandId] = $spd;
+            }
+        }
+        arsort($empireLabSpeeds);
+        $topLabPlanetIds = array_slice(array_keys($empireLabSpeeds), 0, $maxConnectedLabs, true);
+        $topLabPlanetMap = array_fill_keys($topLabPlanetIds, true);
+
         foreach ($planets as $pId => $planetEntry) {
             $pData = $planetEntry['data'];
-            
-            // Check if queue is already full
+            $isTopLabPlanet = isset($topLabPlanetMap[$pId]) || empty($empireLabSpeeds);
+
+            // Check if building queue is full
             if (!empty($planetEntry['building_queue']) && count($planetEntry['building_queue']) >= 2) {
                 continue;
             }
 
             $energy = (float)$pData['energy'];
             $energyUsed = abs((float)$pData['energy_used']);
-            $desiredEnergyBuffer = max(300.0, $energyUsed * 0.20);
+            $energyNet = $energy - $energyUsed;
+            $desiredEnergyBuffer = max(2000.0, $energyUsed * 0.12);
             $freeFields = CalculateMaxPlanetFields($pData) - ((int)$pData['field_current'] + count($planetEntry['building_queue']));
 
             // --- 1. Proactive Energy Scaling & Graviton Satellites Push ---
-            // If energy is below safety buffer, or if pushing for Graviton (199) to unlock NovaRush modules
             if (BuildFunctions::isTechnologieAccessible($this->ctx->user, $pData, 212, array())) {
                 $hangarQueue = !empty($planetEntry['hangar_queue']) ? $planetEntry['hangar_queue'] : array();
                 if (count($hangarQueue) < 2) {
                     $energyPerSat = max(1.0, (($pData['temp_max'] + 160) / 6.0));
                     $satsToQueue = 0;
 
-                    if ($energy < $desiredEnergyBuffer) {
-                        // Restore positive energy buffer so mines produce at 100% capacity
-                        $energyDeficit = $desiredEnergyBuffer - $energy;
-                        $satsToQueue = min(150, (int)ceil($energyDeficit / $energyPerSat));
+                    if ($energyNet < $desiredEnergyBuffer) {
+                        $energyDeficit = $desiredEnergyBuffer - $energyNet;
+                        $config = Config::get();
+                        $energySpeed = (float)($config->energySpeed ?? 1.0);
+                        $userFactor = isset($this->ctx->user['factor']) ? $this->ctx->user['factor'] : array();
+                        $fEnergy = isset($userFactor['Energy']) ? (float)$userFactor['Energy'] : 0.0;
+                        $realEnergyPerSat = max(1.0, floor(($pData['temp_max'] + 160) / 6.0) * $energySpeed * (1.0 + $fEnergy));
+
+                        $satsToQueue = (int)ceil($energyDeficit / $realEnergyPerSat);
                     } elseif (!empty($pData[$resource[31]]) && (int)$pData[$resource[31]] >= 10 && empty($this->ctx->user[$resource[199]])) {
-                        // Graviton Push: Planet has high lab, push toward 300,000 energy to unlock Graviton & Modules (81-84)
                         $neededForGraviton = max(0.0, 300000.0 - $energy);
                         if ($neededForGraviton > 0) {
                             $satsToQueue = min(400, (int)ceil($neededForGraviton / $energyPerSat));
@@ -82,26 +330,63 @@ class BotProductionAllocator
                         $maxCanSats = BuildFunctions::getMaxConstructibleElements($this->ctx->user, $pData, 212);
                         $batchSats = min($satsToQueue, $maxCanSats);
                         if ($batchSats > 0) {
-                            $this->gateway->constructUnits($pId, 212, $batchSats);
+                            $this->gateway->constructUnits($pId, 212, $batchSats, 'Cubrir déficit energético');
                         }
                     }
                 }
             }
 
-            // Comprehensive NovaRush Buildings:
-            // 1: Metal Mine, 2: Crystal Mine, 3: Deuterium Synthesizer
-            // 81: Resource Module (huge 300M/200C/100D production, no energy cost)
-            // 82: Defensive Module, 83: Military Module, 84: Research Module
-            // 4: Solar Plant, 12: Fusion Plant
-            // 14: Robotics Factory, 15: Nanite Factory, 21: Shipyard, 31: Research Lab
-            // 33: Terraformer (expands planet fields)
-            // 44: Missile Silo (stores missiles)
-            // 22: Metal Store, 23: Crystal Store, 24: Deuterium Store
-            $buildIds = array(1, 2, 3, 81, 82, 83, 84, 4, 12, 14, 15, 21, 31, 33, 44, 22, 23, 24);
+            // Comprehensive NovaRush Buildings (including 6 University):
+            $buildIds = array(1, 2, 3, 81, 82, 83, 84, 4, 12, 14, 15, 21, 31, 6, 33, 44, 22, 23, 24);
 
-            // If planet fields are completely exhausted (<= 0), only Terraformer (33) can be queued
+            // Pre-calculate Terraformer cost and storage constraints for proactive urbanism
+            $curTerra = (int)($pData[$resource[33]] ?? 0);
+            $nextTerraCost = BuildFunctions::getElementPrice($this->ctx->user, $pData, 33, false, $curTerra + 1);
+            $nextTerra2Cost = BuildFunctions::getElementPrice($this->ctx->user, $pData, 33, false, $curTerra + 2);
+            $costC = (float)($nextTerraCost[902] ?? $nextTerraCost['crystal'] ?? 0.0);
+            $costD = (float)($nextTerraCost[903] ?? $nextTerraCost['deuterium'] ?? 0.0);
+            $costC2 = (float)($nextTerra2Cost[902] ?? $nextTerra2Cost['crystal'] ?? 0.0);
+            $costD2 = (float)($nextTerra2Cost[903] ?? $nextTerra2Cost['deuterium'] ?? 0.0);
+            $maxC = (float)($pData['crystal_max'] ?? 0.0);
+            $maxD = (float)($pData['deuterium_max'] ?? 0.0);
+            
+            // Proactive 2-level forward check when $freeFields <= 6
+            $terraStorageConstrained = ($freeFields <= 6)
+                ? ($costC > 0.85 * $maxC || $costD > 0.85 * $maxD || $costC2 > 0.85 * $maxC || $costD2 > 0.85 * $maxD)
+                : ($costC > 0.85 * $maxC || $costD > 0.85 * $maxD);
+
+            // --- 2. Resolution of 0-Field Circular Deadlocks ($freeFields <= 0) ---
             if ($freeFields <= 0) {
-                $buildIds = array(33);
+                if ($terraStorageConstrained) {
+                    $buildIds = array(33, 23, 24);
+                } else {
+                    $buildIds = array(33);
+                }
+
+                $isAccessible = BuildFunctions::isTechnologieAccessible($this->ctx->user, $pData, 33, array());
+                $canHoldCost = ($maxC >= $costC && $maxD >= $costD);
+
+                if (!$isAccessible || !$canHoldCost) {
+                    // Deadlock: Terraformer blocked by tech or storage, but fields = 0.
+                    // If colony has massive energy surplus, dismantle 1 level of Solar Plant (#4) to free 1 field!
+                    $solarLvl = (int)($pData[$resource[4]] ?? 0);
+                    if ($solarLvl > 0 && ($energy > 500000.0 || ($energy - $energyUsed) > 500000.0)) {
+                        $dismantled = $this->gateway->dismantleBuilding($pId, 4, 'Resolución de bloqueo circular: liberar 1 campo para almacenes/terraformer');
+                        if ($dismantled) {
+                            $this->ctx->decisionLog->record(
+                                'mine_dismantle',
+                                "Dismantled 1 level of Solar Plant #4 on planet #{$pId} to break 0-field deadlock",
+                                array('planet_id' => $pId, 'energy' => $energy),
+                                "dismantle_4_planet_{$pId}",
+                                25000.0
+                            );
+                            $freeFields = 1;
+                        }
+                    }
+                    if ($freeFields <= 0 && !$terraStorageConstrained) {
+                        continue;
+                    }
+                }
             }
 
             foreach ($buildIds as $mId) {
@@ -109,18 +394,45 @@ class BotProductionAllocator
                     continue;
                 }
 
+                // Erradicar déficit de energía: Si $energyNet < 0, prohíbe evaluar o encolar consumidores (#1, #2, #3)
+                if ($energyNet < 0.0 && in_array($mId, array(1, 2, 3))) {
+                    continue;
+                }
+
+                // Desbloquear Almacenes (#23 y #24) antes de agotar campos en P3:
+                // Cuando $freeFields <= 6, si el próximo Terraformer supera el 85% de capacidad de #23 o #24,
+                // bloquea minas y módulos (#1, #2, #3, #81, #82, #83, #84) en esos últimos 6 campos
+                if ($freeFields <= 6 && $terraStorageConstrained && in_array($mId, array(1, 2, 3, 81, 82, 83, 84))) {
+                    continue;
+                }
+
+                // --- 3. Mandatory Reservation of Last Free Field ($freeFields == 1) ---
+                if ($freeFields == 1 && in_array($mId, array(1, 2, 3))) {
+                    $curTerra = (int)($pData[$resource[33]] ?? 0);
+                    $terraCost = BuildFunctions::getElementPrice($this->ctx->user, $pData, 33, false, $curTerra + 1);
+                    $costC = (float)($terraCost[902] ?? $terraCost['crystal'] ?? 0.0);
+                    $costD = (float)($terraCost[903] ?? $terraCost['deuterium'] ?? 0.0);
+                    $maxC = (float)($pData['crystal_max'] ?? 0.0);
+                    $maxD = (float)($pData['deuterium_max'] ?? 0.0);
+
+                    $storageOk = ($maxC >= $costC && $maxD >= $costD);
+                    $nanoLvl = (int)($pData[$resource[15]] ?? 0);
+                    $energyTechLvl = (int)($this->ctx->user[$resource[113]] ?? 0);
+                    $prereqOk = ($nanoLvl >= 1 && $energyTechLvl >= 12);
+
+                    if (!$storageOk || !$prereqOk) {
+                        // Prohibit spending the last free field on common mines! Reserve for stores/nano/terraformer!
+                        continue;
+                    }
+                }
+
                 $cost = BuildFunctions::getElementPrice($this->ctx->user, $pData, $mId, false);
 
-                // Ensure physical resources allocated to fleet and defense are strictly protected from being spent by mines
-                $fleetCreds = isset($this->ctx->budgetManager) ? $this->ctx->budgetManager->getPlanetFleetCredits($pId) : array();
-                $defCreds   = isset($this->ctx->budgetManager) ? $this->ctx->budgetManager->getPlanetDefenseCredits($pId) : array();
-                $reservedM  = (float)($fleetCreds['metal'] ?? 0.0) + (float)($defCreds['metal'] ?? 0.0);
-                $reservedC  = (float)($fleetCreds['crystal'] ?? 0.0) + (float)($defCreds['crystal'] ?? 0.0);
-                $reservedD  = (float)($fleetCreds['deuterium'] ?? 0.0) + (float)($defCreds['deuterium'] ?? 0.0);
-
-                $availPhysM = max(0.0, (float)$pData['metal'] - $reservedM);
-                $availPhysC = max(0.0, (float)$pData['crystal'] - $reservedC);
-                $availPhysD = max(0.0, (float)$pData['deuterium'] - $reservedD);
+                // Protect tactical fleet deuterium reserve (metal and crystal available for internal bucket swap)
+                $tacticalDeutReserve = 25000.0;
+                $availPhysM = (float)$pData['metal'];
+                $availPhysC = (float)$pData['crystal'];
+                $availPhysD = max(0.0, (float)$pData['deuterium'] - $tacticalDeutReserve);
 
                 $costM = (float)($cost[901] ?? $cost['metal'] ?? 0.0);
                 $costC = (float)($cost[902] ?? $cost['crystal'] ?? 0.0);
@@ -128,51 +440,84 @@ class BotProductionAllocator
 
                 $canAffordPhysical = ($availPhysM >= $costM && $availPhysC >= $costC && $availPhysD >= $costD);
                 $canAffordBudget = (!isset($this->ctx->budgetManager)) || $this->ctx->budgetManager->canAffordBudget($pId, 'mines', $cost);
-                $canAfford = $canAffordPhysical && $canAffordBudget;
 
-                $costMSE = BotEconomyValuator::arrayToMSE($cost);
-                $costHP  = BotEconomyValuator::toHP($costMSE, $empire->getHourlyProductionMSE());
-                
-                $curLevel = isset($pData[$resource[$mId]]) ? (int)$pData[$resource[$mId]] : 0;
-                $nextLevel = $curLevel + 1;
-
-                // Baseline priority score scaled by Difficulty & Personality Mine budget
-                $baseScore = ($macroMines * 40.0) / max(0.1, $costHP);
-
-                // --- 1. Terraformer (33) field expansion logic (Phase 5: <= 1: 15000, <= 3: 8000, > 5: 500) ---
-                if ($mId == 33) {
-                    if ($freeFields <= 1) {
-                        $baseScore = 15000.0; // Critical: planet about to deadlock completely
-                    } elseif ($freeFields <= 3) {
-                        $baseScore = 8000.0;
-                    } elseif ($freeFields > 5) {
-                        $baseScore = 500.0; // Plenty of fields left
-                    } else {
-                        $baseScore = 2000.0;
+                // Liquidity reconciliation via internal bucket swap
+                if ($canAffordPhysical && !$canAffordBudget && isset($this->ctx->budgetManager)) {
+                    $canAffordBudget = $this->ctx->budgetManager->tryInternalBucketSwap($pId, 'mines', $cost);
+                    // Pro-Player Liquidity Guarantee: If physical stock is present on planet surface,
+                    // do not choke high-priority mine/module expansion due to bucket delay:
+                    if (!$canAffordBudget && $canAffordPhysical) {
+                        $canAffordBudget = true;
                     }
                 }
 
-                // If fields are running low (<= 4) and Terraformer is blocked, rush its prerequisites: Nanite (15) and Robotics (14)
+                $canAfford = $canAffordPhysical && $canAffordBudget;
+                $costMSE = BotEconomyValuator::arrayToMSE($cost);
+                $costHP  = BotEconomyValuator::toHP($costMSE, $hourlyEmpireMSE);
+
+                $curLevel = isset($pData[$resource[$mId]]) ? (int)$pData[$resource[$mId]] : 0;
+                $nextLevel = $curLevel + 1;
+
+                $baseScore = ($macroMines * 40.0) / max(0.1, $costHP);
+
+                // --- A. Terraformer (33) Progressive Scaling & Zero-Waste ---
+                if ($mId == 33) {
+                    if ($freeFields > 10) {
+                        continue; // Strictly prohibited to build Terraformer when surplus fields > 10
+                    }
+                    if ($freeFields <= 1) {
+                        $baseScore = 25000.0; // Critical: colony about to deadlock
+                    } elseif ($freeFields <= 3) {
+                        $baseScore = 12000.0; // High priority
+                    } elseif ($freeFields <= 5) {
+                        $baseScore = 6000.0;  // Pro-player expansion
+                    } else { // $freeFields <= 10
+                        $baseScore = 2500.0;
+                    }
+                }
+
+                // If fields running low (<= 4) and Terraformer is blocked, rush its prerequisites
                 if ($freeFields <= 4 && !BuildFunctions::isTechnologieAccessible($this->ctx->user, $pData, 33, array())) {
                     if ($mId == 14 && $curLevel < 10) {
                         $baseScore += 4000.0;
                     } elseif ($mId == 15 && $curLevel < 1) {
-                        $baseScore += 6000.0;
+                        $baseScore += 6500.0;
                     }
                 }
 
-                // --- 2. Energy Scaling (Phase 5: 5000 + |Déficit|*5 if < 0; 1500 if < buffer; 100 if surplus) ---
+                // --- B. Intelligent Energy (4, 12) with Zero Waste ---
                 if ($mId == 4 || $mId == 12) {
-                    if ($energy < 0) {
-                        $baseScore = 5000.0 + (abs($energy) * 5.0);
-                    } elseif ($energy < $desiredEnergyBuffer) {
-                        $baseScore = 1500.0 + (($desiredEnergyBuffer - $energy) * 5.0);
+                    $isGravitonPush = (empty($this->ctx->user[$resource[199]]) && (int)($pData[$resource[31]] ?? 0) >= 10 && $energy < 300000.0);
+
+                    // Strictly zero waste: if surplus energy covers buffer and no graviton push, skip!
+                    if ($energyNet >= $desiredEnergyBuffer && !$isGravitonPush) {
+                        continue;
+                    }
+
+                    // Special condition for Fusion Plant (#12):
+                    if ($mId == 12) {
+                        $solarLvl = (int)($pData[$resource[4]] ?? 0);
+                        $fusionLvl = (int)($pData[$resource[12]] ?? 0);
+                        $energyTechLvl = (int)($this->ctx->user[$resource[113]] ?? 0);
+
+                        $isDeficitOrLow = ($energyNet < 0.0 || $energyNet < ($desiredEnergyBuffer * 0.3));
+                        $solarRatio = (20.0 * ($solarLvl + 1) * pow(1.1, $solarLvl + 1)) / max(1.0, $costMSE);
+                        $fusionDelta = 30.0 * ($fusionLvl + 1) * pow(1.05 + $energyTechLvl * 0.01, $fusionLvl + 1);
+                        $fusionRatio = $fusionDelta / max(1.0, $costMSE);
+
+                        if (!$isDeficitOrLow || ($solarLvl < 25 && $fusionRatio <= $solarRatio && $energyNet >= 0.0)) {
+                            continue; // Skip Fusion Plant to preserve Deuterium stock!
+                        }
+                    }
+
+                    if ($energyNet < 0.0) {
+                        $baseScore = 50000.0; // Score absoluto cuando energyNet < 0
                     } else {
-                        $baseScore = 100.0; // Energy surplus
+                        $baseScore = 1500.0 + (($desiredEnergyBuffer - $energyNet) * 5.0);
                     }
                 }
 
-                // --- 3. Production ROI calculation for 1, 2, 3, and 81 (Resource Module) ---
+                // --- C. Mines (1, 2, 3) & Resource Module (81) Marginal Payback with Time & Catch-up ---
                 if (in_array($mId, array(1, 2, 3, 81))) {
                     $resMult = (float)$config->resource_multiplier;
                     $temp = (float)$pData['temp_max'];
@@ -186,20 +531,20 @@ class BotProductionAllocator
                     $deltaC = 0.0;
                     $deltaD = 0.0;
 
-                    if ($mId == 1) { // Metal Mine
+                    if ($mId == 1) {
                         $baseCur  = 30.0 * $curLevel * pow(1.1, $curLevel);
                         $baseNext = 30.0 * $nextLevel * pow(1.1, $nextLevel);
                         $deltaM   = ($baseNext - $baseCur) * (1.0 + $fRes + $fMet) * $resMult;
-                    } elseif ($mId == 2) { // Crystal Mine
+                    } elseif ($mId == 2) {
                         $baseCur  = 20.0 * $curLevel * pow(1.1, $curLevel);
                         $baseNext = 20.0 * $nextLevel * pow(1.1, $nextLevel);
                         $deltaC   = ($baseNext - $baseCur) * (1.0 + $fRes + $fCry) * $resMult;
-                    } elseif ($mId == 3) { // Deuterium Synthesizer
+                    } elseif ($mId == 3) {
                         $tempFactor = (-0.002 * $temp + 1.28);
                         $baseCur    = 10.0 * $curLevel * pow(1.1, $curLevel) * $tempFactor;
                         $baseNext   = 10.0 * $nextLevel * pow(1.1, $nextLevel) * $tempFactor;
                         $deltaD     = ($baseNext - $baseCur) * (1.0 + $fRes + $fDeu) * $resMult;
-                    } elseif ($mId == 81) { // NovaRush Resource Module: 300 M / 200 C / 100 D base, zero energy!
+                    } elseif ($mId == 81) {
                         $tempFactor = (-0.002 * $temp + 1.28);
                         $deltaM     = (300.0 * $nextLevel * pow(1.1, $nextLevel) - 300.0 * $curLevel * pow(1.1, $curLevel)) * (1.0 + $fRes + $fMet) * $resMult;
                         $deltaC     = (200.0 * $nextLevel * pow(1.1, $nextLevel) - 200.0 * $curLevel * pow(1.1, $curLevel)) * (1.0 + $fRes + $fCry) * $resMult;
@@ -207,56 +552,98 @@ class BotProductionAllocator
                     }
 
                     $deltaMSE = BotEconomyValuator::toMSE($deltaM, $deltaC, $deltaD);
-                    $roi = ($deltaMSE / max(1.0, $costMSE)) * 10000.0 * ($macroMines / 0.35);
-                    $baseScore += $roi;
+                    $buildTimeSec = BuildFunctions::getBuildingTime($this->ctx->user, $pData, $mId, $cost);
+                    $timeFactor = 1.0 / (1.0 + log10(max(1.0, $buildTimeSec / 60.0)));
+                    $paybackScore = ($deltaMSE / max(1.0, $costMSE)) * 15000.0 * $timeFactor;
 
-                    // Extra boost for Resource Module (81) due to huge production and zero energy footprint
+                    // Inter-Colony Catch-Up Multiplier (1.5x to 2.5x)
+                    if (isset($mineAverages[$mId]) && $curLevel <= ($mineAverages[$mId] - 3)) {
+                        $lag = $mineAverages[$mId] - $curLevel;
+                        $catchUpMult = min(2.5, 1.5 + (($lag - 3) * 0.25));
+                        $paybackScore *= $catchUpMult;
+                    }
+
+                    $baseScore += $paybackScore;
                     if ($mId == 81) {
-                        $baseScore += 1200.0 * ($macroMines / 0.35);
+                        // Resource Module (#81): produces 300M + 200C + 100D, 0 energy consumption!
+                        $baseScore += 3500.0 * ($macroMines / 0.35);
                     }
                 }
 
-                // --- 4. NovaRush Special Modules (82, 83, 84) ---
-                if ($mId == 82) { // Defensive Module
-                    $baseScore += 600.0 * ($macro['defense'] / 0.15);
-                } elseif ($mId == 83) { // Military Module
-                    $baseScore += 700.0 * ($macro['fleet'] / 0.30);
-                } elseif ($mId == 84) { // Research Module
-                    $baseScore += 800.0 * ($macro['research'] / 0.20);
+                // --- D. Special Modules (82, 83) & Shipyard (21) proportional to hangar load & mines ---
+                if ($mId == 21 || $mId == 82 || $mId == 83) {
+                    $hangarCount = !empty($planetEntry['hangar_queue']) ? count($planetEntry['hangar_queue']) : 0;
+                    $mineSum = (int)($pData[$resource[1]] ?? 0) + (int)($pData[$resource[2]] ?? 0) + (int)($pData[$resource[3]] ?? 0);
+                    $baseScore += min(4500.0, ($hangarCount * 500.0) + ($mineSum * 15.0));
+                    if ($mId == 82) {
+                        $baseScore += 800.0 * ($macro['defense'] / 0.15);
+                    } elseif ($mId == 83) {
+                        $baseScore += 900.0 * ($macro['fleet'] / 0.30);
+                    }
                 }
 
-                // --- 5. Missile Silo (44) ---
+                // --- E. Missile Silo (44) ---
                 if ($mId == 44) {
                     if ($curLevel < 4) {
-                        $baseScore += 1200.0; // Reach level 4 to unlock interplanetary missiles
+                        $baseScore += 1500.0;
                     } else {
-                        $baseScore += 300.0;
+                        $baseScore += 350.0;
                     }
                 }
 
-                // --- 6. Core Infrastructure (14 Robotics, 15 Nanite, 21 Shipyard, 31 Lab) ---
-                if ($mId == 14 && $curLevel < 10) {
-                    $baseScore += (10 - $curLevel) * 50.0;
-                } elseif ($mId == 15 && $curLevel < 5) {
-                    $baseScore += 1500.0; // Nanite factory is massive speed multiplier
-                } elseif ($mId == 21 && $curLevel < 12) {
-                    $baseScore += (12 - $curLevel) * 50.0;
-                } elseif ($mId == 31 && $curLevel < 12) {
-                    $baseScore += (12 - $curLevel) * 50.0;
+                // --- F. Accelerators without rigid ceilings (14, 15, 31, 6, 84) ---
+                // Nanite (15) and Robotics (14)
+                if ($mId == 14 || $mId == 15) {
+                    $hangarQueueCount = !empty($planetEntry['hangar_queue']) ? count($planetEntry['hangar_queue']) : 0;
+                    $hangarLoadSec = $hangarQueueCount * 900;
+                    if ($costHP <= 4.0 || $hangarLoadSec > 1800) {
+                        $boost = ($mId == 15) ? 4500.0 : 2500.0;
+                        $boost += min(3500.0, max(0.0, (4.0 - $costHP) * 875.0));
+                        $baseScore += $boost;
+                    }
                 }
 
-                // --- 7. Storage Capacity Check (22, 23, 24) ---
-                if ($mId == 22 && isset($pData['metal_max']) && $pData['metal'] > (0.8 * $pData['metal_max'])) {
-                    $baseScore += 1500.0;
-                } elseif ($mId == 23 && isset($pData['crystal_max']) && $pData['crystal'] > (0.8 * $pData['crystal_max'])) {
-                    $baseScore += 1500.0;
-                } elseif ($mId == 24 && isset($pData['deuterium_max']) && $pData['deuterium'] > (0.8 * $pData['deuterium_max'])) {
-                    $baseScore += 1500.0;
+                // Lab (31), Research Module (84), and University (6) on top lab planets (IRN connected)
+                if ($mId == 31 || $mId == 6 || $mId == 84) {
+                    if ($isTopLabPlanet && $costHP <= 8.0) {
+                        if ($mId == 6) {
+                            $baseScore += 8500.0; // University gives -8% research time, +50 TechSpeed!
+                        } elseif ($mId == 84) {
+                            $baseScore += 4500.0;
+                        } else {
+                            $baseScore += 3500.0;
+                        }
+                    }
                 }
 
-                // Phase 5 Archetype multiplier for mines and infrastructure
-                $archMineMult = $this->ctx->personality->getCategoryMultiplier('mines');
-                $finalScore = $baseScore * $archMineMult;
+                // --- G. Storage Capacity Check (22, 23, 24) ---
+                if ($freeFields <= 6 && $terraStorageConstrained && ($mId == 23 || $mId == 24)) {
+                    // Prioridad crítica (32000.0) a #23 y #24 antes de agotar campos en Terraformer
+                    if ($mId == 23 && ($costC > 0.85 * $maxC || $costC2 > 0.85 * $maxC)) {
+                        $baseScore = 32000.0;
+                    } elseif ($mId == 24 && ($costD > 0.85 * $maxD || $costD2 > 0.85 * $maxD)) {
+                        $baseScore = 32000.0;
+                    } else {
+                        $baseScore = 28000.0;
+                    }
+                } elseif ($freeFields > 1) {
+                    if ($mId == 22 && isset($pData['metal_max']) && $pData['metal'] > (0.75 * $pData['metal_max'])) {
+                        $baseScore += 2500.0;
+                    } elseif ($mId == 23 && isset($pData['crystal_max']) && $pData['crystal'] > (0.75 * $pData['crystal_max'])) {
+                        $baseScore += 2500.0;
+                    } elseif ($mId == 24 && isset($pData['deuterium_max']) && $pData['deuterium'] > (0.75 * $pData['deuterium_max'])) {
+                        $baseScore += 2500.0;
+                    }
+                }
+
+                // Apply Backward-Chaining Prerequisite Unlock Boost
+                if (isset($unlockBoosts[$mId])) {
+                    $baseScore += $unlockBoosts[$mId];
+                }
+
+                // Apply Personality Multiplier
+                $pMult = $persMults['buildings'][$mId] ?? 1.0;
+                $finalScore = $baseScore * $pMult;
 
                 $needsTrader = false;
                 $tradeInfo = null;
@@ -276,6 +663,7 @@ class BotProductionAllocator
                         'cost'         => $cost,
                         'needs_trader' => $needsTrader,
                         'trade_info'   => $tradeInfo,
+                        'is_moon'      => false,
                     );
                 } else {
                     $unaffordableGoals[] = array(
@@ -284,75 +672,288 @@ class BotProductionAllocator
                         'score'     => round($finalScore, 2),
                         'cost'      => $cost,
                         'data'      => $pData,
+                        'is_moon'   => false,
                     );
                 }
             }
         }
 
+        // --- 4. Lunar Urbanism Subsystem ---
+        $this->allocateMoonBuildings($empire, $candidates, $unaffordableGoals);
+
+        // --- 5. Parallel Multi-Colony & Lunar Construction Execution ---
         if (!empty($candidates)) {
-            // Sort candidates by score descending
             usort($candidates, function($a, $b) {
                 return $b['score'] <=> $a['score'];
             });
 
-            $queuedPlanets = array();
+            $queuedBodies = array();
 
-            // Enqueue highest viable candidate PER PLANET (Multi-Colony Parallel Construction)
             foreach ($candidates as $cand) {
-                $pId = (int)$cand['planet_id'];
-                if (isset($queuedPlanets[$pId])) {
-                    continue; // This colony already queued its top building in this cycle
+                $bId = (int)$cand['planet_id'];
+                if (isset($queuedBodies[$bId])) {
+                    continue; // Colony or moon already queued its top building in this cycle
                 }
 
                 if (!empty($cand['needs_trader'])) {
-                    $tradeOk = BotPremiumStrategist::tryTraderForCategory($this->ctx, $pId, 'mines', $cand['cost']);
+                    $tradeOk = BotPremiumStrategist::tryTraderForCategory($this->ctx, $bId, 'mines', $cand['cost']);
                     if (!$tradeOk) {
                         continue;
                     }
                 }
 
-                $buildReason = "Retorno de inversión industrial (Score: {$cand['score']}, Payback: {$cand['cost_hp']}h HP)";
-                $ok = $this->gateway->constructBuilding($pId, $cand['element'], $buildReason);
+                $bodyLabel = !empty($cand['is_moon']) ? "luna #{$bId}" : "planeta #{$bId}";
+                $buildReason = "Inversión industrial profesional en {$bodyLabel} (Score: {$cand['score']})";
+                $ok = $this->gateway->constructBuilding($bId, $cand['element'], $buildReason);
                 if ($ok) {
                     $queued++;
-                    $queuedPlanets[$pId] = true;
+                    $queuedBodies[$bId] = true;
                     $this->ctx->decisionLog->record(
                         'mine_upgrade',
-                        "Upgraded {$resource[$cand['element']]} on planet #{$pId} (Multi-Colony Parallel Execution)",
+                        "Upgraded {$resource[$cand['element']]} on {$bodyLabel} (Grandmaster Multi-Colony Parallel Execution)",
                         array_slice($candidates, 0, 5),
-                        "build_{$cand['element']}_planet_{$pId}",
+                        "build_{$cand['element']}_body_{$bId}",
                         $cand['score']
                     );
                 }
             }
         }
 
-        // Phase 3: If no construction was queued and budget manager has no active savings lock, engage savings lock for top priority goal
+        // --- 6. Engaging Savings Lock (Only within reasonable horizon MAX_SAVINGS_LOCK_ETA) ---
         if ($queued == 0 && isset($this->ctx->budgetManager) && empty($this->ctx->budgetManager->getSavingsLock()) && !empty($unaffordableGoals)) {
             usort($unaffordableGoals, function($a, $b) {
                 return $b['score'] <=> $a['score'];
             });
-            $topGoal = reset($unaffordableGoals);
-            if ($topGoal['score'] > 0.0) {
-                $this->ctx->budgetManager->setSavingsLock(
+
+            foreach ($unaffordableGoals as $topGoal) {
+                if ($topGoal['score'] <= 0.0) continue;
+
+                $stockMap = array(
+                    901 => (float)($topGoal['data']['metal'] ?? 0.0),
+                    902 => (float)($topGoal['data']['crystal'] ?? 0.0),
+                    903 => (float)($topGoal['data']['deuterium'] ?? 0.0)
+                );
+                $prodMap = array(
+                    901 => (float)($topGoal['data']['metal_perhour'] ?? 0.0),
+                    902 => (float)($topGoal['data']['crystal_perhour'] ?? 0.0),
+                    903 => (float)($topGoal['data']['deuterium_perhour'] ?? 0.0)
+                );
+                $eta = $this->ctx->budgetManager->calculateSafeEta($topGoal['cost'], $stockMap, $prodMap);
+
+                // If ETA exceeds MAX_SAVINGS_LOCK_ETA (14400s), check if other colonies have free fields
+                if ($eta > self::MAX_SAVINGS_LOCK_ETA) {
+                    $hasOtherFreeFields = false;
+                    foreach ($planets as $pCheckId => $pCheck) {
+                        if ((int)$pCheckId === (int)$topGoal['planet_id']) continue;
+                        $f = CalculateMaxPlanetFields($pCheck['data']) - ((int)$pCheck['data']['field_current'] + count($pCheck['building_queue']));
+                        if ($f > 0) {
+                            $hasOtherFreeFields = true;
+                            break;
+                        }
+                    }
+                    if ($hasOtherFreeFields) {
+                        continue; // Do not freeze the empire for an unreachable goal!
+                    }
+                }
+
+                $locked = $this->ctx->budgetManager->setSavingsLock(
                     $topGoal['planet_id'],
                     'building',
                     $topGoal['element'],
                     $topGoal['cost'],
                     $topGoal['data'],
-                    'mines'
+                    'mines',
+                    $empire
                 );
-                $this->ctx->decisionLog->record(
-                    'savings_lock_engaged',
-                    "Engaged savings lock for {$resource[$topGoal['element']]} on planet #{$topGoal['planet_id']}",
-                    array('element' => $topGoal['element'], 'cost' => $topGoal['cost']),
-                    "save_{$topGoal['element']}",
-                    $topGoal['score']
-                );
+
+                if ($locked) {
+                    $this->ctx->decisionLog->record(
+                        'savings_lock_engaged',
+                        "Engaged savings lock for {$resource[$topGoal['element']]} on body #{$topGoal['planet_id']} (ETA: {$eta}s)",
+                        array('element' => $topGoal['element'], 'cost' => $topGoal['cost'], 'eta' => $eta),
+                        "save_{$topGoal['element']}",
+                        $topGoal['score']
+                    );
+                    break;
+                }
             }
         }
 
         return $queued;
+    }
+
+    /**
+     * Lunar Urbanism Subsystem: evaluate lunar buildings on all moons
+     *
+     * @param BotEmpireState $empire
+     * @param array &$candidates
+     * @param array &$unaffordableGoals
+     */
+    public function allocateMoonBuildings(BotEmpireState $empire, array &$candidates, array &$unaffordableGoals)
+    {
+        global $resource, $pricelist;
+
+        $moons = $empire->getMoons();
+        if (!is_array($moons) || empty($moons)) {
+            return;
+        }
+
+        $hourlyEmpireMSE = $empire->getHourlyProductionMSE();
+        $persMults = $this->getPersonalityMultipliers();
+        $unlockBoosts = $this->computePrerequisiteUnlockBoosts($empire);
+
+        foreach ($moons as $mId => $moonEntry) {
+            $mData = $moonEntry['data'];
+            if (!empty($moonEntry['building_queue']) && count($moonEntry['building_queue']) >= 2) {
+                continue;
+            }
+
+            $freeMoonFields = CalculateMaxPlanetFields($mData) - ((int)$mData['field_current'] + count($moonEntry['building_queue']));
+
+            // Evaluated lunar buildings: 41 Base Lunar, 14 Robotics, 15 Nanobots, 21 Shipyard, 43 Jump Gate, 42 Phalanx
+            $moonBuildIds = array(41, 14, 15, 21, 43, 42);
+
+            $curJumpGate = (int)($mData[$resource[43]] ?? 0);
+            $curRobots   = (int)($mData[$resource[14]] ?? 0);
+            $curNano     = (int)($mData[$resource[15]] ?? 0);
+            $curHangar   = (int)($mData[$resource[21]] ?? 0);
+            $curPhalanx  = (int)($mData[$resource[42]] ?? 0);
+
+            // Regla de Oro de Campos Lunares (#41 Base Lunar y #43 Salto Cuántico):
+            // Si $freeMoonFields <= 1, permite Base Lunar (#41) y Salto Cuántico (#43) para Nivel 1
+            if ($freeMoonFields <= 1) {
+                $moonBuildIds = array(41, 43);
+            }
+
+            foreach ($moonBuildIds as $elemId) {
+                // 1. Mientras sprungtor (#43) == 0 en la luna:
+                // Tope temporal a Phalanx (#42) en Nivel 6, Hangar (#21) en Nivel 4 y Robots (#14) en Nivel 8
+                if ($curJumpGate == 0) {
+                    if ($elemId == 42 && $curPhalanx >= 6) {
+                        continue;
+                    }
+                    if ($elemId == 21 && $curHangar >= 4) {
+                        continue;
+                    }
+                    if ($elemId == 14 && $curRobots >= 8) {
+                        continue;
+                    }
+                    // Tope temporal a Base Lunar (#41) en Nivel 8 si ya hay campos libres (>= 2)
+                    // para preservar los cientos de millones de cristal para Salto Cuántico (#43)
+                    if ($elemId == 41 && (int)($mData[$resource[41]] ?? 0) >= 8 && $freeMoonFields >= 2) {
+                        continue;
+                    }
+                }
+
+                // 2. Prioriza robot_factory (#14) hasta Nivel 5 y nano_factory (#15) a Nivel 1-2
+                // antes de subir el Astillero (#21) por encima de Nivel 4
+                if ($elemId == 21 && $curHangar >= 4 && ($curRobots < 5 || $curNano < 1)) {
+                    continue;
+                }
+
+                if (!BuildFunctions::isTechnologieAccessible($this->ctx->user, $mData, $elemId, array())) {
+                    continue;
+                }
+
+                $cost = BuildFunctions::getElementPrice($this->ctx->user, $mData, $elemId, false);
+                $costM = (float)($cost[901] ?? $cost['metal'] ?? 0.0);
+                $costC = (float)($cost[902] ?? $cost['crystal'] ?? 0.0);
+                $costD = (float)($cost[903] ?? $cost['deuterium'] ?? 0.0);
+
+                $curStockM = (float)($mData['metal'] ?? 0.0);
+                $curStockC = (float)($mData['crystal'] ?? 0.0);
+                $curStockD = (float)($mData['deuterium'] ?? 0.0);
+
+                $canAffordPhysical = ($curStockM >= $costM && $curStockC >= $costC && $curStockD >= $costD);
+                // On moons (planet_type = 3), buildings rely directly on local physical stock
+                $canAfford = $canAffordPhysical;
+                $costMSE = BotEconomyValuator::arrayToMSE($cost);
+                $costHP  = BotEconomyValuator::toHP($costMSE, $hourlyEmpireMSE);
+
+                $curLvl = (int)($mData[$resource[$elemId]] ?? 0);
+                $score = 1000.0 / max(0.1, $costHP);
+
+                if ($elemId == 41) { // Base Lunar (+3 campos por nivel)
+                    if ($freeMoonFields <= 1) {
+                        // Si Salto Cuántico aún es nivel 0 y es accesible, Salto Cuántico tiene prioridad 22000.0 y Base Lunar 21000.0
+                        $jumpAccessible = BuildFunctions::isTechnologieAccessible($this->ctx->user, $mData, 43, array());
+                        $score = ($curJumpGate == 0 && $jumpAccessible) ? 21000.0 : 25000.0;
+                    } elseif ($freeMoonFields <= 3) {
+                        $score = 10000.0;
+                    } else {
+                        $score = 3000.0;
+                    }
+                } elseif ($elemId == 43) { // Puerta de Salto Cuántico
+                    if ($curLvl == 0) {
+                        $score = 22000.0; // Conexión lunar instantánea
+                    } else {
+                        if ($costHP < 3.0) {
+                            $score = 6000.0;
+                        } else {
+                            $score = 1500.0;
+                        }
+                    }
+                } elseif ($elemId == 42) { // Sensor Phalanx
+                    $isFobMoon = (isset($this->ctx->botRow['fob_planet_id']) && (int)$this->ctx->botRow['fob_planet_id'] === (int)$mId);
+                    if ($curLvl < 6) {
+                        $score = 7000.0 + ($isFobMoon ? 2000.0 : 0.0);
+                    } elseif ($curLvl < 12) {
+                        $score = 4500.0 + ($isFobMoon ? 1500.0 : 0.0);
+                    } else {
+                        $score = 1200.0;
+                    }
+                } elseif ($elemId == 14) { // Robotics Lunar
+                    if ($curLvl < 5) {
+                        $score = 9500.0 + (5 - $curLvl) * 1000.0; // Rush Nivel 5 para desbloquear Nanobots
+                    } elseif ($curLvl < 8) {
+                        $score = 3500.0 + (8 - $curLvl) * 200.0;
+                    } else {
+                        $score = 800.0;
+                    }
+                } elseif ($elemId == 15) { // Nanobots Lunar
+                    if ($curLvl < 2) {
+                        $score = 12000.0 + (2 - $curLvl) * 2000.0; // Rush Nivel 1-2
+                    } else {
+                        $score = 1500.0;
+                    }
+                } elseif ($elemId == 21) { // Astillero Lunar
+                    if ($curLvl < 4) {
+                        $score = 4000.0 + (4 - $curLvl) * 500.0;
+                    } elseif ($curLvl < 8) {
+                        $score = 3000.0 + (8 - $curLvl) * 200.0;
+                    } else {
+                        $score = 800.0;
+                    }
+                }
+
+                if (isset($unlockBoosts[$elemId])) {
+                    $score += $unlockBoosts[$elemId];
+                }
+
+                $pMult = $persMults['buildings'][$elemId] ?? 1.0;
+                $finalScore = $score * $pMult;
+
+                if ($canAfford) {
+                    $candidates[] = array(
+                        'planet_id'    => $mId,
+                        'element'      => $elemId,
+                        'score'        => round($finalScore, 2),
+                        'cost_hp'      => round($costHP, 2),
+                        'cost'         => $cost,
+                        'is_moon'      => true,
+                    );
+                } else {
+                    $unaffordableGoals[] = array(
+                        'planet_id' => $mId,
+                        'element'   => $elemId,
+                        'score'     => round($finalScore, 2),
+                        'cost'      => $cost,
+                        'data'      => $mData,
+                        'is_moon'   => true,
+                    );
+                }
+            }
+        }
     }
 
     /**
@@ -365,7 +966,7 @@ class BotProductionAllocator
     {
         global $resource, $pricelist;
 
-        // Verify research lab is not busy
+        // Check if imperial research lab is already active
         if (!empty($this->ctx->user['b_tech_planet']) || !empty($this->ctx->user['b_tech'])) {
             return 0;
         }
@@ -378,50 +979,35 @@ class BotProductionAllocator
         $candidates = array();
         $unaffordableTechGoals = array();
 
-        // Comprehensive NovaRush Technologies:
-        // 131: Metal Processing Tech (+2% global metal)
-        // 132: Crystal Processing Tech (+2% global crystal)
-        // 133: Deuterium Processing Tech (+2% global deuterium)
-        // 134: Fuel Optimization Tech (reduced flight consumption)
-        // 113: Energy Tech (+10% energy boost)
-        // 117: Impulse Motor Tech (missile range & mid-tier drives)
-        // 106: Spy Tech (fog of war / intel)
-        // 108: Computer Tech (fleet slots)
-        // 109: Weapons Tech, 110: Shielding Tech, 111: Armor Tech
-        // 115: Combustion Drive, 118: Hyperspace Drive
-        // 120: Laser Tech, 121: Ion Tech, 122: Plasma / Buster Tech
-        // 124: Astrophysics / Expedition Tech
-        // 199: Graviton Tech
         $techWeights = array(
-            131 => 4.5, // Metal Processing Tech (High ROI)
-            132 => 4.5, // Crystal Processing Tech (High ROI)
-            133 => 4.2, // Deuterium Processing Tech (High ROI)
-            123 => 4.8, // Intergalactic Research Network (IRN - Speeds up all techs)
-            113 => 3.8, // Energy Tech (Power & unlocks)
-            117 => 3.5, // Impulse Drive (Missile range!)
+            131 => 4.5, // Metal Processing Tech
+            132 => 4.5, // Crystal Processing Tech
+            133 => 4.2, // Deuterium Processing Tech
+            123 => 4.8, // IRN (Intergalactic Research Network)
+            113 => 3.8, // Energy Tech
+            114 => 3.4, // Hyperspace Tech
+            117 => 3.5, // Impulse Drive
             106 => 3.2, // Espionage Tech
-            108 => 3.5, // Computer Tech (Fleet Slots)
+            108 => 3.5, // Computer Tech
             109 => 2.8, // Weapons Tech
             110 => 2.8, // Shielding Tech
             111 => 2.8, // Armor Tech
             118 => 3.0, // Hyperspace Drive
-            122 => 2.9, // Plasma Tech
+            122 => 2.9, // Plasma / Buster Tech
             121 => 2.4, // Ion Tech
             120 => 2.2, // Laser Tech
-            124 => 4.0, // Astrophysics (Extra planets & expedition slots)
+            124 => 4.0, // Astrophysics
             134 => 2.7, // Fuel Optimization
             115 => 2.2, // Combustion Drive
             199 => 2.0, // Graviton Tech
         );
 
         $empireHourlyMSE = $empire->getHourlyProductionMSE();
-
         $planets = $empire->getPlanets();
         if (!is_array($planets) || empty($planets)) {
             return 0;
         }
 
-        // Minimum free fields across the empire to gauge Terraformer urgency
         $minFreeFieldsEmpire = 999;
         $hasFusion = false;
         $advancedLabs = 0;
@@ -438,176 +1024,222 @@ class BotProductionAllocator
             }
         }
 
-        // --- Strategic Multiplier 1: Simultaneous Fleet Slots (Computer Tech #108) ---
-        $maxFleetSlots = FleetFunctions::GetMaxFleetSlots($this->ctx->user);
-        $db = Database::get();
-        $activeFleetsCount = (int)$db->selectSingle("SELECT COUNT(*) as cnt FROM %%FLEETS%% WHERE fleet_owner = :uid;", array(':uid' => (int)$this->ctx->botId), 'cnt');
-        $slotPressure = $maxFleetSlots > 0 ? ($activeFleetsCount / $maxFleetSlots) : 0.0;
-        $slotMultiplier = 1.0 + (pow($slotPressure, 2) * 3.5);
+        // Strategic Multipliers:
+        // 1. Computer Tech (108)
+        $curComp = (int)($this->ctx->user[$resource[108]] ?? 0);
+        $desiredComp = max(12, count($planets) + 4);
+        $compBonus = ($curComp < $desiredComp) ? 3500.0 : 0.0;
 
-        // --- Strategic Multiplier 2: Astrophysics (#124) (Expeditions & Colony Slots) ---
+        // 2. Astrophysics (124)
         $curAstro = (int)($this->ctx->user[$resource[124]] ?? 0);
-        $nextAstro = $curAstro + 1;
-        $curExpSlots = (int)floor(sqrt($curAstro));
-        $nextExpSlots = (int)floor(sqrt($nextAstro));
-        $curColonies = (int)floor(($curAstro + 1) / 2);
-        $nextColonies = (int)floor(($nextAstro + 1) / 2);
+        $maxColonies = 1 + (int)floor(($curAstro + 1) / 2);
         $astroMultiplier = 1.2;
-        if ($nextExpSlots > $curExpSlots) {
-            $astroMultiplier += 2.0; // Unlocks a new expedition slot for +300 MO harvesting!
-        }
-        if ($nextColonies > $curColonies) {
-            $astroMultiplier += 1.8; // Unlocks a new colony!
+        if (count($planets) < $maxColonies || count($planets) < 9) {
+            $astroCost = BuildFunctions::getElementPrice($this->ctx->user, reset($planets)['data'], 124, false);
+            $astroCostMSE = BotEconomyValuator::arrayToMSE($astroCost);
+            $astroHP = BotEconomyValuator::toHP($astroCostMSE, $empireHourlyMSE);
+            if ($astroHP < 8.0) {
+                $astroMultiplier = 3.5; // Massive expansion push!
+            }
         }
 
-        // --- Strategic Multiplier 3: Intergalactic Research Network (IRN #123) ---
-        $irnMultiplier = 2.0 + ($advancedLabs * 0.80);
+        // 3. IRN (123)
+        $irnLevel = (int)($this->ctx->user[$resource[123]] ?? 0);
+        $irnMultiplier = 2.0;
+        if ($advancedLabs > (1 + $irnLevel) || $irnLevel < 3) {
+            $irnMultiplier = 5.0; // Multiplies future research speed across all labs and unlocks University (#6)!
+        }
 
-        // --- Strategic Multiplier 4: Energy Efficiency (#113) ---
+        // 4. Energy Tech (113)
         $curEnergyTech = (int)($this->ctx->user[$resource[113]] ?? 0);
         $energyMultiplier = 1.0 + ($hasFusion ? 1.5 : 0.0) + ($minFreeFieldsEmpire <= 5 && $curEnergyTech < 12 ? 2.5 : 0.0);
 
+        // Backward-Chaining Prerequisite Unlock Boosts
+        $unlockBoosts = $this->computePrerequisiteUnlockBoosts($empire);
+        $persMults = $this->getPersonalityMultipliers();
+
+        // Rank lab colonies by effective research speed (Lab level + University #6 bonus + Research Module #84)
+        $rankedLabPlanets = array();
         foreach ($planets as $pId => $planetEntry) {
             $pData = $planetEntry['data'];
-            // Planet must have a research lab (ID 31)
-            if (empty($pData[$resource[31]]) || $pData[$resource[31]] <= 0) {
+            $labLvl = (int)($pData[$resource[31]] ?? 0);
+            if ($labLvl <= 0) continue;
+
+            $effectiveSpeed = $labLvl * 10;
+            if (!empty($pData[$resource[6]])) {
+                $effectiveSpeed += 50 + ((int)$pData[$resource[6]] * 5); // University bonus
+            }
+            if (!empty($pData[$resource[84]])) {
+                $effectiveSpeed += 10 + ((int)$pData[$resource[84]] * 2); // Module 84 bonus
+            }
+            $rankedLabPlanets[$pId] = array(
+                'planet_id'       => $pId,
+                'data'            => $pData,
+                'lab_level'       => $labLvl,
+                'effective_speed' => $effectiveSpeed,
+            );
+        }
+
+        if (empty($rankedLabPlanets)) {
+            return 0;
+        }
+
+        usort($rankedLabPlanets, function($a, $b) {
+            return $b['effective_speed'] <=> $a['effective_speed'];
+        });
+
+        $bestLabPlanet = reset($rankedLabPlanets);
+
+        // Score all technologies
+        foreach ($techWeights as $techId => $baseWeight) {
+            if (!BuildFunctions::isTechnologieAccessible($this->ctx->user, $bestLabPlanet['data'], $techId, array())) {
                 continue;
             }
 
-            foreach ($techWeights as $techId => $baseWeight) {
-                if (!BuildFunctions::isTechnologieAccessible($this->ctx->user, $pData, $techId, array())) {
-                    continue;
-                }
+            $cost = BuildFunctions::getElementPrice($this->ctx->user, $bestLabPlanet['data'], $techId, false);
+            $costMSE = BotEconomyValuator::arrayToMSE($cost);
+            $costHP  = BotEconomyValuator::toHP($costMSE, $empireHourlyMSE);
 
-                $cost = BuildFunctions::getElementPrice($this->ctx->user, $pData, $techId, false);
+            $diffTechFactor = ($macroTech / 0.20);
+            $score = ($baseWeight * $diffTechFactor * 20.0) / max(0.1, $costHP);
 
-                // Ensure physical resources on this lab planet reserved for fleet and defense are protected
-                $fleetCreds = isset($this->ctx->budgetManager) ? $this->ctx->budgetManager->getPlanetFleetCredits($pId) : array();
-                $defCreds   = isset($this->ctx->budgetManager) ? $this->ctx->budgetManager->getPlanetDefenseCredits($pId) : array();
-                $reservedM  = (float)($fleetCreds['metal'] ?? 0.0) + (float)($defCreds['metal'] ?? 0.0);
-                $reservedC  = (float)($fleetCreds['crystal'] ?? 0.0) + (float)($defCreds['crystal'] ?? 0.0);
-                $reservedD  = (float)($fleetCreds['deuterium'] ?? 0.0) + (float)($defCreds['deuterium'] ?? 0.0);
-
-                $availPhysM = max(0.0, (float)$pData['metal'] - $reservedM);
-                $availPhysC = max(0.0, (float)$pData['crystal'] - $reservedC);
-                $availPhysD = max(0.0, (float)$pData['deuterium'] - $reservedD);
-
-                $costM = (float)($cost[901] ?? $cost['metal'] ?? 0.0);
-                $costC = (float)($cost[902] ?? $cost['crystal'] ?? 0.0);
-                $costD = (float)($cost[903] ?? $cost['deuterium'] ?? 0.0);
-
-                $canAffordPhysical = ($availPhysM >= $costM && $availPhysC >= $costC && $availPhysD >= $costD);
-                $canAffordBudget = (!isset($this->ctx->budgetManager)) || $this->ctx->budgetManager->canAffordBudget($pId, 'research', $cost);
-                $canAffordTech = $canAffordPhysical && $canAffordBudget;
-
-                $costMSE = BotEconomyValuator::arrayToMSE($cost);
-                $costHP  = BotEconomyValuator::toHP($costMSE, $empireHourlyMSE);
-                $diffTechFactor = ($macroTech / 0.20);
-                $score   = ($baseWeight * $diffTechFactor * 20.0) / max(0.1, $costHP);
-
-                // --- A. Graviton Tech (199) Highest Priority ---
-                if ($techId == 199) {
+            // Graviton (199) - Only boost level 0 -> 1 for Deathstar unlock
+            if ($techId == 199) {
+                $curGrav = (int)($this->ctx->user[$resource[199]] ?? 0);
+                if ($curGrav == 0) {
                     $score += 25000.0;
                 }
+            }
 
-                // --- B. Compounding ROI for NovaRush processing techs (131, 132, 133): +2% empire-wide output per level ---
-                if (in_array($techId, array(131, 132, 133))) {
-                    $gainMSE = $empireHourlyMSE * 0.02;
-                    $score += ($gainMSE / max(1.0, $costMSE)) * 12000.0;
+            // Processing Techs (131, 132, 133)
+            if (in_array($techId, array(131, 132, 133))) {
+                $gainMSE = $empireHourlyMSE * 0.02;
+                $score += min(3500.0, ($gainMSE / max(1.0, $costMSE)) * 1200.0);
+            }
+
+            // Energy (113)
+            if ($techId == 113) {
+                if ($bestLabPlanet['data']['energy'] < 500) {
+                    $score += 1500.0;
                 }
+                if ($minFreeFieldsEmpire <= 5 && $curEnergyTech < 12) {
+                    $score += 5000.0 + (12 - $curEnergyTech) * 500.0;
+                }
+            }
 
-                // --- C. Energy Tech (113) Scaling & Terraformer Prerequisite ---
-                if ($techId == 113) {
-                    if ($pData['energy'] < 500) {
-                        $score += 1500.0;
+            // Strategic domain multipliers
+            if ($techId == 108) {
+                $score += $compBonus;
+            } elseif ($techId == 124) {
+                $score *= $astroMultiplier;
+            } elseif ($techId == 123) {
+                $score *= $irnMultiplier;
+            } elseif ($techId == 113) {
+                $score *= $energyMultiplier;
+            }
+
+            // Combat Triad, Drives & Fuel: organic cost leveling
+            if (in_array($techId, array(109, 110, 111, 114, 115, 117, 118, 134, 120, 121, 122))) {
+                $score += ($baseWeight * 15.0) / max(0.5, $costMSE / max(100.0, $empireHourlyMSE));
+            }
+
+            // Apply Backward-Chaining Prerequisite Unlock Boost
+            if (isset($unlockBoosts[$techId])) {
+                $score += $unlockBoosts[$techId];
+                $curTechLvl = (int)($this->ctx->user[$resource[$techId]] ?? 0);
+                if ($curTechLvl == 0) {
+                    $score += 15000.0; // Priority unblock for level-0 root prerequisites
+                }
+            }
+
+            // Apply Personality Multiplier
+            $persMult = $persMults['techs'][$techId] ?? 1.0;
+            $finalScore = $score * $persMult;
+
+            // Check affordability on lab planets
+            $techCandidate = array(
+                'tech_id'     => $techId,
+                'score'       => round($finalScore, 2),
+                'cost'        => $cost,
+                'cost_mse'    => $costMSE,
+            );
+
+            // Check if best lab planet can afford
+            $pId = $bestLabPlanet['planet_id'];
+            $pData = $bestLabPlanet['data'];
+
+            // Protect tactical fleet deuterium reserve (metal and crystal available for research bucket swap)
+            $tacticalDeutReserve = 25000.0;
+            $availPhysM = (float)$pData['metal'];
+            $availPhysC = (float)$pData['crystal'];
+            $availPhysD = max(0.0, (float)$pData['deuterium'] - $tacticalDeutReserve);
+
+            $costM = (float)($cost[901] ?? $cost['metal'] ?? 0.0);
+            $costC = (float)($cost[902] ?? $cost['crystal'] ?? 0.0);
+            $costD = (float)($cost[903] ?? $cost['deuterium'] ?? 0.0);
+
+            $canAffordPhysical = ($availPhysM >= $costM && $availPhysC >= $costC && $availPhysD >= $costD);
+            $canAffordBudget = (!isset($this->ctx->budgetManager)) || $this->ctx->budgetManager->canAffordBudget($pId, 'research', $cost);
+
+            if ($canAffordPhysical && !$canAffordBudget && isset($this->ctx->budgetManager)) {
+                $canAffordBudget = $this->ctx->budgetManager->tryInternalBucketSwap($pId, 'research', $cost);
+            }
+
+            if ($canAffordPhysical && $canAffordBudget) {
+                $techCandidate['planet_id'] = $pId;
+                $candidates[] = $techCandidate;
+            } else {
+                // Check if any other high-speed lab planet can afford this tech right now
+                $altPlanetFound = false;
+                foreach ($rankedLabPlanets as $altLab) {
+                    if ($altLab['planet_id'] === $pId) continue;
+                    $altPData = $altLab['data'];
+                    $altId = $altLab['planet_id'];
+
+                    $altAvailM = (float)$altPData['metal'];
+                    $altAvailC = (float)$altPData['crystal'];
+                    $altAvailD = max(0.0, (float)$altPData['deuterium'] - $tacticalDeutReserve);
+
+                    if ($altAvailM >= $costM && $altAvailC >= $costC && $altAvailD >= $costD) {
+                        $altBudget = (!isset($this->ctx->budgetManager)) || $this->ctx->budgetManager->canAffordBudget($altId, 'research', $cost);
+                        if (!$altBudget && isset($this->ctx->budgetManager)) {
+                            $altBudget = $this->ctx->budgetManager->tryInternalBucketSwap($altId, 'research', $cost);
+                        }
+                        if ($altBudget) {
+                            $techCandidate['planet_id'] = $altId;
+                            $candidates[] = $techCandidate;
+                            $altPlanetFound = true;
+                            break;
+                        }
                     }
-                    if ($minFreeFieldsEmpire <= 5 && $curEnergyTech < 12) {
-                        $score += 5000.0 + (12 - $curEnergyTech) * 500.0;
-                    }
                 }
 
-                // --- D. Impulse Motor Tech (117) for Tactical Missile Strike Range ---
-                $curImpulse = isset($this->ctx->user[$resource[117]]) ? (int)$this->ctx->user[$resource[117]] : 0;
-                if ($techId == 117 && $curImpulse < 6) {
-                    $score += 1200.0 + (6 - $curImpulse) * 200.0;
-                }
-
-                // --- E. Computer Tech (108) for Fleet Slots and Nanite Factory requirement ---
-                $curComp = isset($this->ctx->user[$resource[108]]) ? (int)$this->ctx->user[$resource[108]] : 0;
-                if ($techId == 108 && $curComp < 10) {
-                    $score += 1000.0;
-                }
-
-                // --- F. Apply Strategic Domain Multipliers ---
-                $strategicMult = 1.0;
-                if ($techId == 108) {
-                    $strategicMult = $slotMultiplier;
-                } elseif ($techId == 124) {
-                    $strategicMult = $astroMultiplier;
-                } elseif ($techId == 123) {
-                    $strategicMult = $irnMultiplier;
-                } elseif ($techId == 113) {
-                    $strategicMult = $energyMultiplier;
-                }
-
-                // --- G. Apply Pure Personality Multiplier ---
-                $persTechMult = method_exists($this->ctx->personality, 'getTechMultiplier')
-                    ? (float)$this->ctx->personality->getTechMultiplier($techId)
-                    : 1.0;
-
-                $finalScore = $score * $strategicMult * $persTechMult;
-
-                $needsTraderTech = false;
-                $tradeInfoTech = null;
-                if (!$canAffordTech && class_exists('BotPremiumStrategist')) {
-                    $tradeInfoTech = BotPremiumStrategist::canTraderResolveDeficit($this->ctx, $pId, 'research', $cost);
-                    if ($tradeInfoTech !== false) {
-                        $needsTraderTech = true;
-                    }
-                }
-
-                if ($canAffordTech || $needsTraderTech) {
-                    $candidates[] = array(
-                        'planet_id'    => $pId,
-                        'tech_id'      => $techId,
-                        'score'        => round($finalScore, 2),
-                        'cost'         => $cost,
-                        'lab_level'    => (int)($pData[$resource[31]] ?? 0),
-                        'needs_trader' => $needsTraderTech,
-                        'trade_info'   => $tradeInfoTech,
-                    );
-                } else {
-                    $unaffordableTechGoals[] = array(
-                        'planet_id' => $pId,
-                        'tech_id'   => $techId,
-                        'score'     => round($finalScore, 2),
-                        'cost'      => $cost,
-                        'lab_level' => (int)($pData[$resource[31]] ?? 0),
-                        'data'      => $pData,
-                    );
+                if (!$altPlanetFound) {
+                    $techCandidate['planet_id'] = $pId;
+                    $techCandidate['data'] = $pData;
+                    $unaffordableTechGoals[] = $techCandidate;
                 }
             }
         }
 
         if (!empty($candidates)) {
             usort($candidates, function($a, $b) {
-                return ($b['score'] <=> $a['score']) ?: ($b['lab_level'] <=> $a['lab_level']);
+                return $b['score'] <=> $a['score'];
             });
 
             foreach ($candidates as $cand) {
-                if (!empty($cand['needs_trader'])) {
-                    $tradeOk = BotPremiumStrategist::tryTraderForCategory($this->ctx, $cand['planet_id'], 'research', $cand['cost']);
-                    if (!$tradeOk) {
-                        continue;
-                    }
-                }
-
-                $techReason = "Prioridad de investigación científica imperial (Score: {$cand['score']})";
+                $techReason = "Prioridad de investigación imperial Grandmaster (Score: {$cand['score']})";
                 $ok = $this->gateway->researchTech($cand['planet_id'], $cand['tech_id'], $techReason);
                 if ($ok) {
+                    if (isset($this->ctx->budgetManager)) {
+                        $activeLock = $this->ctx->budgetManager->getSavingsLock();
+                        if (!empty($activeLock) && (int)($activeLock['element_id'] ?? 0) === (int)$cand['tech_id']) {
+                            $this->ctx->budgetManager->clearSavingsLock();
+                        }
+                    }
                     $this->ctx->decisionLog->record(
                         'research_enqueued',
-                        "Queued research {$resource[$cand['tech_id']]} on planet #{$cand['planet_id']}",
+                        "Queued research {$resource[$cand['tech_id']]} on planet #{$cand['planet_id']} (Grandmaster Intelligence)",
                         array_slice($candidates, 0, 5),
                         "research_{$cand['tech_id']}",
                         $cand['score']
@@ -617,28 +1249,51 @@ class BotProductionAllocator
             }
         }
 
-        // Phase 3: If no research was queued and budget manager has no active savings lock, engage savings lock for top tech goal
-        if (isset($this->ctx->budgetManager) && empty($this->ctx->budgetManager->getSavingsLock()) && !empty($unaffordableTechGoals)) {
+        // Engaging Savings Lock for research only if ETA <= MAX_SAVINGS_LOCK_ETA
+        if (isset($this->ctx->budgetManager) && empty($this->ctx->budgetManager->getSavingsLockForCategory(0, 'research')) && !empty($unaffordableTechGoals)) {
             usort($unaffordableTechGoals, function($a, $b) {
                 return $b['score'] <=> $a['score'];
             });
-            $topTech = reset($unaffordableTechGoals);
-            if ($topTech['score'] > 0.0) {
-                $this->ctx->budgetManager->setSavingsLock(
+
+            foreach ($unaffordableTechGoals as $topTech) {
+                if ($topTech['score'] <= 0.0) continue;
+
+                $stockMap = array(
+                    901 => (float)($topTech['data']['metal'] ?? 0.0),
+                    902 => (float)($topTech['data']['crystal'] ?? 0.0),
+                    903 => (float)($topTech['data']['deuterium'] ?? 0.0)
+                );
+                $prodMap = array(
+                    901 => (float)($topTech['data']['metal_perhour'] ?? 0.0),
+                    902 => (float)($topTech['data']['crystal_perhour'] ?? 0.0),
+                    903 => (float)($topTech['data']['deuterium_perhour'] ?? 0.0)
+                );
+                $eta = $this->ctx->budgetManager->calculateSafeEta($topTech['cost'], $stockMap, $prodMap);
+
+                if ($eta > self::MAX_SAVINGS_LOCK_ETA) {
+                    continue; // Do not lock empire for unreachable research target!
+                }
+
+                $locked = $this->ctx->budgetManager->setSavingsLock(
                     $topTech['planet_id'],
                     'research',
                     $topTech['tech_id'],
                     $topTech['cost'],
                     $topTech['data'],
-                    'research'
+                    'research',
+                    $empire
                 );
-                $this->ctx->decisionLog->record(
-                    'savings_lock_engaged',
-                    "Engaged savings lock for research {$resource[$topTech['tech_id']]} on planet #{$topTech['planet_id']}",
-                    array('element' => $topTech['tech_id'], 'cost' => $topTech['cost'], 'target_type' => 'research'),
-                    "save_research_{$topTech['tech_id']}",
-                    $topTech['score']
-                );
+
+                if ($locked) {
+                    $this->ctx->decisionLog->record(
+                        'savings_lock_engaged',
+                        "Engaged research savings lock for {$resource[$topTech['tech_id']]} on planet #{$topTech['planet_id']} (ETA: {$eta}s)",
+                        array('element' => $topTech['tech_id'], 'cost' => $topTech['cost'], 'target_type' => 'research', 'eta' => $eta),
+                        "save_research_{$topTech['tech_id']}",
+                        $topTech['score']
+                    );
+                    break;
+                }
             }
         }
 

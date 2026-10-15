@@ -127,7 +127,7 @@ class BotGameServices
     /**
      * Add building to real planet building queue
      */
-    public static function enqueueBuilding(array &$user, array &$planet, $elementId)
+    public static function enqueueBuilding(array &$user, array &$planet, $elementId, $forDestroy = false)
     {
         global $resource, $pricelist, $reslist;
 
@@ -148,23 +148,40 @@ class BotGameServices
         }
 
         $currentMaxFields = CalculateMaxPlanetFields($planet);
-        if ($elementId != 33 && $planet['field_current'] >= ($currentMaxFields - $actualCount)) {
+        if (!$forDestroy && $elementId != 33 && $elementId != 41 && $planet['field_current'] >= ($currentMaxFields - $actualCount)) {
             return false;
         }
 
-        $buildLevel = $planet[$resource[$elementId]] + 1;
-        foreach ($currentQueue as $q) {
-            if ($q[0] == $elementId) {
-                $buildLevel++;
+        if ($forDestroy) {
+            $buildLevel = (int)($planet[$resource[$elementId]] ?? 0);
+            foreach ($currentQueue as $q) {
+                if ($q[0] == $elementId) {
+                    if ($q[4] === 'destroy') {
+                        $buildLevel--;
+                    } else {
+                        $buildLevel++;
+                    }
+                }
+            }
+            if ($buildLevel <= 0) {
+                return false;
+            }
+        } else {
+            $buildLevel = (int)($planet[$resource[$elementId]] ?? 0) + 1;
+            foreach ($currentQueue as $q) {
+                if ($q[0] == $elementId) {
+                    $buildLevel++;
+                }
+            }
+
+            if (isset($pricelist[$elementId]['max']) && $pricelist[$elementId]['max'] < $buildLevel) {
+                return false;
             }
         }
 
-        if (isset($pricelist[$elementId]['max']) && $pricelist[$elementId]['max'] < $buildLevel) {
-            return false;
-        }
-
-        $costResources = BuildFunctions::getElementPrice($user, $planet, $elementId, false);
-        if (!BuildFunctions::isElementBuyable($user, $planet, $elementId, $costResources)) {
+        $levelForPrice = ($forDestroy) ? $buildLevel : (($actualCount == 0) ? null : ($buildLevel - 1));
+        $costResources = BuildFunctions::getElementPrice($user, $planet, $elementId, $forDestroy, $levelForPrice);
+        if (!BuildFunctions::isElementBuyable($user, $planet, $elementId, $costResources, $forDestroy, $levelForPrice)) {
             return false;
         }
 
@@ -173,10 +190,10 @@ class BotGameServices
         $planet['crystal']   -= isset($costResources[902]) ? $costResources[902] : 0;
         $planet['deuterium'] -= isset($costResources[903]) ? $costResources[903] : 0;
 
-        $elementTime  = BuildFunctions::getBuildingTime($user, $planet, $elementId, $costResources);
+        $elementTime  = BuildFunctions::getBuildingTime($user, $planet, $elementId, $costResources, $forDestroy, $levelForPrice);
         $buildEndTime = ($actualCount == 0) ? (BotClock::get() + $elementTime) : ($currentQueue[$actualCount - 1][3] + $elementTime);
 
-        $currentQueue[] = array($elementId, $buildLevel, $elementTime, $buildEndTime, 'build');
+        $currentQueue[] = array($elementId, $buildLevel, $elementTime, $buildEndTime, $forDestroy ? 'destroy' : 'build');
 
         $db = Database::get();
         $sql = "UPDATE %%PLANETS%% SET 
