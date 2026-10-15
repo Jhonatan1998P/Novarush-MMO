@@ -598,13 +598,13 @@ class FleetFunctions
 
 		$fleetId	= $db->lastInsertId();
 
-		$sql	= 'INSERT INTO %%FLEETS_EVENT%% SET fleetID	= :fleetId, `time` = :endTime;';
+		$sql	= 'INSERT INTO %%FLEETS_EVENT%% SET fleetID	= :fleetId, `time` = :endTime ON DUPLICATE KEY UPDATE `time` = VALUES(`time`), `lock` = NULL;';
 		$db->insert($sql, array(
 			':fleetId'	=> $fleetId,
 			':endTime'	=> $fleetStartTime
 		));
 
-		$sql	= 'INSERT INTO %%LOG_FLEETS%% SET
+		$sql	= 'REPLACE INTO %%LOG_FLEETS%% SET
 		fleet_id					= :fleetId,
 		fleet_owner					= :fleetStartOwner,
 		fleet_target_owner			= :fleetTargetOwner,
@@ -632,7 +632,7 @@ class FleetFunctions
 		fleet_target_obj			= :missileTarget,
 		start_time					= :timestamp;';
 
-		$db->insert($sql, array(
+		$db->replace($sql, array(
 			':fleetId'					=> $fleetId,
 			':fleetStartOwner'			=> $fleetStartOwner,
 			':fleetTargetOwner'			=> $fleetTargetOwner,

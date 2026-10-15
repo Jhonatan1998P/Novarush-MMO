@@ -88,17 +88,6 @@ class MissionCaseSpy extends MissionFunctions implements Mission
 		$SpyBuild		= $fleetAmount >= $MinAmount + 3 * SPY_VIEW_FACTOR;
 		$SpyTechno		= $fleetAmount >= $MinAmount + 5 * SPY_VIEW_FACTOR;
 
-		// NovaRush Bot AI: Infallible Espionage Bypass (100% full intel regardless of tech difference or counter-espionage)
-		$dbInst = Database::get();
-		$isSenderBot = $dbInst->selectSingle("SELECT bot_id FROM " . DB_PREFIX . "bots WHERE bot_id = :id AND is_active = 1 LIMIT 1;", array(':id' => (int)$this->_fleet['fleet_owner']));
-		if (!empty($isSenderBot)) {
-			$SpyFleet   = true;
-			$SpyDef     = true;
-			$SpyBuild   = true;
-			$SpyTechno  = true;
-		}
-			
-
 		$classIDs[900]	= array_merge($reslist['resstype'][1], $reslist['resstype'][2]);
 				
 		if($SpyFleet) 
@@ -247,6 +236,7 @@ class MissionCaseSpy extends MissionFunctions implements Mission
 			$isBot = $dbInst->selectSingle("SELECT bot_id FROM " . DB_PREFIX . "bots WHERE bot_id = :id AND is_active = 1;", array(':id' => (int)$this->_fleet['fleet_owner']));
 			if (!empty($isBot)) {
 				$bStore = new BotIntelStore((int)$this->_fleet['fleet_owner']);
+				$probesDestroyed = ($targetChance >= $spyChance);
 				$bStore->saveIntel(
 					(int)$this->_fleet['fleet_end_id'],
 					(int)$this->_fleet['fleet_target_owner'],
@@ -259,10 +249,11 @@ class MissionCaseSpy extends MissionFunctions implements Mission
 						902 => (float)$targetPlanet['crystal'],
 						903 => (float)$targetPlanet['deuterium']
 					),
-					$SpyFleet ? (!empty($spyData[200]) ? $spyData[200] : array()) : null,
-					$SpyDef   ? (!empty($spyData[400]) ? $spyData[400] : array()) : null,
-					$SpyBuild ? (!empty($spyData[0])   ? $spyData[0]   : array()) : null,
-					$SpyTechno ? (!empty($spyData[100]) ? $spyData[100] : array()) : null
+					(!$probesDestroyed && $SpyFleet) ? (!empty($spyData[200]) ? $spyData[200] : array()) : null,
+					(!$probesDestroyed && $SpyDef)   ? (!empty($spyData[400]) ? $spyData[400] : array()) : null,
+					(!$probesDestroyed && $SpyBuild) ? (!empty($spyData[0])   ? $spyData[0]   : array()) : null,
+					(!$probesDestroyed && $SpyTechno) ? (!empty($spyData[100]) ? $spyData[100] : array()) : null,
+					$probesDestroyed
 				);
 			}
 		}

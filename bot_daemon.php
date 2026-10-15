@@ -15,6 +15,16 @@ $once = (isset($argv) && in_array('--once', $argv));
 // MODO ORQUESTADOR CONTINUO (Master Daemon Loop)
 // -------------------------------------------------------------
 if ($isMainScript && !$once) {
+    $lockFile = sys_get_temp_dir() . '/novarush_bot_daemon.lock';
+    $lockFp = @fopen($lockFile, 'c+');
+    if ($lockFp && !@flock($lockFp, LOCK_EX | LOCK_NB)) {
+        echo "========================================================================================\n";
+        echo " [AVISO] Ya existe otra instancia de bot_daemon.php en ejecución activa.\n";
+        echo " Abortando este proceso para evitar conflictos de concurrencia y bloqueos de BD.\n";
+        echo "========================================================================================\n";
+        exit(0);
+    }
+
     echo "========================================================================================\n";
     echo "       NOVARUSH — DAEMON MAESTRO DE INTELIGENCIA ARTIFICIAL (TELEMETRÍA EN VIVO)\n";
     echo "========================================================================================\n";

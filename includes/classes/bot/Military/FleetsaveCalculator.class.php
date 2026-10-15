@@ -134,29 +134,77 @@ class BotFleetsaveCalculator
         $fleetSpeed  = FleetFunctions::GetFleetMaxSpeed($ships, $this->ctx->user);
         $gameSpeed   = FleetFunctions::GetGameSpeedFactor();
 
-        // 2. Scan for closest own colony / moon to minimize base distance & deuterium
+        // 2. Safe Haven Hierarchy:
+        // Priority 1: Nearest own Moon free of hostiles
+        // Priority 2: Nearest own Planet free of hostiles
+        // Priority 3: Most temporally separated destination if entire empire attacked
+        $db = Database::get();
+        $attackedRows = $db->select("
+            SELECT DISTINCT fleet_end_id 
+            FROM %%FLEETS%% 
+            WHERE fleet_owner != :botId 
+              AND fleet_mission IN (1, 2, 9) 
+              AND fleet_mess = 0;
+        ", array(':botId' => $this->ctx->botId));
+
+        $threatenedBodyIds = array();
+        if (!empty($attackedRows) && is_array($attackedRows)) {
+            foreach ($attackedRows as $ar) {
+                $threatenedBodyIds[(int)$ar['fleet_end_id']] = true;
+            }
+        }
+
         $allBodies = $empire->getAllBodies();
-        $closestCandidate = null;
-        $minDistToClosest = 999999999;
+        $bestMoonCandidate = null;
+        $minDistMoon = PHP_INT_MAX;
+
+        $bestPlanetCandidate = null;
+        $minDistPlanet = PHP_INT_MAX;
+
+        $farthestOrMaxTimeCandidate = null;
+        $maxDist = -1;
 
         if (is_array($allBodies)) {
             foreach ($allBodies as $candidateId => $candidate) {
                 if ($candidateId == $endangeredPlanetId) continue;
                 $candCoords = array($candidate['galaxy'], $candidate['system'], $candidate['planet']);
                 $dist = FleetFunctions::GetTargetDistance($startCoords, $candCoords);
+                $isThreatened = isset($threatenedBodyIds[(int)$candidateId]);
+                $isMoon = ((int)($candidate['planet_type'] ?? 1) === 3);
 
-                if ($dist < $minDistToClosest) {
-                    $minDistToClosest = $dist;
-                    $closestCandidate = $candidate;
+                // Priority 1: Nearest own Moon free of hostiles
+                if ($isMoon && !$isThreatened) {
+                    if ($dist < $minDistMoon) {
+                        $minDistMoon = $dist;
+                        $bestMoonCandidate = $candidate;
+                    }
+                }
+
+                // Priority 2: Nearest own Planet free of hostiles
+                if (!$isMoon && !$isThreatened) {
+                    if ($dist < $minDistPlanet) {
+                        $minDistPlanet = $dist;
+                        $bestPlanetCandidate = $candidate;
+                    }
+                }
+
+                // Priority 3: Most temporally separated destination if entire empire attacked (farthest distance)
+                if ($dist > $maxDist) {
+                    $maxDist = $dist;
+                    $farthestOrMaxTimeCandidate = $candidate;
                 }
             }
         }
 
-        if (empty($closestCandidate)) {
+        if ($bestMoonCandidate !== null) {
+            $destination = $bestMoonCandidate;
+        } elseif ($bestPlanetCandidate !== null) {
+            $destination = $bestPlanetCandidate;
+        } elseif ($farthestOrMaxTimeCandidate !== null) {
+            $destination = $farthestOrMaxTimeCandidate;
+        } else {
             return $this->emergencyExpeditionSave($endangered, $ships);
         }
-
-        $destination = $closestCandidate;
 
         // Fetch fresh physical resources
         $db = Database::get();
@@ -258,8 +306,11 @@ class BotFleetsaveCalculator
                 $this->ctx->budgetManager->syncPlanetEvacuation($endangeredPlanetId, $cargoRes);
             }
 
-            // Recall scheduled randomly in a window between 5 to 60 seconds after impact
-            $recallDelay = mt_rand(5, 60);
+            // Recall scheduled using difficulty-calibrated delay range post-impact
+            $delayRange  = method_exists($this->ctx->difficulty, 'getFleetsaveRecallDelayRange')
+                ? $this->ctx->difficulty->getFleetsaveRecallDelayRange()
+                : array(60, 150);
+            $recallDelay = mt_rand($delayRange[0], $delayRange[1]);
             $recallTime  = (int)$threatArrivalTime + $recallDelay;
             BotScheduler::scheduleTask(
                 $this->ctx->botId,
@@ -408,8 +459,11 @@ class BotFleetsaveCalculator
                 $this->ctx->budgetManager->syncPlanetEvacuation($endangeredPlanetId, $cargoRes);
             }
 
-            // Recall scheduled randomly in a window between 5 to 60 seconds after impact
-            $recallDelay = mt_rand(5, 60);
+            // Recall scheduled using difficulty-calibrated delay range post-impact
+            $delayRange  = method_exists($this->ctx->difficulty, 'getFleetsaveRecallDelayRange')
+                ? $this->ctx->difficulty->getFleetsaveRecallDelayRange()
+                : array(60, 150);
+            $recallDelay = mt_rand($delayRange[0], $delayRange[1]);
             $recallTime  = (int)$threatArrivalTime + $recallDelay;
             BotScheduler::scheduleTask(
                 $this->ctx->botId,

@@ -29,14 +29,24 @@ class BotStagingPlanner
     public function getBestStagingBase(BotEmpireState $empire, array $targetCoord = null)
     {
         $allPlanets = $empire->getPlanets();
-        if (empty($allPlanets)) {
+        $allMoons   = $empire->getMoons();
+        if (empty($allPlanets) && empty($allMoons)) {
             return 0;
         }
 
         // Prioritize locked target FOB designated by StrikePlanner
         if (!empty($this->ctx->botRow['fob_planet_id']) && (int)$this->ctx->botRow['fob_planet_id'] > 0) {
             $fobId = (int)$this->ctx->botRow['fob_planet_id'];
-            if ($empire->getPlanet($fobId) !== null) {
+            $fobBody = $empire->getPlanet($fobId);
+            if ($fobBody !== null) {
+                // Doctrina Lunar Anti-Phalanx: Si la FOB actual es un planeta, verificar si tiene Luna propia
+                if ((int)$fobBody['planet_type'] !== 3) {
+                    foreach ($allMoons as $mId => $mData) {
+                        if ($mData['galaxy'] == $fobBody['galaxy'] && $mData['system'] == $fobBody['system'] && $mData['planet'] == $fobBody['planet']) {
+                            return (int)$mId;
+                        }
+                    }
+                }
                 return $fobId;
             }
         }
@@ -46,8 +56,8 @@ class BotStagingPlanner
             $tG = (int)$targetCoord['galaxy'];
             $tS = (int)$targetCoord['system'];
 
-            $bestId = 0;
-            $minDist = PHP_INT_MAX;
+            $bestPlanetId = 0;
+            $minPlanetDist = PHP_INT_MAX;
 
             foreach ($allPlanets as $pId => $pData) {
                 $pGalaxy = (int)$pData['galaxy'];
@@ -59,21 +69,54 @@ class BotStagingPlanner
                     $dist = 10000 + (abs($pGalaxy - $tG) * 1000) + abs($pSystem - $tS);
                 }
 
-                if ($dist < $minDist) {
-                    $minDist = $dist;
-                    $bestId = $pId;
+                if ($dist < $minPlanetDist) {
+                    $minPlanetDist = $dist;
+                    $bestPlanetId = $pId;
                 }
             }
 
-            if ($bestId > 0) {
-                return $bestId;
+            // Prioridad Absoluta de Luna como FOB (BotWarfareDoctrine v3.4):
+            // 1. Si el planeta óptimo tiene Luna propia en esas mismas coordenadas, asigna la Luna como FOB
+            if ($bestPlanetId > 0 && isset($allPlanets[$bestPlanetId])) {
+                $optP = $allPlanets[$bestPlanetId];
+                foreach ($allMoons as $mId => $mData) {
+                    if ($mData['galaxy'] == $optP['galaxy'] && $mData['system'] == $optP['system'] && $mData['planet'] == $optP['planet']) {
+                        return (int)$mId;
+                    }
+                }
+            }
+
+            // 2. Si existe una Luna propia a distancia competitiva (misma galaxia y diferencia <= 10 sistemas)
+            $bestMoonId = 0;
+            $minMoonDist = PHP_INT_MAX;
+            foreach ($allMoons as $mId => $mData) {
+                $mGalaxy = (int)$mData['galaxy'];
+                $mSystem = (int)$mData['system'];
+
+                if ($mGalaxy == $tG) {
+                    $dist = abs($mSystem - $tS);
+                } else {
+                    $dist = 10000 + (abs($mGalaxy - $tG) * 1000) + abs($mSystem - $tS);
+                }
+
+                if ($dist < $minMoonDist) {
+                    $minMoonDist = $dist;
+                    $bestMoonId = $mId;
+                }
+            }
+
+            if ($bestMoonId > 0 && ($minMoonDist <= ($minPlanetDist + 10))) {
+                return (int)$bestMoonId;
+            }
+
+            if ($bestPlanetId > 0) {
+                return (int)$bestPlanetId;
             }
         }
 
         // 1. Prefer moon if available
-        $moons = $empire->getMoons();
-        if (!empty($moons)) {
-            $moonIds = array_keys($moons);
+        if (!empty($allMoons)) {
+            $moonIds = array_keys($allMoons);
             return $moonIds[0];
         }
 
@@ -155,8 +198,8 @@ class BotStagingPlanner
                 }
             }
         } else {
-            // Si el objetivo está indefenso o la inteligencia aún no reporta defensores, pero la FOB ya cuenta con guarnición respetable (>= 5,000 naves de combate), no saturar en despliegues
-            if (!empty($effectiveFobFleet) && array_sum($effectiveFobFleet) >= 5000) {
+            // Si el objetivo está indefenso o la inteligencia aún no reporta defensores, pero la FOB ya cuenta con guarnición respetable (>= 5,000 naves de combate), no saturar en despliegues salvo urgencia
+            if (!$isUrgent && !empty($effectiveFobFleet) && array_sum($effectiveFobFleet) >= 5000) {
                 return 0;
             }
         }
@@ -183,6 +226,16 @@ class BotStagingPlanner
         if (!is_array($allBodies) || empty($allBodies)) {
             return 0;
         }
+
+        // Prioriza transferencias en Misión 4 hacia Lunas propias (Luna -> Luna)
+        uasort($allBodies, function($a, $b) use ($target) {
+            $aType = (int)($a['data']['planet_type'] ?? 1);
+            $bType = (int)($b['data']['planet_type'] ?? 1);
+            if ((int)$target['planet_type'] === 3 && $aType !== $bType) {
+                return ($aType === 3) ? -1 : 1;
+            }
+            return 0;
+        });
 
         foreach ($allBodies as $pId => $body) {
             if ($pId == $stagingBaseId) continue;
@@ -295,8 +348,9 @@ class BotStagingPlanner
                 }
             }
 
-            // Minimum squadron size of 25 combat ships to avoid slot exhaustion
-            if (empty($candidateShips) || array_sum($candidateShips) < 25) {
+            // Minimum squadron size of 25 combat ships, or presence of idle recyclers to concentrate
+            $hasRecyclers = (!empty($candidateShips[219]) || !empty($candidateShips[209]));
+            if (empty($candidateShips) || (!$hasRecyclers && array_sum($candidateShips) < 25)) {
                 continue;
             }
 
@@ -341,15 +395,15 @@ class BotStagingPlanner
                         }
                     }
                 }
-                // Include utility ships (transporters/recyclers) if present
-                foreach (array(217, 203, 219, 209) as $sId) {
-                    if (!empty($candidateShips[$sId]) && empty($selectedShips[$sId])) {
+                // Always concentrate idle recyclers & utility ships to the FOB
+                foreach (array(219, 209, 217, 203) as $sId) {
+                    if (!empty($candidateShips[$sId])) {
                         $selectedShips[$sId] = $candidateShips[$sId];
                     }
                 }
             }
 
-            if (empty($selectedShips) || array_sum($selectedShips) < 25) {
+            if (empty($selectedShips) || (!$hasRecyclers && array_sum($selectedShips) < 25)) {
                 $selectedShips = $candidateShips;
             }
 
@@ -389,7 +443,7 @@ class BotStagingPlanner
                             $scaled[$sId] = $nCnt;
                         }
                     }
-                    if (!empty($scaled) && array_sum($scaled) >= 25) {
+                    if (!empty($scaled) && ($hasRecyclers || array_sum($scaled) >= 25)) {
                         $selectedShips = $scaled;
                         $fleetSpeed = FleetFunctions::GetFleetMaxSpeed($selectedShips, $this->ctx->user);
                         for ($spd = $maxSpdCandidate; $spd >= 1; $spd--) {
@@ -405,7 +459,7 @@ class BotStagingPlanner
                 }
             }
 
-            if ($chosenSpeed <= 0 || empty($selectedShips) || array_sum($selectedShips) < 25) {
+            if ($chosenSpeed <= 0 || empty($selectedShips) || (!$hasRecyclers && array_sum($selectedShips) < 25)) {
                 continue;
             }
 

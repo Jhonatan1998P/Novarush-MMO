@@ -418,6 +418,8 @@ class BotForcePlanner
      */
     public function getConstructibleBatch(array $pData, array $categoryCredits, $unitId, $queuedJobs, $maxAllowedSlots, $queueRemainingSec, $maxHangarDuration, $batchTimeTarget, $lockedDefRes = 0, $isEmergency = false, $lockedDefAmount = 0.0)
     {
+        global $pricelist;
+
         if ($this->isUnitInQueue($pData, $unitId)) {
             return 0;
         }
@@ -436,6 +438,38 @@ class BotForcePlanner
 
         $triMax = $this->calculateTriResourceMaxUnits($pData, $categoryCredits, $unitId, $lockedDefRes, $lockedDefAmount);
         $maxConstructible = BuildFunctions::getMaxConstructibleElements($this->ctx->user, $pData, $unitId);
+
+        // Si el límite por créditos virtuales es inferior a lo físicamente construible, intentar swap interno antes de truncar
+        if ($triMax < $maxConstructible && isset($this->ctx->budgetManager) && !empty($pData['id'])) {
+            $catName = ($unitId >= 400 && $unitId <= 599) ? 'defense' : 'fleet';
+            $pId = (int)$pData['id'];
+            $costM = isset($pricelist[$unitId]['cost'][901]) ? (float)$pricelist[$unitId]['cost'][901] : 0.0;
+            $costC = isset($pricelist[$unitId]['cost'][902]) ? (float)$pricelist[$unitId]['cost'][902] : 0.0;
+            $costD = isset($pricelist[$unitId]['cost'][903]) ? (float)$pricelist[$unitId]['cost'][903] : 0.0;
+
+            $unitTimeEst = max(0.001, (float)BuildFunctions::getBuildingTime($this->ctx->user, $pData, $unitId));
+            $availQueueSecEst = max(0, $maxHangarDuration - $queueRemainingSec);
+            $maxByQueueCapEst = (int)floor($availQueueSecEst / $unitTimeEst);
+            $targetUnits = $isEmergency ? $maxConstructible : min($maxConstructible, max(1, $maxByQueueCapEst));
+
+            if ($targetUnits > $triMax) {
+                $neededRes = array(
+                    901 => $costM * $targetUnits,
+                    902 => $costC * $targetUnits,
+                    903 => $costD * $targetUnits,
+                );
+                if ($this->ctx->budgetManager->tryInternalBucketSwap($pId, $catName, $neededRes)) {
+                    $refreshedCredits = ($catName === 'fleet')
+                        ? $this->ctx->budgetManager->getPlanetFleetCredits($pId)
+                        : $this->ctx->budgetManager->getPlanetDefenseCredits($pId);
+                    $categoryCredits['metal']     = max((float)($categoryCredits['metal'] ?? 0.0), (float)($refreshedCredits['metal'] ?? 0.0));
+                    $categoryCredits['crystal']   = max((float)($categoryCredits['crystal'] ?? 0.0), (float)($refreshedCredits['crystal'] ?? 0.0));
+                    $categoryCredits['deuterium'] = max((float)($categoryCredits['deuterium'] ?? 0.0), (float)($refreshedCredits['deuterium'] ?? 0.0));
+                    $triMax = $this->calculateTriResourceMaxUnits($pData, $categoryCredits, $unitId, $lockedDefRes, $lockedDefAmount);
+                }
+            }
+        }
+
         $count = min($triMax, $maxConstructible);
         if ($count <= 0) {
             return 0;
@@ -648,6 +682,30 @@ class BotForcePlanner
             return $recruited;
         }
 
+        // Evaluar capacidad de recicladores vs flota militar en todo el imperio
+        $empireMilMSE = 0.0;
+        $empireRecCap = 0.0;
+        foreach ($allBodies as $b) {
+            $bd = $b['data'];
+            $c209 = isset($bd[$resource[209]]) ? (int)$bd[$resource[209]] : 0;
+            $c219 = isset($bd[$resource[219]]) ? (int)$bd[$resource[219]] : 0;
+            $empireRecCap += ($c219 * 200000000.0) + ($c209 * 20000.0);
+
+            if (!empty($reslist['fleet'])) {
+                foreach ($reslist['fleet'] as $shipId) {
+                    if (in_array($shipId, array(202, 203, 208, 209, 210, 212, 217, 219, 233))) {
+                        continue;
+                    }
+                    $sc = isset($bd[$resource[$shipId]]) ? (int)$bd[$resource[$shipId]] : 0;
+                    if ($sc > 0) {
+                        $shipMSE = BotEconomyValuator::getElementPriceMSE($shipId);
+                        $empireMilMSE += ($sc * $shipMSE);
+                    }
+                }
+            }
+        }
+        $needRecyclerBoost = ($empireMilMSE > 0 && ($empireRecCap / $empireMilMSE) < 0.35);
+
         foreach ($allBodies as $pId => $body) {
             $pData = $body['data'];
 
@@ -748,9 +806,36 @@ class BotForcePlanner
                 $canBuild502 = BuildFunctions::isTechnologieAccessible($this->ctx->user, $pData, 502, array());
                 $canBuild503 = ($siloLevel >= 4 && $impulse >= 1 && BuildFunctions::isTechnologieAccessible($this->ctx->user, $pData, 503, array()));
 
+                $isSiegeInRange = false;
+                if ($isSiegeActive) {
+                    $lockedG = isset($this->ctx->botRow['target_galaxy']) ? (int)$this->ctx->botRow['target_galaxy'] : 0;
+                    $lockedS = isset($this->ctx->botRow['target_system']) ? (int)$this->ctx->botRow['target_system'] : 0;
+                    $mipRange = FleetFunctions::getMissileRange($impulse);
+                    if ($lockedG === (int)$pData['galaxy'] && abs($lockedS - (int)$pData['system']) <= $mipRange) {
+                        $isSiegeInRange = true;
+                    }
+                }
+
+                $pers = isset($this->ctx->personality->name) ? $this->ctx->personality->name : 'balanced';
+
                 if ($canBuild502 && $canBuild503) {
-                    $target502 = (int)floor($totalSiloMax * 0.60);
-                    $target503 = (int)floor($totalSiloMax * 0.40);
+                    if ($isSiegeInRange) {
+                        // 30% ABM / 70% MIP during active siege in range
+                        $target502 = (int)floor($totalSiloMax * 0.30);
+                        $target503 = (int)floor($totalSiloMax * 0.70);
+                    } elseif ($pers === 'turtle' || $pers === 'miner' || $pers === BotPersonality::DEFENSIVE || $pers === BotPersonality::ECONOMIC) {
+                        // 85/15 for turtle/miner
+                        $target502 = (int)floor($totalSiloMax * 0.85);
+                        $target503 = (int)floor($totalSiloMax * 0.15);
+                    } elseif ($pers === 'raider' || $pers === 'aggressive' || $pers === BotPersonality::AGGRESSIVE) {
+                        // 50/50 raider
+                        $target502 = (int)floor($totalSiloMax * 0.50);
+                        $target503 = (int)floor($totalSiloMax * 0.50);
+                    } else {
+                        // 70/30 balanced
+                        $target502 = (int)floor($totalSiloMax * 0.70);
+                        $target503 = (int)floor($totalSiloMax * 0.30);
+                    }
                 } elseif ($canBuild502) {
                     $target502 = $totalSiloMax;
                     $target503 = 0;
@@ -967,13 +1052,16 @@ class BotForcePlanner
                     $unitRecycler    = BuildFunctions::isTechnologieAccessible($this->ctx->user, $pData, 219, array()) ? 219 : (BuildFunctions::isTechnologieAccessible($this->ctx->user, $pData, 209, array()) ? 209 : 0);
                     $unitTransporter = BuildFunctions::isTechnologieAccessible($this->ctx->user, $pData, 217, array()) ? 217 : (BuildFunctions::isTechnologieAccessible($this->ctx->user, $pData, 203, array()) ? 203 : (BuildFunctions::isTechnologieAccessible($this->ctx->user, $pData, 202, array()) ? 202 : 0));
 
+                    $recShare = ($needRecyclerBoost) ? 0.150 : 0.025;
+                    $otherScale = (1.0 - $recShare) / 0.975;
+
                     $categoryConfigs = array(
-                        'heavy'       => array('unit' => $unitHeavy,       'share' => 0.200, 'priority' => 1),
-                        'medium'      => array('unit' => $unitMedium,      'share' => 0.250, 'priority' => 2),
-                        'support'     => array('unit' => $unitSupport,     'share' => 0.300, 'priority' => 3),
-                        'fodder'      => array('unit' => $unitFodder,      'share' => 0.200, 'priority' => 4),
-                        'recycler'    => array('unit' => $unitRecycler,    'share' => 0.025, 'priority' => 5),
-                        'transporter' => array('unit' => $unitTransporter, 'share' => 0.025, 'priority' => 6),
+                        'heavy'       => array('unit' => $unitHeavy,       'share' => 0.200 * $otherScale, 'priority' => 1),
+                        'medium'      => array('unit' => $unitMedium,      'share' => 0.250 * $otherScale, 'priority' => 2),
+                        'support'     => array('unit' => $unitSupport,     'share' => 0.300 * $otherScale, 'priority' => 3),
+                        'fodder'      => array('unit' => $unitFodder,      'share' => 0.200 * $otherScale, 'priority' => 4),
+                        'recycler'    => array('unit' => $unitRecycler,    'share' => $recShare,           'priority' => 5),
+                        'transporter' => array('unit' => $unitTransporter, 'share' => 0.025 * $otherScale, 'priority' => 6),
                     );
 
                     // Agrupar unidades coincidentes para no duplicar slots de cola en el hangar

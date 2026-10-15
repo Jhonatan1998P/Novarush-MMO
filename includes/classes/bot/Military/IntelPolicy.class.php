@@ -38,7 +38,7 @@ class BotIntelPolicy
 
         // Helper to locate best origin with probes for a specific target (minimizing flight distance)
         // Helper to locate best origin with probes for a specific target (minimizing flight distance)
-        $findOriginWithProbes = function($targetGalaxy, $targetSystem, $minProbes = 30) use (&$allEmpirePlanets, $basePlanet, $resource) {
+        $findOriginWithProbes = function($targetGalaxy, $targetSystem, $minProbes = 3) use (&$allEmpirePlanets, $basePlanet, $resource) {
             $bestBodyId = null;
             $bestProbes = 0;
             $minDist = PHP_INT_MAX;
@@ -150,10 +150,10 @@ class BotIntelPolicy
 
                     $targetKey = "{$lockedGalaxy}:{$lockedSystem}:{$lockedPlanet}";
                     if (!isset($activeSpyMap[$targetKey])) {
-                        $origin = $findOriginWithProbes($lockedGalaxy, $lockedSystem, 30);
+                        $origin = $findOriginWithProbes($lockedGalaxy, $lockedSystem, 3);
                         if (!empty($origin)) {
-                            // Tactical probe scaling: Always send at least 30 spy probes as mandated
-                            $probeCount = min($origin['available'], max(30, (int)round($this->ctx->personality->aggressionLevel * 30)));
+                            // Tactical probe scaling via BotWarfareDoctrine v3.4
+                            $probeCount = $this->calculateProbesToSend($lockedIntel, $origin['available']);
 
                             if ($probeCount > 0) {
                                 $fleet = array(210 => $probeCount);
@@ -212,36 +212,38 @@ class BotIntelPolicy
                     if (!isset($activeSpyMap[$targetKey])) {
                         $preIntel = $world->intel->getIntel($tgG, $tgS, $tgP, 1, 0.08); // 5 min freshness
                         if ($preIntel === null || empty($preIntel['defense_scouted'])) {
-                            $origin = $findOriginWithProbes($tgG, $tgS, 30);
+                            $origin = $findOriginWithProbes($tgG, $tgS, 3);
                             if (!empty($origin) && $origin['available'] > 0) {
-                                $pCount = min($origin['available'], max(30, (int)round($this->ctx->personality->aggressionLevel * 30)));
-                                $fArray = array(210 => $pCount);
-                                $ok = $this->gateway->launchFleet(
-                                    $fArray,
-                                    6, // Mission 6: Espionage
-                                    $origin['id'],
-                                    (int)$inAtt['fleet_end_id'],
-                                    (int)$inAtt['fleet_target_owner'],
-                                    $tgG,
-                                    $tgS,
-                                    $tgP,
-                                    1,
-                                    array(),
-                                    10
-                                );
-                                if ($ok) {
-                                    $scouted++;
-                                    $activeSpyMap[$targetKey] = true;
-                                    if (isset($allEmpirePlanets[$origin['id']]['data'][$resource[210]])) {
-                                        $allEmpirePlanets[$origin['id']]['data'][$resource[210]] -= $pCount;
-                                    }
-                                    $this->ctx->decisionLog->record(
-                                        'pre_impact_reconnaissance',
-                                        "Pre-impact tactical re-espionage dispatched from colony #{$origin['id']} to [{$tgG}:{$tgS}:{$tgP}] ({$pCount} probes, T-minus {$remTime}s) to confirm target status.",
-                                        array('target' => "{$tgG}:{$tgS}:{$tgP}", 'probes' => $pCount, 'rem_time' => $remTime, 'origin' => $origin['id']),
-                                        "spy_preimpact_{$tgG}_{$tgS}_{$tgP}",
-                                        4000.0
+                                $pCount = $this->calculateProbesToSend($preIntel, $origin['available']);
+                                if ($pCount > 0) {
+                                    $fArray = array(210 => $pCount);
+                                    $ok = $this->gateway->launchFleet(
+                                        $fArray,
+                                        6, // Mission 6: Espionage
+                                        $origin['id'],
+                                        (int)$inAtt['fleet_end_id'],
+                                        (int)$inAtt['fleet_target_owner'],
+                                        $tgG,
+                                        $tgS,
+                                        $tgP,
+                                        1,
+                                        array(),
+                                        10
                                     );
+                                    if ($ok) {
+                                        $scouted++;
+                                        $activeSpyMap[$targetKey] = true;
+                                        if (isset($allEmpirePlanets[$origin['id']]['data'][$resource[210]])) {
+                                            $allEmpirePlanets[$origin['id']]['data'][$resource[210]] -= $pCount;
+                                        }
+                                        $this->ctx->decisionLog->record(
+                                            'pre_impact_reconnaissance',
+                                            "Pre-impact tactical re-espionage dispatched from colony #{$origin['id']} to [{$tgG}:{$tgS}:{$tgP}] ({$pCount} probes, T-minus {$remTime}s) to confirm target status.",
+                                            array('target' => "{$tgG}:{$tgS}:{$tgP}", 'probes' => $pCount, 'rem_time' => $remTime, 'origin' => $origin['id']),
+                                            "spy_preimpact_{$tgG}_{$tgS}_{$tgP}",
+                                            4000.0
+                                        );
+                                    }
                                 }
                             }
                         }
@@ -288,18 +290,13 @@ class BotIntelPolicy
                 continue;
             }
 
-            $origin = $findOriginWithProbes((int)$t['galaxy'], (int)$t['system'], 30);
+            $origin = $findOriginWithProbes((int)$t['galaxy'], (int)$t['system'], 3);
             if (empty($origin) || $origin['available'] <= 0) {
                 break;
             }
 
-            // Probes per mission: Always at least 30 spy probes as mandated
-            $isHeavyRecon = isset($entry['category']) && $entry['category'] === 'recon_heavy';
-            if ($isHeavyRecon) {
-                $probeCount = min($origin['available'], max(30, (int)round($this->ctx->personality->aggressionLevel * 35)));
-            } else {
-                $probeCount = min($origin['available'], max(30, (int)round($this->ctx->personality->aggressionLevel * 30)));
-            }
+            // Probes per mission: Sized via BotWarfareDoctrine v3.4
+            $probeCount = $this->calculateProbesToSend($intel, $origin['available']);
             if ($probeCount <= 0) break;
 
             $fleet = array(210 => $probeCount);
@@ -340,5 +337,39 @@ class BotIntelPolicy
         }
 
         return $scouted;
+    }
+
+    /**
+     * Calcula la cantidad óptima de sondas de espionaje respetando BotWarfareDoctrine v3.4:
+     * - Base: min(getMaxSpyProbes(), max(3, pow(max(0, defSpyTech - atkSpyTech) + 3, 2)))
+     * - Si el último espionaje en uni1_bot_intel no vio defensas o tecnologías, duplica las sondas hasta getMaxSpyProbes()
+     *
+     * @param array|null $intel
+     * @param int $availableProbes
+     * @return int
+     */
+    public function calculateProbesToSend($intel = null, $availableProbes = PHP_INT_MAX)
+    {
+        $atkSpyTech = isset($this->ctx->user['spy_tech']) ? (int)$this->ctx->user['spy_tech'] : 0;
+        $defSpyTech = 0;
+        if (is_array($intel) && !empty($intel['techs'][106])) {
+            $defSpyTech = (int)$intel['techs'][106];
+        } elseif (is_numeric($intel)) {
+            $defSpyTech = (int)$intel;
+        }
+
+        $diff = max(0, $defSpyTech - $atkSpyTech);
+        $calcProbes = max(3, (int)pow($diff + 3, 2));
+
+        if (is_array($intel) && (empty($intel['defense_scouted']) || empty($intel['techs_scouted']) || !empty($intel['incomplete_intel']))) {
+            $calcProbes *= 2;
+        }
+
+        $maxProbes = (isset($this->ctx->difficulty) && method_exists($this->ctx->difficulty, 'getMaxSpyProbes')) 
+            ? (int)$this->ctx->difficulty->getMaxSpyProbes() 
+            : 50;
+
+        $probeCount = min($maxProbes, $calcProbes);
+        return min((int)$availableProbes, $probeCount);
     }
 }

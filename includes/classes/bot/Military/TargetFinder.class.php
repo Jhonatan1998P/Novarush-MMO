@@ -144,13 +144,108 @@ class BotTargetFinder
             }
         }
 
+        // Deconflicción: Excluye objetivos con target_type = 'siege' bloqueados por otro bot activo en las últimas 6 horas
+        $otherBotSieges = $db->select("SELECT target_galaxy, target_system, target_planet, target_type, target_lock_time 
+            FROM " . DB_PREFIX . "bots 
+            WHERE bot_id != :selfBotId 
+              AND is_active = 1 
+              AND target_type = 'siege' 
+              AND target_lock_time > :lockExpire;", array(
+            ':selfBotId'  => $this->ctx->botId,
+            ':lockExpire' => TIMESTAMP - 21600
+        ));
+        $siegeLockedMap = array();
+        if (is_array($otherBotSieges)) {
+            foreach ($otherBotSieges as $obs) {
+                $siegeLockedMap[(int)$obs['target_galaxy'] . ':' . (int)$obs['target_system'] . ':' . (int)$obs['target_planet']] = true;
+            }
+        }
+
+        // Monitoreo de flotas atacantes en vuelo (para descuento de botín pow(0.5, inFlightAttacks))
+        $inFlightRows = $db->select("SELECT fleet_end_galaxy, fleet_end_system, fleet_end_planet, fleet_end_type, COUNT(*) as cnt 
+            FROM %%FLEETS%% 
+            WHERE fleet_mission = 1 AND fleet_mess = 0 
+            GROUP BY fleet_end_galaxy, fleet_end_system, fleet_end_planet, fleet_end_type;");
+        $inFlightMap = array();
+        if (is_array($inFlightRows)) {
+            foreach ($inFlightRows as $ifr) {
+                $inFlightMap[(int)$ifr['fleet_end_galaxy'] . ':' . (int)$ifr['fleet_end_system'] . ':' . (int)$ifr['fleet_end_planet'] . ':' . (int)$ifr['fleet_end_type']] = (int)$ifr['cnt'];
+            }
+        }
+
+        // Uso Ofensivo de Sensor Phalanx (ID 42)
+        $phalanxPriorityTargets = array();
+        if (method_exists($this->ctx->difficulty, 'canUseOffensivePhalanx') && $this->ctx->difficulty->canUseOffensivePhalanx()) {
+            if ($world !== null && isset($world->empire)) {
+                foreach ($world->empire->getAllBodies() as $body) {
+                    $bData = isset($body['data']) ? $body['data'] : $body;
+                    $bType = (int)($bData['planet_type'] ?? 1);
+                    if ($bType !== 3) continue; // Requiere Luna propia
+
+                    $phalanxLvl = isset($bData[$resource[42]]) ? (int)$bData[$resource[42]] : 0;
+                    $deutStock  = isset($bData['deuterium']) ? (float)$bData['deuterium'] : 0.0;
+
+                    if ($phalanxLvl > 0 && $deutStock >= 25000.0) {
+                        $range = ($phalanxLvl == 1) ? 1 : max(0, pow($phalanxLvl, 2) - 1);
+                        $mGalaxy = (int)$bData['galaxy'];
+                        $mSystem = (int)$bData['system'];
+                        $minSys  = max(1, $mSystem - $range);
+                        $maxSys  = min(500, $mSystem + $range);
+
+                        $returningFleets = $db->select("SELECT fleet_start_galaxy, fleet_start_system, fleet_start_planet, fleet_start_type, fleet_array, fleet_end_time 
+                            FROM %%FLEETS%% 
+                            WHERE fleet_mission != 6 
+                              AND fleet_mess = 1 
+                              AND fleet_start_type = 1 
+                              AND fleet_start_galaxy = :g 
+                              AND fleet_start_system BETWEEN :minS AND :maxS 
+                              AND fleet_owner != :botId 
+                              AND fleet_target_owner != :botId2 
+                            LIMIT 10;", array(
+                            ':g'      => $mGalaxy,
+                            ':minS'   => $minSys,
+                            ':maxS'   => $maxSys,
+                            ':botId'  => $this->ctx->botId,
+                            ':botId2' => $this->ctx->botId
+                        ));
+
+                        if (!empty($returningFleets)) {
+                            // Deducción canónica de 5,000 de deuterio por escaneo de Phalanx
+                            $db->update("UPDATE %%PLANETS%% SET deuterium = GREATEST(0, deuterium - 5000) WHERE id = :moonId;", array(
+                                ':moonId' => (int)$bData['id']
+                            ));
+                            if (isset($body['data']['deuterium'])) {
+                                $body['data']['deuterium'] -= 5000.0;
+                            }
+
+                            foreach ($returningFleets as $rf) {
+                                $rfKey = (int)$rf['fleet_start_galaxy'] . ':' . (int)$rf['fleet_start_system'] . ':' . (int)$rf['fleet_start_planet'] . ':' . (int)$rf['fleet_start_type'];
+                                $phalanxPriorityTargets[$rfKey] = array(
+                                    'returning_at' => (int)$rf['fleet_end_time'],
+                                    'fleet_array'  => $rf['fleet_array']
+                                );
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         foreach ($planets as $p) {
-            // Deduplicate coordinates
-            $coordKey = "{$p['galaxy']}:{$p['system']}:{$p['planet']}";
+            $pType = isset($p['planet_type']) ? (int)$p['planet_type'] : 1;
+
+            // Deduplicate coordinates including planet_type
+            $coordKey = "{$p['galaxy']}:{$p['system']}:{$p['planet']}:{$pType}";
             if (isset($seenCoords[$coordKey])) {
                 continue;
             }
             $seenCoords[$coordKey] = true;
+
+            // Deconflicción: Excluye objetivos en asedio por otro bot activo
+            $coordBaseKey = "{$p['galaxy']}:{$p['system']}:{$p['planet']}";
+            if (isset($siegeLockedMap[$coordBaseKey])) {
+                continue;
+            }
 
             // Do not target own planets, other bots, vacant slots, or administrator accounts
             if ($p['owner_id'] == $this->ctx->botId || isset($allBotIds[(int)$p['owner_id']]) || $p['owner_id'] <= 0 || (int)$p['owner_id'] === 1 || (!empty($p['authlevel']) && (int)$p['authlevel'] > 0) || strtolower((string)$p['username']) === 'admin') {
@@ -167,6 +262,20 @@ class BotTargetFinder
             // Skip vacation mode
             if (!empty($p['is_vacation'])) {
                 continue;
+            }
+
+            // Detección de Estado de Actividad (BotWarfareDoctrine v3.4):
+            // OFFLINE: Inactividad >= 2700s (45 min)
+            // RECENT: Inactividad entre 900s y 2699s (15–45 min)
+            // ONLINE: Actividad reciente < 900s (< 15 min, estrella (*) activa)
+            $lastActivityTime = max((int)($p['last_update'] ?? 0), (int)($p['onlinetime'] ?? 0), (int)($p['last_fleet_out'] ?? 0));
+            $inactivitySeconds = ($lastActivityTime > 0) ? max(0, TIMESTAMP - $lastActivityTime) : 999999;
+            if ($inactivitySeconds < 900) {
+                $activityStatus = 'ONLINE';
+            } elseif ($inactivitySeconds < 2700) {
+                $activityStatus = 'RECENT';
+            } else {
+                $activityStatus = 'OFFLINE';
             }
 
             // Find closest bot colony to target (candidate FOB)
@@ -190,6 +299,19 @@ class BotTargetFinder
                 }
             }
 
+            // Prioridad Absoluta de Luna como FOB (BotWarfareDoctrine v3.4):
+            // Si la colonia óptima tiene Luna propia en esas mismas coordenadas, asignar la Luna como candidate FOB
+            $allMoons = ($empireOrBase instanceof BotEmpireState) ? $empireOrBase->getMoons() : (($world !== null && isset($world->empire)) ? $world->empire->getMoons() : array());
+            if (!empty($allMoons) && !empty($nearestColony)) {
+                foreach ($allMoons as $mId => $mData) {
+                    if ((int)$mData['galaxy'] === (int)$nearestColony['galaxy'] && (int)$mData['system'] === (int)$nearestColony['system'] && (int)$mData['planet'] === (int)$nearestColony['planet']) {
+                        $nearestColonyId = (int)$mId;
+                        $nearestColony = $mData;
+                        break;
+                    }
+                }
+            }
+
             // Calculate estimated flight duration & roundtrip hours
             $startCoords = array($nearestColony['galaxy'], $nearestColony['system'], $nearestColony['planet']);
             $targetCoords = array($p['galaxy'], $p['system'], $p['planet']);
@@ -198,10 +320,10 @@ class BotTargetFinder
             $flightSecs = FleetFunctions::GetMissionDuration(10, 15000, $realDist, $gameSpeed, $this->ctx->user);
             $roundtripHours = max(0.05, (2.0 * $flightSecs) / 3600.0);
 
-            // Fetch intelligence if world model is provided
+            // Fetch intelligence if world model is provided (supporting moons planet_type = 3)
             $intel = null;
             if ($world !== null && isset($world->intel)) {
-                $intel = $world->intel->getIntel($p['galaxy'], $p['system'], (int)$p['planet'], 1, $halfLife);
+                $intel = $world->intel->getIntel($p['galaxy'], $p['system'], (int)$p['planet'], $pType, $halfLife);
             }
 
             $category = 'recon';
@@ -211,10 +333,11 @@ class BotTargetFinder
             $defenseMSE   = 0.0;
             $netEV        = 0.0;
             $valorHora    = 0.0;
+            $inFlightAttacks = isset($inFlightMap[$coordKey]) ? (int)$inFlightMap[$coordKey] : 0;
 
             // Anti-Trap & Anti-Bait Guard:
             // Check recent activity marker '*' (active in last 15 mins)
-            $isRecentlyActive = ($p['activity_marker'] === '*' || (is_numeric($p['activity_marker']) && (int)$p['activity_marker'] < 15));
+            $isRecentlyActive = ($activityStatus === 'ONLINE' || $p['activity_marker'] === '*' || (is_numeric($p['activity_marker']) && (int)$p['activity_marker'] < 15));
 
             if ($intel !== null && $intel['confidence'] >= 0.4) {
                 // 1. Calculate Fleet Value on Ground
@@ -269,6 +392,12 @@ class BotTargetFinder
                 $lootCry   = $projC * 0.50;
                 $lootDeut  = $projD * 0.50;
                 $lootMSE   = BotEconomyValuator::toMSE($lootMetal, $lootCry, $lootDeut);
+
+                // Descuento en vuelo (BotWarfareDoctrine v3.4):
+                // Descuenta el botín terrestre por pow(0.5, $inFlightAttacks) si ya hay flotas atacando ese planeta
+                if ($inFlightAttacks > 0) {
+                    $lootMSE *= pow(0.5, $inFlightAttacks);
+                }
 
                 // 3. Calculate Defense Threat
                 if (!empty($intel['defense']) && is_array($intel['defense'])) {
@@ -672,27 +801,30 @@ class BotTargetFinder
                 // Valor(t) = EV(t) / horasIdaVuelta(t)
                 $valorHora = $netEV / $roundtripHours;
 
-                if (in_array($category, array('fleet_crash', 'siege', 'farming'))) {
+                // Puntuación de Candidatos canónica (BotWarfareDoctrine v3.4):
+                // Ordena la cola de candidatos sumando LootElegibleMSE + (EstimatedFleetDebrisMSE * 1.5)
+                $hasPhalanxPriority = isset($phalanxPriorityTargets[$coordKey]);
+                $phalanxBonus = $hasPhalanxPriority ? 5000000.0 : 0.0;
+                $score = $lootMSE + ($debrisValMSE * 1.5) + $phalanxBonus;
+                if ($score <= 0 && $netEV > 0) {
                     $score = max(50.0, $valorHora);
-                } elseif ($category === 'recon_heavy') {
-                    $score = max(50.0, ($lootMSE / 1000.0) - ($minDistance * 0.5));
-                } else {
-                    $score = max(10.0, ($lootMSE / 5000.0) - ($minDistance * 1.5));
                 }
             } else {
                 $prodMseHourly = 5000.0;
                 // Unexplored target: Score for Reconnaissance based on public galaxy activity markers
+                $hasPhalanxPriority = isset($phalanxPriorityTargets[$coordKey]);
+                $phalanxBonus = $hasPhalanxPriority ? 5000000.0 : 0.0;
                 $category = 'recon';
-                $score = 1000.0;
-                if ($p['activity_marker'] === 'none') {
+                $score = 1000.0 + $phalanxBonus;
+                if ($activityStatus === 'OFFLINE' || $p['activity_marker'] === 'none') {
                     $score += 600.0; // Inactive player
-                } elseif (is_numeric($p['activity_marker']) && $p['activity_marker'] >= 30) {
+                } elseif ($activityStatus === 'RECENT') {
                     $score += 300.0;
                 }
 
                 if ($p['has_debris']) {
                     $pubDebris = $p['debris_metal'] + ($p['debris_crystal'] * 2);
-                    $score += min(600.0, $pubDebris / 100000.0);
+                    $score += ($pubDebris * 1.5);
                 }
                 $score -= ($minDistance * 1.0);
             }
@@ -702,6 +834,10 @@ class BotTargetFinder
                     'target'            => $p,
                     'category'          => $category,
                     'score'             => round($score, 2),
+                    'activity_status'   => $activityStatus,
+                    'inactivity_seconds'=> $inactivitySeconds,
+                    'phalanx_detected'  => $hasPhalanxPriority,
+                    'in_flight_attacks' => $inFlightAttacks,
                     'distance'          => $minDistance,
                     'nearest_colony_id' => $nearestColonyId,
                     'loot_mse'          => $lootMSE,

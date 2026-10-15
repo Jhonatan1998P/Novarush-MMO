@@ -12,6 +12,12 @@ class BotDifficultyProfile
     const NORMAL    = 'normal';
     const HARD      = 'hard';
     const NIGHTMARE = 'nightmare';
+    const TITAN     = 'titan';
+
+    public static function get($name = self::NORMAL)
+    {
+        return new self($name);
+    }
 
     public $name;
     public $reactionDelayMin;       // Seconds delay before reacting to new threat
@@ -64,7 +70,7 @@ class BotDifficultyProfile
                 $this->recyclerStrikeOffset          = mt_rand(1, 15);
                 $this->minRoiRequired                = 0.40;  // Conservador: exige 40% ROI
                 $this->maxOwnFleetLossRatioAllowed  = 0.10;  // Miedo a perder más del 10% de flota
-                $this->minRecyclerCoverageRequired  = 0.30;
+                $this->minRecyclerCoverageRequired  = 0.50;
                 $this->ninjaTrapAllowed             = false; // Siempre huye si pierde
                 $this->antiBaitEnabled              = false; // Ciego ante trampas ninjas (novato)
                 $this->antiBaitWindowSeconds        = 0;
@@ -86,7 +92,7 @@ class BotDifficultyProfile
                 $this->maxHangarQueueDuration        = 86400; // 24 horas
                 $this->batchTimeTarget               = 3600;  // 1 hora
                 $this->maxRegularSlots               = 6;
-                $this->recyclerStrikeOffset          = mt_rand(1, 3);
+                $this->recyclerStrikeOffset          = mt_rand(2, 4);
                 $this->minRoiRequired                = 0.30;  // Exige 30% ROI mínimo
                 $this->maxOwnFleetLossRatioAllowed  = 0.75;  // Acepta desgaste fuerte si es rentable
                 $this->minRecyclerCoverageRequired  = 0.85;  // 85% de reciclaje asegurado
@@ -96,6 +102,7 @@ class BotDifficultyProfile
                 $this->antiBaitAccuracy             = 0.85;  // 85% agudeza de evasión
                 break;
 
+            case self::TITAN:
             case self::NIGHTMARE:
                 $this->reactionDelayMin              = 15;
                 $this->reactionDelayMax              = 35;
@@ -111,7 +118,7 @@ class BotDifficultyProfile
                 $this->maxHangarQueueDuration        = 86400; // 24 horas
                 $this->batchTimeTarget               = 3600;  // 1 hora
                 $this->maxRegularSlots               = 6;
-                $this->recyclerStrikeOffset          = mt_rand(1, 3);
+                $this->recyclerStrikeOffset          = mt_rand(1, 2);
                 $this->minRoiRequired                = 0.30;  // Exige 30% ROI mínimo en gran escala
                 $this->maxOwnFleetLossRatioAllowed  = 1.00;  // Sacrificio mutuo 100% si ganancia neta es positiva
                 $this->minRecyclerCoverageRequired  = 0.95;  // 95% estricto de cobertura de reciclaje
@@ -138,7 +145,7 @@ class BotDifficultyProfile
                 $this->maxHangarQueueDuration        = 86400; // 24 horas
                 $this->batchTimeTarget               = 3600;  // 1 hora
                 $this->maxRegularSlots               = 6;
-                $this->recyclerStrikeOffset          = mt_rand(1, 10);
+                $this->recyclerStrikeOffset          = mt_rand(6, 15);
                 $this->minRoiRequired                = 0.30;  // Exige 30% ROI mínimo
                 $this->maxOwnFleetLossRatioAllowed  = 0.40;  // Tolera hasta 40% de bajas
                 $this->minRecyclerCoverageRequired  = 0.70;  // 70% reciclaje asegurado
@@ -152,38 +159,39 @@ class BotDifficultyProfile
 
     /**
      * Retorna el desfase aleatorio de arribo de recicladores post-impacto según dificultad (Ataque y Defensa):
-     * - Pesadilla / Titán y Difícil: 1 a 3 segundos aleatorios (1..3)
-     * - Normal: 1 a 10 segundos aleatorios (1..10)
-     * - Fácil: 1 a 15 segundos aleatorios (1..15)
+     * - Pesadilla / Titán: 1 a 2 segundos
+     * - Difícil: 2 a 4 segundos
+     * - Normal: 6 a 15 segundos
+     * - Fácil: 15 a 40 segundos
      *
      * @return int
      */
     public function getRecyclerOffset()
     {
-        switch ($this->name) {
-            case self::NIGHTMARE:
-            case 'titan':
-            case 'titán':
-            case self::HARD:
-                return mt_rand(1, 3);
-
-            case self::EASY:
-                return mt_rand(1, 15);
-
-            case self::NORMAL:
-            default:
-                return mt_rand(1, 10);
-        }
+        return $this->getRecyclerStrikeOffset();
     }
 
     /**
      * Retorna el desfase de reciclaje ofensivo post-impacto.
+     * Easy: 15..40, Normal: 6..15, Hard: 2..4, Nightmare: 1..2
      *
      * @return int
      */
     public function getRecyclerStrikeOffset()
     {
-        return $this->getRecyclerOffset();
+        switch ($this->name) {
+            case self::EASY:
+                return mt_rand(15, 40);
+            case self::HARD:
+                return mt_rand(2, 4);
+            case self::NIGHTMARE:
+            case 'titan':
+            case 'titán':
+                return mt_rand(1, 2);
+            case self::NORMAL:
+            default:
+                return mt_rand(6, 15);
+        }
     }
 
     /**
@@ -193,7 +201,208 @@ class BotDifficultyProfile
      */
     public function getRecyclerDefenseOffset()
     {
-        return $this->getRecyclerOffset();
+        return $this->getRecyclerStrikeOffset();
+    }
+
+    /**
+     * Máximo de sondas de espionaje por misión
+     * Easy: 6, Normal: 15, Hard: 30, Nightmare: 50
+     *
+     * @return int
+     */
+    public function getMaxSpyProbes()
+    {
+        switch ($this->name) {
+            case self::EASY:
+                return 6;
+            case self::HARD:
+                return 30;
+            case self::NIGHTMARE:
+            case 'titan':
+            case 'titán':
+                return 50;
+            case self::NORMAL:
+            default:
+                return 15;
+        }
+    }
+
+    /**
+     * Tope estricto de ataques simultáneos en vuelo (máximo 2)
+     * Easy: 1, Normal: 2, Hard: 2, Nightmare: 2
+     *
+     * @return int
+     */
+    public function getMaxConcurrentStrikes()
+    {
+        switch ($this->name) {
+            case self::EASY:
+                return 1;
+            case self::HARD:
+            case self::NIGHTMARE:
+            case 'titan':
+            case 'titán':
+            case self::NORMAL:
+            default:
+                return 2;
+        }
+    }
+
+    /**
+     * Determina si se debe enviar una sonda de seguridad pre-impacto
+     * Easy: false, Normal: (mt_rand(1, 100) <= 50), Hard: true, Nightmare: true
+     *
+     * @return bool
+     */
+    public function shouldSendSafetyProbe()
+    {
+        switch ($this->name) {
+            case self::EASY:
+                return false;
+            case self::HARD:
+            case self::NIGHTMARE:
+            case 'titan':
+            case 'titán':
+                return true;
+            case self::NORMAL:
+            default:
+                return (mt_rand(1, 100) <= 50);
+        }
+    }
+
+    /**
+     * Ventana previa al impacto para espionaje anti-bait (segundos)
+     * Easy: 0, Normal: 180, Hard: 120, Nightmare: 90
+     *
+     * @return int
+     */
+    public function getSafetyProbeWindowSeconds()
+    {
+        switch ($this->name) {
+            case self::EASY:
+                return 0;
+            case self::HARD:
+                return 120;
+            case self::NIGHTMARE:
+            case 'titan':
+            case 'titán':
+                return 90;
+            case self::NORMAL:
+            default:
+                return 180;
+        }
+    }
+
+    /**
+     * Ataques reservados sobre el límite legal de 6 para Caza de Flotas / Asedio
+     * Easy: 0, Normal: 1, Hard: 2, Nightmare: 2
+     *
+     * @return int
+     */
+    public function getBashingFarmReserve()
+    {
+        switch ($this->name) {
+            case self::EASY:
+                return 0;
+            case self::NORMAL:
+                return 1;
+            case self::HARD:
+            case self::NIGHTMARE:
+            case 'titan':
+            case 'titán':
+            default:
+                return 2;
+        }
+    }
+
+    /**
+     * Segundos exactos antes del impacto de la flota para impacto de misiles MIP
+     * Easy: 10..25, Normal: 5..12, Hard: 2..4, Nightmare: 1..2
+     *
+     * @return int
+     */
+    public function getMipImpactLeadSeconds()
+    {
+        switch ($this->name) {
+            case self::EASY:
+                return mt_rand(10, 25);
+            case self::HARD:
+                return mt_rand(2, 4);
+            case self::NIGHTMARE:
+            case 'titan':
+            case 'titán':
+                return mt_rand(1, 2);
+            case self::NORMAL:
+            default:
+                return mt_rand(5, 12);
+        }
+    }
+
+    /**
+     * Rango de retardo en segundos para recall post-impacto enemigo en fleetsave
+     * Easy: [120, 300], Normal: [60, 150], Hard: [25, 60], Nightmare: [10, 30]
+     *
+     * @return int[]
+     */
+    public function getFleetsaveRecallDelayRange()
+    {
+        switch ($this->name) {
+            case self::EASY:
+                return array(120, 300);
+            case self::HARD:
+                return array(25, 60);
+            case self::NIGHTMARE:
+            case 'titan':
+            case 'titán':
+                return array(10, 30);
+            case self::NORMAL:
+            default:
+                return array(60, 150);
+        }
+    }
+
+    /**
+     * Cobertura mínima de recicladores exigida
+     * Easy: 0.50, Normal: 0.70, Hard: 0.85, Nightmare: 0.95
+     *
+     * @return float
+     */
+    public function getMinRecyclerCoverage()
+    {
+        switch ($this->name) {
+            case self::EASY:
+                return 0.50;
+            case self::HARD:
+                return 0.85;
+            case self::NIGHTMARE:
+            case 'titan':
+            case 'titán':
+                return 0.95;
+            case self::NORMAL:
+            default:
+                return 0.70;
+        }
+    }
+
+    /**
+     * Permite uso ofensivo de sensor phalanx
+     * Easy: false, Normal: false, Hard: true, Nightmare: true
+     *
+     * @return bool
+     */
+    public function canUseOffensivePhalanx()
+    {
+        switch ($this->name) {
+            case self::HARD:
+            case self::NIGHTMARE:
+            case 'titan':
+            case 'titán':
+                return true;
+            case self::EASY:
+            case self::NORMAL:
+            default:
+                return false;
+        }
     }
 
     /**
@@ -219,6 +428,62 @@ class BotDifficultyProfile
              'research' => 0.20,
          );
      }
+
+    public function getProbeFormulaMode()
+    {
+        return ($this->name === self::EASY) ? 'flat_minimal' : 'canonical_delta';
+    }
+
+    public function getMaxProbesPerMission()
+    {
+        return $this->getMaxSpyProbes();
+    }
+
+    public function prefersMoonFOB()
+    {
+        return ($this->name === self::HARD || $this->name === self::NIGHTMARE || $this->name === self::TITAN);
+    }
+
+    public function canDoMoonToMoonDeployment()
+    {
+        return ($this->name === self::HARD || $this->name === self::NIGHTMARE || $this->name === self::TITAN);
+    }
+
+    public function canDetectOnlineActivity()
+    {
+        return ($this->name === self::HARD || $this->name === self::NIGHTMARE || $this->name === self::TITAN);
+    }
+
+    public function enforcesWaterfallQueue()
+    {
+        return true;
+    }
+
+    public function canLaunchSurgicalMIP()
+    {
+        return ($this->name === self::NIGHTMARE || $this->name === self::TITAN);
+    }
+
+    public function hasAntiBaitWatchdog()
+    {
+        return ($this->name === self::HARD || $this->name === self::NIGHTMARE || $this->name === self::TITAN);
+    }
+
+    public function getSafetyProbeWindow()
+    {
+        switch ($this->name) {
+            case self::NIGHTMARE:
+            case self::TITAN:
+                return array(180, 240);
+            case self::HARD:
+                return array(120, 180);
+            case self::NORMAL:
+                return array(60, 120);
+            case self::EASY:
+            default:
+                return array(0, 0);
+        }
+    }
 
     public function isTitan()
     {

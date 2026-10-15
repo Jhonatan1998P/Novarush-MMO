@@ -613,7 +613,7 @@ class BotActionGateway
             return false;
         }
 
-        // Check range: Range = (impulse * 2) - 1 systems in same galaxy
+        // Check range: Range = (impulse_motor_tech * 5) - 1 systems in same galaxy
         $range = FleetFunctions::GetMissileRange($impulse);
         if ($targetGalaxy != $startPlanet['galaxy'] || abs($targetSystem - $startPlanet['system']) > $range) {
             return false;

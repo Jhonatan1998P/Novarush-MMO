@@ -132,6 +132,7 @@ class BotEngine
             defense_data LONGTEXT NULL,
             building_data LONGTEXT NULL,
             tech_data LONGTEXT NULL,
+            incomplete_intel TINYINT UNSIGNED NOT NULL DEFAULT 0,
             scanned_at INT NOT NULL,
             UNIQUE KEY idx_bot_target (bot_id, galaxy, system, planet, planet_type),
             KEY idx_bot_scanned (bot_id, scanned_at)
@@ -200,6 +201,8 @@ class BotEngine
                     ADD COLUMN IF NOT EXISTS last_fleet_recruit INT(11) NOT NULL DEFAULT 0,
                     ADD COLUMN IF NOT EXISTS last_defense_recruit INT(11) NOT NULL DEFAULT 0,
                     ADD COLUMN IF NOT EXISTS doctrine_fodder INT(10) UNSIGNED NOT NULL DEFAULT 0;");
+                $pdo->exec("ALTER TABLE " . DB_PREFIX . "bot_intel 
+                    ADD COLUMN IF NOT EXISTS incomplete_intel TINYINT UNSIGNED NOT NULL DEFAULT 0;");
             } catch (Throwable $eCol) {
                 // Ya existen o no soportado IF NOT EXISTS en versión antigua
             }

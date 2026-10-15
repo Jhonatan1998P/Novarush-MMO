@@ -18,16 +18,25 @@ class BotIntelStore
     /**
      * Store new espionage intel
      */
-    public function saveIntel($targetPlanetId, $targetUserId, $galaxy, $system, $planet, $planetType, array $resources, $fleets = null, $defenses = null, $buildings = null, $techs = null)
+    public function saveIntel($targetPlanetId, $targetUserId, $galaxy, $system, $planet, $planetType, array $resources, $fleets = null, $defenses = null, $buildings = null, $techs = null, $probesDestroyed = false)
     {
         $db = Database::get();
 
+        $isIncomplete = ($probesDestroyed || $fleets === null || $defenses === null || $buildings === null || $techs === null) ? 1 : 0;
+
+        if ($probesDestroyed) {
+            $fleets = null;
+            $defenses = null;
+            $buildings = null;
+            $techs = null;
+        }
+
         $sql = "INSERT INTO " . DB_PREFIX . "bot_intel 
                 (bot_id, target_planet_id, target_user_id, galaxy, system, planet, planet_type,
-                 metal, crystal, deuterium, fleet_data, defense_data, building_data, tech_data, scanned_at)
+                 metal, crystal, deuterium, fleet_data, defense_data, building_data, tech_data, scanned_at, incomplete_intel)
                 VALUES 
                 (:bot_id, :target_planet_id, :target_user_id, :galaxy, :system, :planet, :planet_type,
-                 :metal, :crystal, :deuterium, :fleet_data, :defense_data, :building_data, :tech_data, :scanned_at)
+                 :metal, :crystal, :deuterium, :fleet_data, :defense_data, :building_data, :tech_data, :scanned_at, :incomplete_intel)
                 ON DUPLICATE KEY UPDATE
                  target_planet_id = VALUES(target_planet_id),
                  target_user_id   = VALUES(target_user_id),
@@ -38,7 +47,8 @@ class BotIntelStore
                  defense_data     = IF(VALUES(defense_data) IS NOT NULL, VALUES(defense_data), defense_data),
                  building_data    = IF(VALUES(building_data) IS NOT NULL, VALUES(building_data), building_data),
                  tech_data        = IF(VALUES(tech_data) IS NOT NULL, VALUES(tech_data), tech_data),
-                 scanned_at       = VALUES(scanned_at);";
+                 scanned_at       = VALUES(scanned_at),
+                 incomplete_intel = VALUES(incomplete_intel);";
 
         $db->insert($sql, array(
             ':bot_id'           => $this->botId,
@@ -56,6 +66,7 @@ class BotIntelStore
             ':building_data'    => ($buildings !== null && is_array($buildings)) ? json_encode($buildings) : null,
             ':tech_data'        => ($techs !== null && is_array($techs)) ? json_encode($techs) : null,
             ':scanned_at'       => TIMESTAMP,
+            ':incomplete_intel' => $isIncomplete,
         ));
     }
 
@@ -117,6 +128,7 @@ class BotIntelStore
             'defense_scouted'  => ($row['defense_data'] !== null),
             'buildings_scouted'=> ($row['building_data'] !== null),
             'techs_scouted'    => ($row['tech_data'] !== null),
+            'incomplete_intel' => !empty($row['incomplete_intel']),
             'fleet'            => ($row['fleet_data'] !== null && is_array($f = json_decode($row['fleet_data'], true))) ? $f : array(),
             'defense'          => ($row['defense_data'] !== null && is_array($d = json_decode($row['defense_data'], true))) ? $d : array(),
             'buildings'        => ($row['building_data'] !== null && is_array($b = json_decode($row['building_data'], true))) ? $b : array(),

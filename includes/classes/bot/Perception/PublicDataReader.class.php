@@ -57,9 +57,9 @@ class BotPublicDataReader
                 WHERE p.universe = :uni 
                   AND p.galaxy = :galaxy 
                   AND p.system = :system 
-                  AND p.planet_type = 1 
+                  AND p.planet_type IN (1, 3) 
                   AND p.destruyed = 0
-                ORDER BY p.planet ASC;";
+                ORDER BY p.planet ASC, p.planet_type ASC;";
 
         $rows = $db->select($sql, array(
             ':uni'    => (int)$universe,
@@ -92,12 +92,16 @@ class BotPublicDataReader
                 'galaxy'           => (int)$row['galaxy'],
                 'system'           => (int)$row['system'],
                 'planet'           => (int)$row['planet'],
+                'planet_type'      => (int)($row['planet_type'] ?? 1),
                 'has_moon'         => $hasMoon,
                 'has_debris'       => $hasDebris,
                 'debris_metal'     => (float)$row['der_metal'],
                 'debris_crystal'   => (float)$row['der_crystal'],
                 'activity_marker'  => $activityMarker,
                 'activity_minutes' => $activityMinutes,
+                'last_update'      => (int)($row['last_update'] ?? 0),
+                'onlinetime'       => (int)($row['onlinetime'] ?? 0),
+                'last_fleet_out'   => (int)($row['last_fleet_out'] ?? 0),
                 'is_vacation'      => (!empty($row['urlaubs_modus']) || (!empty($row['banaday']) && $row['banaday'] > TIMESTAMP)),
             );
         }
@@ -150,10 +154,10 @@ class BotPublicDataReader
                 LEFT JOIN %%PLANETS%% m ON m.id = p.id_luna
                 LEFT JOIN %%USERS%% u ON u.id = p.id_owner
                 WHERE p.universe = :uni 
-                  AND p.planet_type = 1 
+                  AND p.planet_type IN (1, 3) 
                   AND p.destruyed = 0
                   AND (" . implode(' OR ', $clauses) . ")
-                ORDER BY p.galaxy ASC, p.system ASC, p.planet ASC;";
+                ORDER BY p.galaxy ASC, p.system ASC, p.planet ASC, p.planet_type ASC;";
 
         $rows = $db->select($sql, $params);
 
@@ -181,12 +185,16 @@ class BotPublicDataReader
                 'galaxy'           => (int)$row['galaxy'],
                 'system'           => (int)$row['system'],
                 'planet'           => (int)$row['planet'],
+                'planet_type'      => (int)($row['planet_type'] ?? 1),
                 'has_moon'         => $hasMoon,
                 'has_debris'       => $hasDebris,
                 'debris_metal'     => (float)$row['der_metal'],
                 'debris_crystal'   => (float)$row['der_crystal'],
                 'activity_marker'  => $activityMarker,
                 'activity_minutes' => $activityMinutes,
+                'last_update'      => (int)($row['last_update'] ?? 0),
+                'onlinetime'       => (int)($row['onlinetime'] ?? 0),
+                'last_fleet_out'   => (int)($row['last_fleet_out'] ?? 0),
                 'is_vacation'      => (!empty($row['urlaubs_modus']) || (!empty($row['banaday']) && $row['banaday'] > TIMESTAMP)),
             );
         }
@@ -202,5 +210,26 @@ class BotPublicDataReader
         $db = Database::get();
         $sql = "SELECT * FROM %%STATPOINTS%% WHERE id_owner = :id AND stat_type = 1 LIMIT 1;";
         return $db->selectSingle($sql, array(':id' => (int)$userId));
+    }
+
+    /**
+     * Categorize player activity status according to BotWarfareDoctrine v3.4:
+     * - ONLINE: Inactivity < 900s (< 15 min, star '*' active)
+     * - RECENT: Inactivity between 900s and 2700s (15–45 min)
+     * - OFFLINE: Inactivity >= 2700s (>= 45 min) or unrecorded
+     *
+     * @param int $lastActivityTime
+     * @return string 'ONLINE' | 'RECENT' | 'OFFLINE'
+     */
+    public static function getPlayerStatus($lastActivityTime)
+    {
+        $inactivity = ($lastActivityTime > 0) ? max(0, TIMESTAMP - (int)$lastActivityTime) : 999999;
+        if ($inactivity < 900) {
+            return 'ONLINE';
+        } elseif ($inactivity < 2700) {
+            return 'RECENT';
+        } else {
+            return 'OFFLINE';
+        }
     }
 }

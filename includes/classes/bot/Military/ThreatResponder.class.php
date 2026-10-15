@@ -157,13 +157,17 @@ class BotThreatResponder
                 $balanceEvacuar = 0.0 - ($lootStolenMSE + $defLossAlone);
 
                 $ninjaTrapAllowed = !empty($this->ctx->difficulty->ninjaTrapAllowed);
-                $minRecCoverageReq = isset($this->ctx->difficulty->minRecyclerCoverageRequired) ? (float)$this->ctx->difficulty->minRecyclerCoverageRequired : 0.70;
+                $minRecCoverageReq = method_exists($this->ctx->difficulty, 'getMinRecyclerCoverage')
+                    ? (float)$this->ctx->difficulty->getMinRecyclerCoverage()
+                    : (isset($this->ctx->difficulty->minRecyclerCoverageRequired) ? (float)$this->ctx->difficulty->minRecyclerCoverageRequired : 0.70);
                 $recCoverage = ($totalDebrisMse > 0) ? ($localRecCap / $totalDebrisMse) : 0.0;
+                $ownFleetLossRatio = isset($simCombined['def_loss_pct']) ? (float)$simCombined['def_loss_pct'] : 0.0;
 
-                // Trampa Ninja es viable si pelear en casa arroja un balance superior a evacuar y es económicamente positivo o equilibrado
+                // Trampa Ninja es viable si: BalancePelear > BalanceEvacuar, cobertura de recicladores >= minRecyclerCoverage, y ownFleetLossRatio <= 0.25
                 $isProfitableNinjaTrap = $ninjaTrapAllowed && (
-                    ($balancePelear > $balanceEvacuar && ($balancePelear > 0 || $botWinProb >= 0.50)) &&
-                    ($recCoverage >= $minRecCoverageReq || $localHarvestableDebris >= ($botGarrisonLossesMSE * 0.80))
+                    $balancePelear > $balanceEvacuar &&
+                    $recCoverage >= $minRecCoverageReq &&
+                    $ownFleetLossRatio <= 0.25
                 );
 
                 if ($isProfitableNinjaTrap) {
@@ -244,10 +248,37 @@ class BotThreatResponder
                         );
                         $actionsExecuted++;
                     } else {
-                        // B1 FIX: Defenses hold, but combat warships need evacuation.
-                        // Exclude Mega Recyclers (#219) and standard Recyclers (#209) from evacuation so they harvest local debris!
+                        // Autonomous Bunker: Dejar en tierra ÚNICAMENTE los recicladores exactos para cubrir el 110% de escombros,
+                        // evacuando el resto de la flota de combate y recicladores sobrantes
+                        $expectedDebris = (float)($simDefOnly['debris_metal'] ?? 0) + (float)($simDefOnly['debris_crystal'] ?? 0);
+                        if ($expectedDebris <= 0) {
+                            $attLossMse = (float)($simDefOnly['att_loss_mse'] ?? 0);
+                            if ($attLossMse > 0) {
+                                $expectedDebris = max(50000.0, $attLossMse * 0.70);
+                            }
+                        }
+                        $debrisCoverageTarget = $expectedDebris * 1.10;
+
                         $evacShips = $localFleet;
-                        unset($evacShips[209], $evacShips[219]);
+                        $remainingCapNeeded = $debrisCoverageTarget;
+
+                        // 1. Reservar Mega Recicladores (219, cap 200M)
+                        $avail219 = isset($evacShips[219]) ? (int)$evacShips[219] : 0;
+                        if ($avail219 > 0 && $remainingCapNeeded > 0) {
+                            $keep219 = min($avail219, (int)ceil($remainingCapNeeded / 200000000.0));
+                            $remainingCapNeeded -= ($keep219 * 200000000.0);
+                            $evacShips[219] -= $keep219;
+                            if ($evacShips[219] <= 0) unset($evacShips[219]);
+                        }
+
+                        // 2. Reservar Recicladores estándar (209, cap 20k)
+                        $avail209 = isset($evacShips[209]) ? (int)$evacShips[209] : 0;
+                        if ($avail209 > 0 && $remainingCapNeeded > 0) {
+                            $keep209 = min($avail209, (int)ceil($remainingCapNeeded / 20000.0));
+                            $remainingCapNeeded -= ($keep209 * 20000.0);
+                            $evacShips[209] -= $keep209;
+                            if ($evacShips[209] <= 0) unset($evacShips[209]);
+                        }
 
                         $saved = false;
                         if (!empty($evacShips)) {

@@ -270,7 +270,26 @@ class BotKernel
 
     private static function processScheduledTasks(BotContext $ctx)
     {
-        $dueTasks = BotScheduler::getDueTasks($ctx->botId);
+        $db = Database::get();
+        $now = TIMESTAMP;
+        $lookahead = $now + 32;
+
+        // Query due tasks up to $now, plus precision sync tasks up to $lookahead
+        $dueTasks = $db->select("
+            SELECT * FROM " . DB_PREFIX . "bot_tasks 
+            WHERE bot_id = :bot_id 
+              AND status = 'pending' 
+              AND (
+                  scheduled_at <= :now 
+                  OR (task_type IN ('staggered_mip_salvo', 'staggered_recycler_dispatch', 'staggered_defense_recycle', 'staggered_fleet_assault') AND scheduled_at <= :lookahead)
+              )
+            ORDER BY scheduled_at ASC;
+        ", array(
+            ':bot_id'    => (int)$ctx->botId,
+            ':now'       => (int)$now,
+            ':lookahead' => (int)$lookahead,
+        ));
+
         if (!is_array($dueTasks) || empty($dueTasks)) {
             return;
         }
@@ -278,9 +297,59 @@ class BotKernel
         foreach ($dueTasks as $task) {
             $payload = json_decode($task['payload'], true);
             $taskType = $task['task_type'];
+            $executeAt = (int)$task['scheduled_at'];
+
+            // Micro-wait for 1-2s synchronization precision on timed offensive tasks
+            $syncTypes = array('staggered_mip_salvo', 'staggered_recycler_dispatch', 'staggered_defense_recycle', 'staggered_fleet_assault');
+            if (in_array($taskType, $syncTypes)) {
+                $curTime = time();
+                if ($executeAt > $curTime) {
+                    $waitSec = min(32, $executeAt - $curTime);
+                    if ($waitSec > 0) {
+                        sleep($waitSec);
+                    }
+                }
+            }
 
             if ($taskType === 'fleetsave_recall') {
                 if (is_array($payload) && isset($payload['fleet_id'])) {
+                    $originId = isset($payload['origin_id']) ? (int)$payload['origin_id'] : 0;
+                    // Dynamic Retargeting: Check %%FLEETS%% for hostile attacks (AKS slow or secondary waves) within next 180s
+                    $hostileThreat = null;
+                    if ($originId > 0) {
+                        $hostileThreat = $db->selectSingle("
+                            SELECT MIN(fleet_start_time) as next_impact 
+                            FROM %%FLEETS%% 
+                            WHERE fleet_end_id = :pId 
+                              AND fleet_owner != :botId 
+                              AND fleet_mission IN (1, 2, 9) 
+                              AND fleet_mess = 0 
+                              AND fleet_start_time <= :tLimit;
+                        ", array(
+                            ':pId'    => $originId,
+                            ':botId'  => $ctx->botId,
+                            ':tLimit' => TIMESTAMP + 180
+                        ));
+                    }
+
+                    if (!empty($hostileThreat['next_impact']) && (int)$hostileThreat['next_impact'] > TIMESTAMP) {
+                        $nextImpact = (int)$hostileThreat['next_impact'];
+                        $rescheduleDelay = mt_rand(15, 40);
+                        $newScheduledAt = $nextImpact + $rescheduleDelay;
+                        $db->update("UPDATE " . DB_PREFIX . "bot_tasks SET scheduled_at = :newTime WHERE task_id = :tId;", array(
+                            ':newTime' => $newScheduledAt,
+                            ':tId'     => $task['task_id'],
+                        ));
+                        $ctx->decisionLog->record(
+                            'fleetsave_recall_postponed_aks_slow',
+                            "Retorno de fleetsave pospuesto: hostil en aproximación a colonia #{$originId} (impacto a las " . date('H:i:s', $nextImpact) . "). Reprogramando recall a T+" . ($newScheduledAt - TIMESTAMP) . "s para evitar emboscada AKS.",
+                            array('origin_id' => $originId, 'next_impact' => $nextImpact, 'delay' => $rescheduleDelay),
+                            "recall_defer_{$originId}",
+                            5000.0
+                        );
+                        continue; // Do NOT recall now into hostile ambush!
+                    }
+
                     BotGameServices::recallFleet($ctx->user, $payload['fleet_id']);
                     if (isset($ctx->budgetManager) && !empty($payload['origin_id'])) {
                         $ctx->budgetManager->syncFleetsaveReturn((int)$payload['origin_id'], $payload);
@@ -303,6 +372,18 @@ class BotKernel
                 }
             } elseif ($taskType === 'staggered_fleet_assault' || $taskType === 'staggered_farm_wave') {
                 if (is_array($payload) && isset($payload['fleet'], $payload['fob_id']) && !self::isFleetMovementBlocked($ctx->botId)) {
+                    $maxConcurrent = method_exists($ctx->difficulty, 'getMaxConcurrentStrikes')
+                        ? (int)$ctx->difficulty->getMaxConcurrentStrikes()
+                        : 2;
+                    $curAttRow = $db->selectSingle("SELECT COUNT(*) as cnt FROM %%FLEETS%% WHERE fleet_owner = :bId AND fleet_mission = 1 AND fleet_mess = 0;", array(':bId' => $ctx->botId));
+                    $curAttCount = !empty($curAttRow) ? (int)$curAttRow['cnt'] : 0;
+                    if ($curAttCount >= $maxConcurrent) {
+                        $db->update("UPDATE " . DB_PREFIX . "bot_tasks SET scheduled_at = :newTime WHERE task_id = :tId;", array(
+                            ':newTime' => TIMESTAMP + 30,
+                            ':tId'     => $task['task_id'],
+                        ));
+                        continue;
+                    }
                     $gateway = new BotActionGateway($ctx);
                     $speed = isset($payload['speed']) ? (int)$payload['speed'] : 10;
                     $ok = $gateway->launchFleet(
