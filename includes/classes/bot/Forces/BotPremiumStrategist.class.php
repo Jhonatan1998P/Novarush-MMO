@@ -219,15 +219,11 @@ class BotPremiumStrategist
             return false;
         }
 
-        // Cushion preservation (>= 2000 MO) unless tactical emergency / fleetsave / watchdog
         $isEmergency = ($contextReason === 'tactical_emergency' || 
                         $contextReason === 'fleetsave' || 
                         strpos($contextReason, 'emergency') !== false || 
                         strpos($contextReason, 'watchdog') !== false || 
                         strpos($contextReason, 'strike') !== false);
-        if (!$isEmergency && ($userMO - $costMO) < 2000.0) {
-            return false;
-        }
 
         // Check cooldowns for non-emergencies
         if (isset($this->ctx->budgetManager) && !$isEmergency && $contextReason !== 'warehouse_compression' && $contextReason !== 'high_value_unlock') {
@@ -383,10 +379,11 @@ class BotPremiumStrategist
             return false; // Total MSE physically insufficient
         }
 
+        $fuelReserve = (strpos($contextReason, 'fleet') !== false) ? 15000000.0 : 0.0;
         // Calculate surplus above target cost for each resource
         $surplusM = max(0.0, $curM - $costM);
         $surplusC = max(0.0, $curC - $costC);
-        $surplusD = max(0.0, $curD - $costD);
+        $surplusD = max(0.0, ($curD - $fuelReserve) - $costD);
 
         $surplusMSE = array(
             901 => $surplusM * 1.0,
@@ -426,9 +423,21 @@ class BotPremiumStrategist
             $exchanges[] = array('from_res' => $payResId, 'to_res' => 903, 'from_units' => $costInPay, 'to_units' => $defD);
         }
 
-        $availPay = ($payResId === 901 ? $curM : ($payResId === 902 ? $curC : $curD));
+        $availPay = ($payResId === 901 ? $curM : ($payResId === 902 ? $curC : max(0.0, $curD - $fuelReserve)));
         if ($availPay < $totalPayNeeded - 0.0001) {
             return false; // Insufficient surplus in selected currency
+        }
+
+        // Mass threshold check (>= 60M MSE or strategic tech / high value unlock)
+        $tradedMSE = $totalPayNeeded * ($payResId === 901 ? 1.0 : ($payResId === 902 ? 2.0 : 4.0));
+        $isStrategic = ($isEmergency || 
+                        strpos($contextReason, '123') !== false || 
+                        strpos($contextReason, '124') !== false || 
+                        strpos($contextReason, '199') !== false || 
+                        strpos($contextReason, 'strategic') !== false || 
+                        $contextReason === 'high_value_unlock');
+        if (!$isStrategic && $tradedMSE < 60000000.0 && $costMSE < 60000000.0) {
+            return false;
         }
 
         // Debit 50 MO once
@@ -782,10 +791,11 @@ class BotPremiumStrategist
         global $Charge;
         $chargeRates = !empty($Charge) ? $Charge : self::CHARGE_RATES;
 
-        // Surplus above cost
+        // Surplus above cost (reserving 15M fuel if category is fleet)
+        $fuelReserve = ($category === 'fleet') ? 15000000.0 : 0.0;
         $surplusM = max(0.0, $curM - $costM);
         $surplusC = max(0.0, $curC - $costC);
-        $surplusD = max(0.0, $curD - $costD);
+        $surplusD = max(0.0, ($curD - $fuelReserve) - $costD);
 
         $surplusMSE = array(
             901 => $surplusM * 1.0,
@@ -809,7 +819,7 @@ class BotPremiumStrategist
         if ($payResId !== 902 && $defC > 0.0) $totalPayNeeded += $defC * $chargeRates[$payResId][902];
         if ($payResId !== 903 && $defD > 0.0) $totalPayNeeded += $defD * $chargeRates[$payResId][903];
 
-        $availPay = ($payResId === 901 ? $curM : ($payResId === 902 ? $curC : $curD));
+        $availPay = ($payResId === 901 ? $curM : ($payResId === 902 ? $curC : max(0.0, $curD - $fuelReserve)));
         if ($availPay >= $totalPayNeeded - 0.0001) {
             return array(
                 'exact_delta_trade'  => true,

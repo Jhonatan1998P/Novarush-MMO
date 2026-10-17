@@ -458,8 +458,13 @@ class BotForcePlanner
                     $triMax = $this->calculateTriResourceMaxUnits($pData, $categoryCredits, $unitId, $lockedDefRes, $lockedDefAmount);
                 }
 
-                // Si aún está limitado y el planeta tiene más de 50M de cristal físico pero carece de metal, intentar rebalanceo vía mercader
-                if ($triMax < $targetUnits && (float)($pData['crystal'] ?? 0.0) > 50000000 && class_exists('BotPremiumStrategist')) {
+                // Si aún está limitado y el planeta tiene más de 100M MSE de excedente físico en cualquier recurso, intentar rebalanceo vía mercader
+                $physM = (float)($pData['metal'] ?? 0.0);
+                $physC = (float)($pData['crystal'] ?? 0.0);
+                $physD = max(0.0, (float)($pData['deuterium'] ?? 0.0) - 15000000.0); // 15M fuel reserve
+                $hasMSEExcess = ($physM >= 100000000.0 || (2.0 * $physC) >= 100000000.0 || (4.0 * $physD) >= 100000000.0);
+
+                if ($triMax < $targetUnits && $hasMSEExcess && class_exists('BotPremiumStrategist')) {
                     if (BotPremiumStrategist::tryTraderForCategory($this->ctx, $pId, $catName, $neededRes)) {
                         $pDataRefreshed = $this->ctx->empire ? $this->ctx->empire->getPlanet($pId) : null;
                         if (!empty($pDataRefreshed['data'])) {

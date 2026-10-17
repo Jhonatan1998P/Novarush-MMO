@@ -40,6 +40,18 @@ class BotBudgetManager
         self::$internalBucketSwapsCount = 0;
     }
 
+    public function getMaxSavingsLockEta(array $savingsLock = null)
+    {
+        $lock = $savingsLock ?? $this->savingsLock;
+        if (!empty($lock)) {
+            $elemId = (int)($lock['element_id'] ?? 0);
+            if ($elemId === 123 || $elemId === 124) {
+                return 28800; // 8 hours for imperial strategic research
+            }
+        }
+        return self::MAX_SAVINGS_LOCK_ETA;
+    }
+
     private $ctx;
     private $credits = array();
     private $savingsLock = null;
@@ -324,9 +336,116 @@ class BotBudgetManager
         // Enforce Strict Physical Invariant Reconciliation (Conservation of Virtual Earmarks)
         $this->reconcilePhysicalInvariant($empire, $ratios);
 
+        // Reequilibrio Simétrico Anti-Estancamiento de 3 Recursos entre bolsas locales en RAM
+        $this->rebalanceStagnantBuckets($empire);
+
         $this->credits['last_updated'] = $now;
         $this->lastBudgetTime = $now;
         $this->saveState();
+    }
+
+    /**
+     * Reequilibrio Simétrico Anti-Estancamiento de 3 Recursos entre bolsas en RAM:
+     * Si alguna bolsa local (mines, fleet, defense) tiene algún recurso > 40M MSE
+     * (respetando siempre 15M de Deuterio en 'fleet' para combustible) y dicho recurso
+     * representa más del 70% del MSE total de esa bolsa, transfiere hasta el 65% de
+     * ese recurso excedente hacia las otras bolsas (mines, fleet, research).
+     *
+     * @param BotEmpireState $empire
+     */
+    public function rebalanceStagnantBuckets(BotEmpireState $empire)
+    {
+        $planets = $empire->getPlanets();
+        if (!is_array($planets) || empty($planets)) {
+            return;
+        }
+
+        $localCats = array('mines', 'fleet', 'defense');
+
+        foreach ($planets as $pId => $pEntry) {
+            $pId = (int)$pId;
+            if (!isset($this->credits['planets'][$pId])) {
+                continue;
+            }
+
+            foreach ($localCats as $cat) {
+                if ($this->isCategoryLocked($pId, $cat)) {
+                    continue;
+                }
+
+                $bM = max(0.0, (float)($this->credits['planets'][$pId][$cat]['metal'] ?? 0.0));
+                $bC = max(0.0, (float)($this->credits['planets'][$pId][$cat]['crystal'] ?? 0.0));
+                $bD = max(0.0, (float)($this->credits['planets'][$pId][$cat]['deuterium'] ?? 0.0));
+
+                // Reserva de combustible de 15M si es fleet
+                $availD = ($cat === 'fleet') ? max(0.0, $bD - 15000000.0) : $bD;
+
+                $mseM = $bM * 1.0;
+                $mseC = $bC * 2.0;
+                $mseD = $availD * 4.0;
+                $totBucketMSE = $mseM + $mseC + $mseD;
+
+                if ($totBucketMSE <= 0.0) {
+                    continue;
+                }
+
+                $domKey = null;
+                if ($mseM > 40000000.0 && ($mseM / $totBucketMSE) > 0.70) {
+                    $domKey = 'metal';
+                } elseif ($mseC > 40000000.0 && ($mseC / $totBucketMSE) > 0.70) {
+                    $domKey = 'crystal';
+                } elseif ($mseD > 40000000.0 && ($mseD / $totBucketMSE) > 0.70) {
+                    $domKey = 'deuterium';
+                }
+
+                if ($domKey === null) {
+                    continue;
+                }
+
+                // Transferir 65% del excedente disponible
+                $transferRatio = 0.65;
+                $availUnits = ($domKey === 'deuterium' && $cat === 'fleet') ? $availD : ($domKey === 'metal' ? $bM : ($domKey === 'crystal' ? $bC : $bD));
+                $unitsToTransfer = round($availUnits * $transferRatio, 2);
+
+                if ($unitsToTransfer <= 0.0) {
+                    continue;
+                }
+
+                // Bolsas destinatarias: las otras bolsas locales + research global
+                $targetBuckets = array();
+                foreach ($localCats as $tCat) {
+                    if ($tCat !== $cat && !$this->isCategoryLocked($pId, $tCat)) {
+                        $targetBuckets[] = $tCat;
+                    }
+                }
+                $targetBuckets[] = 'research';
+
+                if (empty($targetBuckets)) {
+                    continue;
+                }
+
+                $sharePerBucket = round($unitsToTransfer / count($targetBuckets), 2);
+                if ($sharePerBucket <= 0.0) {
+                    continue;
+                }
+
+                // Aplicar swap en RAM
+                $this->credits['planets'][$pId][$cat][$domKey] = max(0.0, round($this->credits['planets'][$pId][$cat][$domKey] - $unitsToTransfer, 2));
+
+                foreach ($targetBuckets as $tCat) {
+                    if ($tCat === 'research') {
+                        $this->credits['research'][$domKey] = round((float)($this->credits['research'][$domKey] ?? 0.0) + $sharePerBucket, 2);
+                    } else {
+                        if (!isset($this->credits['planets'][$pId][$tCat])) {
+                            $this->credits['planets'][$pId][$tCat] = array('metal' => 0.0, 'crystal' => 0.0, 'deuterium' => 0.0);
+                        }
+                        $this->credits['planets'][$pId][$tCat][$domKey] = round((float)($this->credits['planets'][$pId][$tCat][$domKey] ?? 0.0) + $sharePerBucket, 2);
+                    }
+                }
+
+                self::$internalBucketSwapsCount++;
+            }
+        }
     }
 
     /**
@@ -556,6 +675,14 @@ class BotBudgetManager
             $this->reconcilePlanetResource($pId, 'crystal', $sumVirtC, $maxLocalC, $capC, $ratios, $localRatioSum);
             $this->reconcilePlanetResource($pId, 'deuterium', $sumVirtD, $maxLocalD, $capD, $ratios, $localRatioSum);
 
+            // Planetas con hangar == 0 no deben retener presupuesto en fleet ni defense
+            global $resource;
+            $curHangar = (int)($pData[$resource[21]] ?? 0);
+            if ($curHangar === 0) {
+                $this->credits['planets'][$pId]['fleet'] = array('metal' => 0.0, 'crystal' => 0.0, 'deuterium' => 0.0);
+                $this->credits['planets'][$pId]['defense'] = array('metal' => 0.0, 'crystal' => 0.0, 'deuterium' => 0.0);
+            }
+
             // Keep last_physical locked to real physical stock
             $this->credits['last_physical'][$pId] = array(
                 'metal'     => $curM,
@@ -567,6 +694,7 @@ class BotBudgetManager
         // Reconcile moons: strictly enforce that virtual moon credits never exceed actual physical stock
         $moons = $empire->getMoons();
         if (is_array($moons)) {
+            global $resource;
             foreach ($moons as $mId => $mEntry) {
                 $mData = $mEntry['data'];
                 $mId   = (int)$mId;
@@ -577,6 +705,15 @@ class BotBudgetManager
                         'fleet'   => array('metal' => 0.0, 'crystal' => 0.0, 'deuterium' => 0.0),
                         'defense' => array('metal' => 0.0, 'crystal' => 0.0, 'deuterium' => 0.0),
                     );
+                }
+
+                $hasGate = ((int)($mData[$resource[43]] ?? 0)) >= 1;
+                $hasPhalanx = ((int)($mData[$resource[42]] ?? 0)) >= 1;
+
+                if ($hasGate && $hasPhalanx) {
+                    // Cero retención en cubeta "mines" ni "defense" en lunas desarrolladas
+                    $this->credits['planets'][$mId]['mines'] = array('metal' => 0.0, 'crystal' => 0.0, 'deuterium' => 0.0);
+                    $this->credits['planets'][$mId]['defense'] = array('metal' => 0.0, 'crystal' => 0.0, 'deuterium' => 0.0);
                 }
 
                 $curM = max(0.0, (float)($mData['metal'] ?? 0.0));
@@ -1282,6 +1419,40 @@ class BotBudgetManager
     public function getDonorSurplusByCategory($planetId, $category, array $planetData)
     {
         $planetId = (int)$planetId;
+        global $resource;
+
+        $isMoon = ((string)($planetData['planet_type'] ?? '1') === '3');
+        if ($isMoon) {
+            $hasGate = ((int)($planetData[$resource[43]] ?? 0)) >= 1;
+            $physM = max(0.0, (float)($planetData['metal'] ?? 0.0));
+            $physC = max(0.0, (float)($planetData['crystal'] ?? 0.0));
+            // Reserva táctica de Phalanx/combustible: 25,000,000
+            $physD = max(0.0, (float)($planetData['deuterium'] ?? 0.0) - 25000000.0);
+
+            if ($hasGate) {
+                return array(
+                    'metal'     => round($physM, 2),
+                    'crystal'   => round($physC, 2),
+                    'deuterium' => round($physD, 2),
+                );
+            }
+            return array(
+                'metal'     => round(max(0.0, $physM - 2000000.0), 2),
+                'crystal'   => round(max(0.0, $physC - 4000000.0), 2),
+                'deuterium' => round($physD, 2),
+            );
+        }
+
+        // Planetas con hangar == 0 exponen todo el cristal y deuterio estancado
+        $curHangar = (int)($planetData[$resource[21]] ?? 0);
+        if ($curHangar === 0) {
+            return array(
+                'metal'     => round(max(0.0, (float)($planetData['metal'] ?? 0.0) - 50000.0), 2),
+                'crystal'   => round(max(0.0, (float)($planetData['crystal'] ?? 0.0) - 30000.0), 2),
+                'deuterium' => round(max(0.0, (float)($planetData['deuterium'] ?? 0.0) - 20000.0), 2),
+            );
+        }
+
         $prodM = max(0.0, (float)($planetData['metal_perhour'] ?? 0.0));
         $prodC = max(0.0, (float)($planetData['crystal_perhour'] ?? 0.0));
         $prodD = max(0.0, (float)($planetData['deuterium_perhour'] ?? 0.0));
@@ -1300,19 +1471,19 @@ class BotBudgetManager
             ? ($this->credits['research'] ?? array())
             : ($this->credits['planets'][$planetId][$category] ?? array());
 
-        // Budget credits available for this category (strictly isolated to the 4 canonical budgets)
-        $catCredits = ($category === 'research')
-            ? ($this->credits['research'] ?? array())
-            : ($this->credits['planets'][$planetId][$category] ?? array());
-
         $budgetAvailM = (float)($catCredits['metal'] ?? 0.0);
         $budgetAvailC = (float)($catCredits['crystal'] ?? 0.0);
         $budgetAvailD = (float)($catCredits['deuterium'] ?? 0.0);
 
+        // Si una bolsa/físico tiene excedente masivo (>40M MSE), exponer el 100% de ese excedente por encima del piso de seguridad
+        $expM = (($physSurplusM * 1.0) > 40000000.0) ? $physSurplusM : min($physSurplusM, $budgetAvailM);
+        $expC = (($physSurplusC * 2.0) > 40000000.0) ? $physSurplusC : min($physSurplusC, $budgetAvailC);
+        $expD = (($physSurplusD * 4.0) > 40000000.0) ? $physSurplusD : min($physSurplusD, $budgetAvailD);
+
         return array(
-            'metal'     => round(min($physSurplusM, $budgetAvailM), 2),
-            'crystal'   => round(min($physSurplusC, $budgetAvailC), 2),
-            'deuterium' => round(min($physSurplusD, $budgetAvailD), 2),
+            'metal'     => round($expM, 2),
+            'crystal'   => round($expC, 2),
+            'deuterium' => round($expD, 2),
         );
     }
 
@@ -1630,7 +1801,8 @@ class BotBudgetManager
         $eta = $this->calculateSafeEta($cost, $stockMap, $prodMap);
 
         // MAX_SAVINGS_LOCK_ETA enforcement: Never lock empire for unreachable targets
-        if ($eta > self::MAX_SAVINGS_LOCK_ETA) {
+        $maxLockEta = $this->getMaxSavingsLockEta(array('element_id' => $elementId));
+        if ($eta > $maxLockEta) {
             if ($empire !== null) {
                 $hasFreeFieldsElsewhere = false;
                 foreach ($empire->getPlanets() as $pCheckId => $pCheck) {
@@ -1677,7 +1849,8 @@ class BotBudgetManager
 
         // Auto-expire lock if it exceeds maximum savings horizon
         $eta = (float)($this->savingsLock['eta_seconds'] ?? 0.0);
-        if ($eta > self::MAX_SAVINGS_LOCK_ETA) {
+        $maxLockEta = $this->getMaxSavingsLockEta($this->savingsLock);
+        if ($eta > $maxLockEta) {
             $this->clearSavingsLock();
             return false;
         }
@@ -1760,12 +1933,13 @@ class BotBudgetManager
             return array('status' => 'invalid_planet');
         }
 
-        // Auto-expire savings lock exceeding MAX_SAVINGS_LOCK_ETA (14400s / 4h)
+        // Auto-expire savings lock exceeding MAX_SAVINGS_LOCK_ETA (14400s / 4h or 28800s for 123/124)
         $currentEta = (float)($this->savingsLock['eta_seconds'] ?? 0.0);
-        if ($currentEta > self::MAX_SAVINGS_LOCK_ETA) {
+        $maxLockEta = $this->getMaxSavingsLockEta($this->savingsLock);
+        if ($currentEta > $maxLockEta) {
             $this->ctx->decisionLog->record(
                 'savings_lock_aborted_eta',
-                "Savings lock aborted: ETA ({$currentEta}s) exceeds MAX_SAVINGS_LOCK_ETA (" . self::MAX_SAVINGS_LOCK_ETA . "s). Unlocking empire.",
+                "Savings lock aborted: ETA ({$currentEta}s) exceeds MAX_SAVINGS_LOCK_ETA ({$maxLockEta}s). Unlocking empire.",
                 $this->savingsLock,
                 'abort_savings_eta',
                 12000.0

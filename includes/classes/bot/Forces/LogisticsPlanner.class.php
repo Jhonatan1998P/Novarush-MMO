@@ -147,10 +147,185 @@ class BotLogisticsPlanner
             }
         }
 
+        $convoysDispatched = 0;
+        $servicedDistinctTargets = array_keys($activeTargetDestinations);
+
+        // 1c. Moon Loot Evacuation Guard:
+        // Evacuate massive loot accumulated on moons (planet_type = 3) to their parent planets
+        $moons = $empire->getMoons();
+        if (!empty($moons) && $availableSlots > 0) {
+            global $resource, $pricelist;
+            $cap217 = isset($pricelist[217]['capacity']) ? (float)$pricelist[217]['capacity'] : 400000000;
+            $cap203 = isset($pricelist[203]['capacity']) ? (float)$pricelist[203]['capacity'] : 25000;
+            $cap202 = isset($pricelist[202]['capacity']) ? (float)$pricelist[202]['capacity'] : 5000;
+
+            foreach ($moons as $mId => $mEntry) {
+                if ($availableSlots <= 0) {
+                    break;
+                }
+                $mData = $mEntry['data'];
+                $physM = (float)($mData['metal'] ?? 0.0);
+                $physC = (float)($mData['crystal'] ?? 0.0);
+                $physD = (float)($mData['deuterium'] ?? 0.0);
+                $mseMC = BotEconomyValuator::toMSE($physM, $physC, 0.0);
+
+                if ($physM > 5000000.0 || $physC > 5000000.0 || $physD > 25000000.0) {
+                    // Find parent planet
+                    $parentPlanet = null;
+                    $parentPlanetId = 0;
+                    foreach ($empire->getPlanets() as $pId => $pEntry) {
+                        if ((int)$pEntry['data']['galaxy'] === (int)$mData['galaxy'] &&
+                            (int)$pEntry['data']['system'] === (int)$mData['system'] &&
+                            (int)$pEntry['data']['planet'] === (int)$mData['planet']) {
+                            $parentPlanet = $pEntry['data'];
+                            $parentPlanetId = (int)$pId;
+                            break;
+                        }
+                    }
+
+                    if ($parentPlanetId <= 0 || empty($parentPlanet)) {
+                        continue;
+                    }
+
+                    // Check if moon or parent already has an active outgoing transport or inbound deploy
+                    if (isset($activeTargetDestinations[$parentPlanetId]) || isset($activeTargetDestinations[$mId])) {
+                        continue;
+                    }
+
+                    $cargos217 = (int)($mData[$resource[217]] ?? 0);
+                    $cargos203 = (int)($mData[$resource[203]] ?? 0);
+                    $cargos202 = (int)($mData[$resource[202]] ?? 0);
+                    $totalMoonCargoCap = ($cargos217 * $cap217) + ($cargos203 * $cap203) + ($cargos202 * $cap202);
+
+                    $evacM = max(0.0, $physM - 100000.0);
+                    $evacC = max(0.0, $physC - 100000.0);
+                    $evacD = max(0.0, $physD - 25000000.0); // Retener 25M Deu para phalanx / reserva segura
+                    $totalToEvac = $evacM + $evacC + $evacD;
+
+                    if ($totalMoonCargoCap > 0 && $totalToEvac > 0) {
+                        // Dispatch Mission 3 (Transport) from moon to parent planet
+                        $takeRatio = min(1.0, $totalMoonCargoCap / $totalToEvac);
+                        $sendM = floor($evacM * $takeRatio);
+                        $sendC = floor($evacC * $takeRatio);
+                        $sendD = floor($evacD * $takeRatio);
+                        $cargoSum = $sendM + $sendC + $sendD;
+
+                        $shipsToSend = array();
+                        $needCap = $cargoSum;
+                        if ($cargos217 > 0 && $needCap > 0) {
+                            $u217 = min($cargos217, (int)ceil($needCap / $cap217));
+                            $shipsToSend[217] = $u217;
+                            $needCap -= ($u217 * $cap217);
+                        }
+                        if ($cargos203 > 0 && $needCap > 0) {
+                            $u203 = min($cargos203, (int)ceil($needCap / $cap203));
+                            $shipsToSend[203] = $u203;
+                            $needCap -= ($u203 * $cap203);
+                        }
+                        if ($cargos202 > 0 && $needCap > 0) {
+                            $u202 = min($cargos202, (int)ceil($needCap / $cap202));
+                            $shipsToSend[202] = $u202;
+                            $needCap -= ($u202 * $cap202);
+                        }
+
+                        if (!empty($shipsToSend)) {
+                            $cargoResources = array(901 => $sendM, 902 => $sendC, 903 => $sendD);
+                            $startTime = 0;
+                            $ok = $this->gateway->launchFleet(
+                                $shipsToSend,
+                                3, // Mission 3: Transport to parent planet
+                                $mId,
+                                $parentPlanetId,
+                                $this->ctx->botId,
+                                (int)$parentPlanet['galaxy'],
+                                (int)$parentPlanet['system'],
+                                (int)$parentPlanet['planet'],
+                                1, // Parent planet_type = 1
+                                $cargoResources,
+                                10,
+                                $startTime
+                            );
+
+                            if ($ok) {
+                                $availableSlots--;
+                                $convoysDispatched++;
+                                $activeTargetDestinations[$parentPlanetId] = true;
+                                $this->ctx->decisionLog->record(
+                                    'moon_loot_evacuation',
+                                    "Evacuación de botín lunar desde luna #{$mId} hacia planeta padre #{$parentPlanetId}: " . number_format($cargoSum) . " recursos (" . number_format($sendM) . "M, " . number_format($sendC) . "C, " . number_format($sendD) . "D)",
+                                    array('moon' => $mId, 'parent' => $parentPlanetId, 'res' => $cargoResources, 'ships' => $shipsToSend),
+                                    "moon_evac_{$mId}_to_{$parentPlanetId}",
+                                    $cargoSum
+                                );
+                                continue;
+                            }
+                        }
+                    } elseif ($totalToEvac > 5000000.0) {
+                        // Moon has no cargos or insufficient, but accumulates > 5M loot to evacuate!
+                        // Dispatch empty cargo ships (Mission 4 Deploy) from parent planet to the moon
+                        $pCargos217 = (int)($parentPlanet[$resource[217]] ?? 0);
+                        $pCargos203 = (int)($parentPlanet[$resource[203]] ?? 0);
+                        $pCargos202 = (int)($parentPlanet[$resource[202]] ?? 0);
+                        $parentCargoCap = ($pCargos217 * $cap217) + ($pCargos203 * $cap203) + ($pCargos202 * $cap202);
+
+                        if ($parentCargoCap > 0) {
+                            $neededCap = $totalToEvac;
+                            $deployShips = array();
+                            if ($pCargos217 > 0 && $neededCap > 0) {
+                                $u217 = min($pCargos217, (int)ceil($neededCap / $cap217));
+                                $deployShips[217] = $u217;
+                                $neededCap -= ($u217 * $cap217);
+                            }
+                            if ($pCargos203 > 0 && $neededCap > 0) {
+                                $u203 = min($pCargos203, (int)ceil($neededCap / $cap203));
+                                $deployShips[203] = $u203;
+                                $neededCap -= ($u203 * $cap203);
+                            }
+                            if ($pCargos202 > 0 && $neededCap > 0) {
+                                $u202 = min($pCargos202, (int)ceil($neededCap / $cap202));
+                                $deployShips[202] = $u202;
+                                $neededCap -= ($u202 * $cap202);
+                            }
+
+                            if (!empty($deployShips)) {
+                                $startTime = 0;
+                                $ok = $this->gateway->launchFleet(
+                                    $deployShips,
+                                    4, // Mission 4: Deploy to moon
+                                    $parentPlanetId,
+                                    $mId,
+                                    $this->ctx->botId,
+                                    (int)$mData['galaxy'],
+                                    (int)$mData['system'],
+                                    (int)$mData['planet'],
+                                    3, // Moon planet_type = 3
+                                    array(),
+                                    10,
+                                    $startTime
+                                );
+                                if ($ok) {
+                                    $availableSlots--;
+                                    $convoysDispatched++;
+                                    $activeTargetDestinations[$mId] = true;
+                                    $this->ctx->decisionLog->record(
+                                        'cargos_deployed_to_moon',
+                                        "Despliegue de cargueros vacíos desde planeta padre #{$parentPlanetId} hacia luna #{$mId} para evacuar botín masivo (" . number_format($mseMC) . " MSE)",
+                                        array('parent' => $parentPlanetId, 'moon' => $mId, 'ships' => $deployShips),
+                                        "deploy_cargos_to_moon_{$mId}",
+                                        $mseMC
+                                    );
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         // 2. Collect and rank empire-wide demands by strict priority
         $demands = $this->collectEmpireDemands($empire, $world, $hubPlanetId);
         if (empty($demands)) {
-            return 0;
+            return $convoysDispatched;
         }
 
         // Sort demands: Priority 1 (Military) -> Priority 2 (Recruitment) -> Priority 3 (Economy/Tech)
@@ -161,8 +336,7 @@ class BotLogisticsPlanner
             return (float)($b['urgency_score'] ?? 0) <=> (float)($a['urgency_score'] ?? 0);
         });
 
-        $convoysDispatched = 0;
-        $servicedDistinctTargets = array_keys($activeTargetDestinations);
+        $servicedDistinctTargets = array_unique(array_merge($servicedDistinctTargets, array_keys($activeTargetDestinations)));
 
         // 3. Process demands sequentially
         foreach ($demands as $demand) {
@@ -424,14 +598,14 @@ class BotLogisticsPlanner
     public function estimateSurplusBalancingDemands(BotEmpireState $empire)
     {
         $demands = array();
-        $planets = $empire->getPlanets();
-        if (count($planets) < 2) {
+        $allBodies = $empire->getAllBodies();
+        if (count($allBodies) < 2) {
             return $demands;
         }
 
         $hasMajorSurplus = false;
-        foreach ($planets as $p) {
-            $pData = $p['data'];
+        foreach ($allBodies as $b) {
+            $pData = $b['data'];
             $stockMSE = BotEconomyValuator::toMSE(
                 (float)($pData['metal'] ?? 0),
                 (float)($pData['crystal'] ?? 0),
@@ -447,6 +621,7 @@ class BotLogisticsPlanner
             return $demands;
         }
 
+        $planets = $empire->getPlanets();
         foreach ($planets as $pId => $p) {
             $pData = $p['data'];
             $stockMSE = BotEconomyValuator::toMSE(
@@ -624,6 +799,7 @@ class BotLogisticsPlanner
         $allBodies = $empire->getAllBodies();
         foreach ($allBodies as $bId => $body) {
             $pData = $body['data'];
+            if ((string)($pData['planet_type'] ?? '1') === '3') continue;
             $siloLevel = isset($pData[$resource[44]]) ? (int)$pData[$resource[44]] : 0;
             if ($siloLevel < 4) continue;
 
@@ -667,6 +843,7 @@ class BotLogisticsPlanner
         global $resource, $pricelist;
 
         foreach ($allBodies as $bId => $body) {
+            if ((string)($body['data']['planet_type'] ?? '1') === '3') continue;
             $queuedJobs = !empty($body['hangar_queue']) ? count($body['hangar_queue']) : 0;
             if ($queuedJobs >= 5) continue;
 
@@ -810,60 +987,58 @@ class BotLogisticsPlanner
             $curHangar   = (int)($mData[$resource[21]] ?? 0);
 
             // 1. Phalanx Deuterium Buffer (500,000 D for scans)
-            if ($curPhalanx >= 1) {
-                $curDeut = (float)($mData['deuterium'] ?? 0.0);
-                if ($curDeut < 500000.0) {
-                    $needD = 500000.0 - $curDeut;
-                    $demands[] = array(
-                        'target_planet_id' => $mId,
-                        'type'             => 'military_fuel',
-                        'priority'         => 1, // High priority military fuel for Phalanx
-                        'urgency_score'    => 4000.0,
-                        'required'         => array('metal' => 0.0, 'crystal' => 0.0, 'deuterium' => $needD),
-                        'reason'           => "Buffer operativo de Deuterio para escaneos de Sensor Phalanx en luna #{$mId}",
-                    );
-                }
+            $curDeut = (float)($mData['deuterium'] ?? 0.0);
+            if ($curDeut < 500000.0) {
+                $needD = 500000.0 - $curDeut;
+                $demands[] = array(
+                    'target_planet_id' => $mId,
+                    'type'             => 'military_fuel',
+                    'priority'         => 1, // High priority military fuel for Phalanx
+                    'urgency_score'    => 4000.0,
+                    'required'         => array('metal' => 0.0, 'crystal' => 0.0, 'deuterium' => $needD),
+                    'reason'           => "Buffer operativo de Deuterio para escaneos de Sensor Phalanx en luna #{$mId}",
+                );
             }
 
-            // 2. Determine target building according to v4.5/v4.6 lunar doctrine
+            // Si la luna ya tiene Salto Cuántico (sprungtor >= 1), Base Lunar (mondbasis >= 6) y Phalanx (phalanx >= 1),
+            // se considera 100% OPERATIVA y NO debe generar más demandas de edificios ni absorción de recursos.
+            $isOperative = ($curJumpGate >= 1 && $curMondbasis >= 6 && $curPhalanx >= 1);
+            if ($isOperative) {
+                continue;
+            }
+
+            // 2. Determinar edificio objetivo según doctrina lunar
             $targetElemId = null;
             $urgency = 1500.0;
+            $priority = 3;
 
-            if ($freeMoonFields <= 1) {
-                $jumpAccessible = BuildFunctions::isTechnologieAccessible($this->ctx->user, $mData, 43, array());
-                if ($curJumpGate == 0 && $jumpAccessible) {
-                    $targetElemId = 43;
-                    $urgency = 3500.0;
+            // Prioridad máxima a Salto Cuántico (10/10 Jump Gates): si curJumpGate == 0
+            if ($curJumpGate == 0) {
+                $priority = 2;
+                $urgency = 9500.0;
+                if ($curMondbasis < 6) {
+                    $targetElemId = 41; // mondbasis
                 } else {
-                    $targetElemId = 41;
-                    $urgency = 3200.0;
+                    $targetElemId = 43; // sprungtor
                 }
             } else {
-                $jumpAccessible = BuildFunctions::isTechnologieAccessible($this->ctx->user, $mData, 43, array());
-                if ($curJumpGate == 0 && $jumpAccessible) {
-                    $targetElemId = 43;
-                    $urgency = 3500.0;
-                } elseif ($curRobots < 5) {
-                    $targetElemId = 14;
-                    $urgency = 2500.0;
-                } elseif ($curNano < 2 && BuildFunctions::isTechnologieAccessible($this->ctx->user, $mData, 15, array())) {
-                    $targetElemId = 15;
-                    $urgency = 2600.0;
-                } elseif ($curPhalanx < 6 && BuildFunctions::isTechnologieAccessible($this->ctx->user, $mData, 42, array())) {
-                    $targetElemId = 42;
-                    $urgency = 2200.0;
-                } elseif ($curRobots < 8) {
-                    $targetElemId = 14;
-                    $urgency = 1800.0;
-                } elseif ($curHangar < 4 && BuildFunctions::isTechnologieAccessible($this->ctx->user, $mData, 21, array())) {
-                    $targetElemId = 21;
-                    $urgency = 1600.0;
-                } elseif ($curMondbasis < 13) {
+                if ($freeMoonFields <= 1) {
                     $targetElemId = 41;
-                    $urgency = 2000.0;
-                } elseif ($curPhalanx < 12 && BuildFunctions::isTechnologieAccessible($this->ctx->user, $mData, 42, array())) {
-                    $targetElemId = 42;
-                    $urgency = 1800.0;
+                    $urgency = 3200.0;
+                } else {
+                    if ($curRobots < 5) {
+                        $targetElemId = 14;
+                        $urgency = 2500.0;
+                    } elseif ($curNano < 2 && BuildFunctions::isTechnologieAccessible($this->ctx->user, $mData, 15, array())) {
+                        $targetElemId = 15;
+                        $urgency = 2600.0;
+                    } elseif ($curPhalanx < 6 && BuildFunctions::isTechnologieAccessible($this->ctx->user, $mData, 42, array())) {
+                        $targetElemId = 42;
+                        $urgency = 2200.0;
+                    } elseif ($curMondbasis < 6) {
+                        $targetElemId = 41;
+                        $urgency = 2000.0;
+                    }
                 }
             }
 
@@ -873,12 +1048,14 @@ class BotLogisticsPlanner
                 $reqC = (float)($cost[902] ?? $cost['crystal'] ?? 0.0);
                 $reqD = (float)($cost[903] ?? $cost['deuterium'] ?? 0.0);
 
-                // Multiply by 2 for cheap early levels to avoid repetitive trips
-                $costMSE = BotEconomyValuator::toMSE($reqM, $reqC, $reqD);
-                if ($costMSE < 10000000.0) {
-                    $reqM *= 2.0;
-                    $reqC *= 2.0;
-                    $reqD *= 2.0;
+                // Multiply by 2 for cheap early levels to avoid repetitive trips (unless priority 2 Jump Gate)
+                if ($priority !== 2) {
+                    $costMSE = BotEconomyValuator::toMSE($reqM, $reqC, $reqD);
+                    if ($costMSE < 10000000.0) {
+                        $reqM *= 2.0;
+                        $reqC *= 2.0;
+                        $reqD *= 2.0;
+                    }
                 }
 
                 $curStockM = (float)($mData['metal'] ?? 0.0);
@@ -891,10 +1068,10 @@ class BotLogisticsPlanner
                         'type'             => 'building',
                         'element_id'       => $targetElemId,
                         'count'            => 1,
-                        'priority'         => 3,
+                        'priority'         => $priority,
                         'urgency_score'    => $urgency,
                         'required'         => array('metal' => $reqM, 'crystal' => $reqC, 'deuterium' => $reqD),
-                        'reason'           => "Abastecimiento lunar para {$resource[$targetElemId]} en luna #{$mId}",
+                        'reason'           => "Abastecimiento lunar prioritario para {$resource[$targetElemId]} en luna #{$mId}",
                     );
                 }
             }

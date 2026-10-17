@@ -27,6 +27,7 @@ require_once 'includes/classes/bot/Military/TargetBlacklist.class.php';
 class BotTargetFinder
 {
     public static $phalanxScansCount = 0;
+    private static $scannedFleetCache = array();
     private $ctx;
 
     public function __construct(BotContext $ctx)
@@ -217,23 +218,38 @@ class BotTargetFinder
                         ));
 
                         if (!empty($detectedFleets)) {
-                            self::$phalanxScansCount++;
-                            // Deducción canónica de 5,000 de deuterio por escaneo de Phalanx
-                            $db->update("UPDATE %%PLANETS%% SET deuterium = GREATEST(0, deuterium - 5000) WHERE id = :moonId;", array(
-                                ':moonId' => (int)$bData['id']
-                            ));
-                            if (isset($body['data']['deuterium'])) {
-                                $body['data']['deuterium'] -= 5000.0;
+                            $now = class_exists('BotClock') ? BotClock::now() : TIMESTAMP;
+                            $newlyDetected = array();
+                            foreach ($detectedFleets as $rf) {
+                                $scanKey = $this->ctx->botId . '_' . $rf['fleet_id'] . '_' . $rf['fleet_mess'] . '_' . $rf['fleet_end_time'];
+                                $lastScan = self::$scannedFleetCache[$scanKey] ?? 0;
+                                if (($now - $lastScan) >= 1800) {
+                                    $newlyDetected[] = $rf;
+                                    self::$scannedFleetCache[$scanKey] = $now;
+                                }
                             }
 
-                            $this->ctx->decisionLog->record(
-                                'phalanx_scan_executed',
-                                "Phalanx Sensor sweep from Moon #{$bData['id']} [{$mGalaxy}:{$mSystem}:{$bData['planet']}] detected " . count($detectedFleets) . " rival fleet movement(s) in range [{$minSys} - {$maxSys}] (-5,000 Deut)",
-                                array('moon_id' => (int)$bData['id'], 'detected_fleets_count' => count($detectedFleets), 'range_systems' => "{$minSys}-{$maxSys}"),
-                                "phalanx_scan_{$bData['id']}",
-                                3500.0
-                            );
+                            // Only deduct deuterium and log if there are newly detected fleets
+                            if (!empty($newlyDetected)) {
+                                self::$phalanxScansCount++;
+                                // Deducción canónica de 5,000 de deuterio por escaneo de Phalanx
+                                $db->update("UPDATE %%PLANETS%% SET deuterium = GREATEST(0, deuterium - 5000) WHERE id = :moonId;", array(
+                                    ':moonId' => (int)$bData['id']
+                                ));
+                                if (isset($body['data']['deuterium'])) {
+                                    $body['data']['deuterium'] -= 5000.0;
+                                }
 
+                                $this->ctx->decisionLog->record(
+                                    'phalanx_scan_executed',
+                                    "Phalanx Sensor sweep from Moon #{$bData['id']} [{$mGalaxy}:{$mSystem}:{$bData['planet']}] detected " . count($newlyDetected) . " new rival fleet movement(s) in range [{$minSys} - {$maxSys}] (-5,000 Deut)",
+                                    array('moon_id' => (int)$bData['id'], 'detected_fleets_count' => count($newlyDetected), 'range_systems' => "{$minSys}-{$maxSys}"),
+                                    "phalanx_scan_{$bData['id']}",
+                                    3500.0
+                                );
+                            }
+
+                            // Always populate $phalanxPriorityTargets with all detected fleets so StrikePlanner can intercept
                             foreach ($detectedFleets as $rf) {
                                 if ((int)$rf['fleet_mess'] === 1) {
                                     $rfKey = (int)$rf['fleet_start_galaxy'] . ':' . (int)$rf['fleet_start_system'] . ':' . (int)$rf['fleet_start_planet'] . ':' . (int)$rf['fleet_start_type'];

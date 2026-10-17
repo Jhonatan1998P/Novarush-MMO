@@ -603,6 +603,10 @@ function runZeroToEmpireSimulation($personality, $difficulty, $days, $username, 
 
     $simElapsedSec = 0.0;
     $step = 0;
+    // Optimización de I/O de MariaDB/InnoDB para acelerar benchmarks
+    try {
+        $db->nativeQuery("SET GLOBAL innodb_flush_log_at_trx_commit = 2;");
+    } catch (\Throwable $e) {}
 
     $db->beginTransaction();
 
@@ -678,8 +682,8 @@ function runZeroToEmpireSimulation($personality, $difficulty, $days, $username, 
         $virtualTime = (int)round($simStartVirtual + $simElapsedSec);
         BotClock::setNow($virtualTime);
 
-        // Commit periódico cada 32 pasos
-        if ($step % 32 === 0) {
+        // Commit periódico cada 25 pasos
+        if ($step % 25 === 0) {
             $db->commit();
             $db->beginTransaction();
         }
@@ -810,20 +814,37 @@ function runZeroToEmpireSimulation($personality, $difficulty, $days, $username, 
                 $sumSprungtor += (int)$m['sprungtor'];
             }
 
-            // Flota militar total y valor MSE
-            $milShipIds = array(204, 205, 206, 207, 215, 213, 214, 216, 225, 209, 219, 202, 203, 217);
+            // Flota total y valor MSE (incluye planetas, lunas y flotas en vuelo para 100% paridad)
             $totMilShips = 0;
             $totMilMSE = 0.0;
 
             $allOwnedBodies = array_merge($planetsQuery, $moonsQuery);
             foreach ($allOwnedBodies as $body) {
-                foreach ($milShipIds as $sId) {
+                foreach ($reslist['fleet'] as $sId) {
                     $sCol = $resource[$sId] ?? null;
                     if ($sCol && isset($body[$sCol])) {
                         $cnt = (int)$body[$sCol];
                         if ($cnt > 0) {
                             $totMilShips += $cnt;
                             $totMilMSE += BotEconomyValuator::getElementPriceMSE($sId, $cnt);
+                        }
+                    }
+                }
+            }
+
+            // Contabilizar naves en vuelo para paridad 100% con inventario de flota
+            $flyingFleetsDay = $db->select("SELECT fleet_array FROM %%FLEETS%% WHERE fleet_owner = :botId;", array(':botId' => $userId));
+            foreach ($flyingFleetsDay as $f) {
+                $arr = explode(';', $f['fleet_array'] ?? '');
+                foreach ($arr as $elem) {
+                    if (empty($elem)) continue;
+                    $pair = explode(',', $elem);
+                    if (isset($pair[0], $pair[1])) {
+                        $fShipId = (int)$pair[0];
+                        $fShipCnt = (int)$pair[1];
+                        if ($fShipCnt > 0 && in_array($fShipId, $reslist['fleet'], true)) {
+                            $totMilShips += $fShipCnt;
+                            $totMilMSE += BotEconomyValuator::getElementPriceMSE($fShipId, $fShipCnt);
                         }
                     }
                 }
@@ -1081,17 +1102,23 @@ function runZeroToEmpireSimulation($personality, $difficulty, $days, $username, 
             }
         }
 
+        $baseMoonFields = (int)$m['field_max'];
+        $effMoonFields  = function_exists('CalculateMaxPlanetFields') ? CalculateMaxPlanetFields($m) : $baseMoonFields;
+        $curMoonFields  = (int)$m['field_current'];
+
         $moonsDetail[] = array(
-            'id'             => (int)$m['id'],
-            'name'           => $m['name'],
-            'coords'         => "[{$m['galaxy']}:{$m['system']}:{$m['planet']}]",
-            'field_current'  => (int)$m['field_current'],
-            'field_max'      => (int)$m['field_max'],
-            'mondbasis'      => (int)($m['mondbasis'] ?? 0),
-            'phalanx'        => (int)($m['phalanx'] ?? 0),
-            'sprungtor'      => (int)($m['sprungtor'] ?? 0),
-            'last_jump_time' => (int)($m['last_jump_time'] ?? 0),
-            'parked_ships'   => $moonParkedShips,
+            'id'               => (int)$m['id'],
+            'name'             => $m['name'],
+            'coords'           => "[{$m['galaxy']}:{$m['system']}:{$m['planet']}]",
+            'field_current'    => $curMoonFields,
+            'field_max'        => $effMoonFields,
+            'field_max_base'   => $baseMoonFields,
+            'fields_formatted' => "{$curMoonFields}/{$effMoonFields} (base {$baseMoonFields})",
+            'mondbasis'        => (int)($m['mondbasis'] ?? 0),
+            'phalanx'          => (int)($m['phalanx'] ?? 0),
+            'sprungtor'        => (int)($m['sprungtor'] ?? 0),
+            'last_jump_time'   => (int)($m['last_jump_time'] ?? 0),
+            'parked_ships'     => $moonParkedShips,
         );
     }
 
@@ -1265,8 +1292,8 @@ function runZeroToEmpireSimulation($personality, $difficulty, $days, $username, 
             'total_planets_count'    => count($finalPlanets),
             'total_moons_count'      => count($finalMoons),
             'military_fleet_summary' => array(
-                'total_units' => $finalSnap['military_units'] ?? 0,
-                'total_mse'   => $finalSnap['military_mse'] ?? 0.0,
+                'total_units' => $totalShipsCount,
+                'total_mse'   => round($totalShipsMSE, 2),
             ),
             'in_flight_fleets_count' => count($finalFleets),
         ),
