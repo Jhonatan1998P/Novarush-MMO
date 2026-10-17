@@ -74,6 +74,8 @@ class BotCivicStrategist
         }
 
         $persName = strtolower($this->ctx->personality->name ?? 'balanced');
+        $botId = (int)($this->ctx->user['id'] ?? $this->ctx->botId);
+        $variantIdx = $botId % 4;
 
         switch ($persName) {
             case 'miner':
@@ -103,10 +105,27 @@ class BotCivicStrategist
 
             case 'balanced':
             default:
-                $targetRace   = 1503; // Humanos
-                $targetGov    = 1603; // Democracia
-                $targetEthics = 1702; // Neutral
-                $profileDesc  = 'Equilibrado (Humanos + Democracia + Neutral)';
+                if ($variantIdx === 0) {
+                    $targetRace   = 1504; // Kratonianos
+                    $targetGov    = 1601; // Imperio
+                    $targetEthics = 1703; // Maldad
+                    $profileDesc  = 'Equilibrado / Variante Kratoniana (Kratonianos + Imperio + Maldad)';
+                } elseif ($variantIdx === 1) {
+                    $targetRace   = 1501; // Fotorianos
+                    $targetGov    = 1602; // República
+                    $targetEthics = 1701; // Bien
+                    $profileDesc  = 'Equilibrado / Variante Fotoriana (Fotorianos + República + Bien)';
+                } elseif ($variantIdx === 2) {
+                    $targetRace   = 1502; // Sinuria
+                    $targetGov    = 1601; // Imperio
+                    $targetEthics = 1702; // Neutral
+                    $profileDesc  = 'Equilibrado / Variante Sinuria (Sinuria + Imperio + Neutral)';
+                } else {
+                    $targetRace   = 1503; // Humanos
+                    $targetGov    = 1603; // Democracia
+                    $targetEthics = 1702; // Neutral
+                    $profileDesc  = 'Equilibrado / Variante Humana (Humanos + Democracia + Neutral)';
+                }
                 break;
         }
 

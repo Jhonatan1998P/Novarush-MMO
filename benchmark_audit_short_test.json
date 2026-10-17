@@ -3,19 +3,19 @@
         "personality": "aggressive",
         "difficulty": "nightmare",
         "simulated_days": 0.05,
-        "virtual_seconds": 4343,
-        "real_execution_seconds": 8.87,
-        "total_kernel_turns_executed": 93,
+        "virtual_seconds": 4350,
+        "real_execution_seconds": 4.1,
+        "total_kernel_turns_executed": 95,
         "used_full_bot_kernel_process_turn": true,
-        "generated_at_iso": "2026-10-17T03:05:50+02:00",
+        "generated_at_iso": "2026-10-17T23:35:30+02:00",
         "benchmark_name": "NovaRush Zero-to-Empire 7-Day Simulation Benchmark",
         "engine_version": "2Moons NovaRush AI Kernel v2.5",
         "bot_username": "SimZeroBot",
-        "bot_id": 88959,
-        "virtual_start_time": 1792199140,
-        "virtual_end_time": 1792203483,
-        "virtual_start_iso": "2026-10-17T03:05:40+02:00",
-        "virtual_end_iso": "2026-10-17T04:18:03+02:00",
+        "bot_id": 88977,
+        "virtual_start_time": 1792272926,
+        "virtual_end_time": 1792277276,
+        "virtual_start_iso": "2026-10-17T23:35:26+02:00",
+        "virtual_end_iso": "2026-10-18T00:47:56+02:00",
         "home_coordinate": "[1:335:8]",
         "rivals_coordinates": [
             "[1:332:8]",
@@ -27,15 +27,15 @@
         "user_technologies": {
             "spy_tech": 1,
             "computer_tech": 4,
-            "military_tech": 5,
-            "defence_tech": 2,
+            "military_tech": 6,
+            "defence_tech": 4,
             "shield_tech": 4,
             "energy_tech": 3,
             "hyperspace_tech": 0,
             "combustion_tech": 0,
             "impulse_motor_tech": 4,
             "hyperspace_motor_tech": 0,
-            "laser_tech": 1,
+            "laser_tech": 2,
             "ionic_tech": 0,
             "buster_tech": 0,
             "intergalactic_tech": 0,
@@ -45,7 +45,7 @@
             "deuterium_proc_tech": 0,
             "fuel_optim_tech": 0,
             "graviton_tech": 0,
-            "b_tech": 1792203527
+            "b_tech": 1792277311
         },
         "full_technologies_report": [
             {
@@ -64,13 +64,13 @@
                 "id": 109,
                 "code": "military_tech",
                 "name": "Tecnología de armas",
-                "level": 5
+                "level": 6
             },
             {
                 "id": 110,
                 "code": "defence_tech",
                 "name": "Tecnología Shield",
-                "level": 2
+                "level": 4
             },
             {
                 "id": 111,
@@ -112,7 +112,7 @@
                 "id": 120,
                 "code": "laser_tech",
                 "name": "Tecnología láser",
-                "level": 1
+                "level": 2
             },
             {
                 "id": 121,
@@ -172,7 +172,7 @@
         "full_buildings_report": {
             "planets": [
                 {
-                    "planet_id": 89740,
+                    "planet_id": 89868,
                     "coords": "[1:335:8]",
                     "name": "Genesis-Prime",
                     "buildings": {
@@ -181,12 +181,12 @@
                         "deuterium_sintetizer": 13,
                         "solar_plant": 18,
                         "university": 0,
-                        "fusion_plant": 0,
+                        "fusion_plant": 1,
                         "robot_factory": 5,
                         "nano_factory": 0,
-                        "hangar": 5,
-                        "metal_store": 3,
-                        "crystal_store": 0,
+                        "hangar": 4,
+                        "metal_store": 4,
+                        "crystal_store": 4,
                         "deuterium_store": 0,
                         "laboratory": 8,
                         "terraformer": 0,
@@ -238,7 +238,7 @@
                     "id": 12,
                     "code": "fusion_plant",
                     "name": "Planta de energía de deuterio",
-                    "total_level": 0
+                    "total_level": 1
                 },
                 {
                     "id": 14,
@@ -256,19 +256,19 @@
                     "id": 21,
                     "code": "hangar",
                     "name": "Astillero",
-                    "total_level": 5
+                    "total_level": 4
                 },
                 {
                     "id": 22,
                     "code": "metal_store",
                     "name": "Almacenamiento de metal",
-                    "total_level": 3
+                    "total_level": 4
                 },
                 {
                     "id": 23,
                     "code": "crystal_store",
                     "name": "Almacenamiento de cristal",
-                    "total_level": 0
+                    "total_level": 4
                 },
                 {
                     "id": 24,
@@ -360,12 +360,12 @@
                 "id": 212,
                 "code": "solar_satelit",
                 "name": "Satélite Solar",
-                "parked_planets": 12,
+                "parked_planets": 11,
                 "parked_moons": 0,
                 "in_flight": 0,
-                "total_units": 12,
+                "total_units": 11,
                 "mse_per_unit": 6000,
-                "total_mse": 72000
+                "total_mse": 66000
             },
             {
                 "id": 233,
@@ -527,10 +527,10 @@
                 "name": "Colonizador",
                 "parked_planets": 0,
                 "parked_moons": 0,
-                "in_flight": 3,
-                "total_units": 3,
+                "in_flight": 4,
+                "total_units": 4,
                 "mse_per_unit": 90000,
-                "total_mse": 270000
+                "total_mse": 360000
             },
             {
                 "id": 209,
@@ -1117,9 +1117,9 @@
                 "id": 401,
                 "code": "misil_launcher",
                 "name": "Lanzamisiles",
-                "total_units": 6,
+                "total_units": 2,
                 "mse_per_unit": 2000,
-                "total_mse": 12000
+                "total_mse": 4000
             },
             {
                 "id": 405,
@@ -1572,74 +1572,76 @@
         ],
         "planets_detail": [
             {
-                "id": 89740,
+                "id": 89868,
                 "name": "Genesis-Prime",
                 "coords": "[1:335:8]",
-                "field_current": 85,
+                "field_current": 90,
                 "field_max": 163,
                 "field_max_base": 163,
-                "fields_formatted": "85\/163 (base 163)",
+                "fields_formatted": "90\/163 (base 163)",
                 "id_luna": 0,
                 "mines_and_buildings": {
                     "metal_mine": 16,
                     "crystal_mine": 16,
                     "deuterium_sintetizer": 13,
                     "solar_plant": 18,
+                    "fusion_plant": 1,
                     "robot_factory": 5,
-                    "hangar": 5,
-                    "metal_store": 3,
+                    "hangar": 4,
+                    "metal_store": 4,
+                    "crystal_store": 4,
                     "laboratory": 8,
                     "silo": 1
                 },
                 "resources_per_hour": {
                     "metal_perhour": 1014570.035388,
                     "crystal_perhour": 676380.023592,
-                    "deuterium_perhour": 229610.834651,
-                    "total_mse_perhour": 3285773.421176
+                    "deuterium_perhour": 227221.437406,
+                    "total_mse_perhour": 3276215.832196
                 },
                 "parked_ships": {
-                    "solar_satelit": 12
+                    "solar_satelit": 11
                 },
                 "parked_defenses": {
-                    "misil_launcher": 6
+                    "misil_launcher": 2
                 }
             }
         ],
         "moons_detail": [],
         "user_summary": {
-            "id": 88959,
+            "id": 88977,
             "username": "SimZeroBot",
             "darkmatter": 0
         },
         "bot_summary": {
-            "bot_id": 88959,
+            "bot_id": 88977,
             "personality": "aggressive",
             "difficulty": "nightmare",
             "doctrine": "aggressive",
-            "last_activity": 1792203483,
+            "last_activity": 1792277276,
             "budget_credits": {
                 "planets": {
-                    "89740": {
+                    "89868": {
                         "mines": {
-                            "metal": 0,
-                            "crystal": 2126.65,
-                            "deuterium": 2540.14
+                            "metal": 179.24,
+                            "crystal": 0,
+                            "deuterium": 3555.05
                         },
                         "fleet": {
-                            "metal": 7017.29,
-                            "crystal": 12177.3,
-                            "deuterium": 3482.43
+                            "metal": 7990.55,
+                            "crystal": 4923.31,
+                            "deuterium": 0
                         },
                         "defense": {
-                            "metal": 3786.53,
-                            "crystal": 7126.24,
-                            "deuterium": 2869.56
+                            "metal": 3032.62,
+                            "crystal": 4442.21,
+                            "deuterium": 4041.2
                         }
                     }
                 },
                 "research": {
-                    "metal": 0,
-                    "crystal": 3117.38,
+                    "metal": 7503.13,
+                    "crystal": 772.66,
                     "deuterium": 9600
                 },
                 "opportunity_fund": {
@@ -1648,22 +1650,22 @@
                     "deuterium": 0
                 },
                 "last_physical": {
-                    "89740": {
-                        "metal": 136.1541683459327,
-                        "crystal": 23755.12277239729,
-                        "deuterium": 11115.160382137281
+                    "89868": {
+                        "metal": 12627.236622345932,
+                        "crystal": 5757.960995897287,
+                        "deuterium": 3106.86
                     }
                 },
-                "last_updated": 1792203483
+                "last_updated": 1792277276
             }
         },
         "total_planets_count": 1,
         "total_moons_count": 0,
         "military_fleet_summary": {
-            "total_units": 0,
-            "total_mse": 0
+            "total_units": 15,
+            "total_mse": 426000
         },
-        "in_flight_fleets_count": 3
+        "in_flight_fleets_count": 4
     },
     "missions_and_operations_ledger": {
         "mission_1_attack": {
@@ -1685,8 +1687,8 @@
             "phalanx_scans": 0
         },
         "mission_7_colonization": {
-            "colonizers_built": 3,
-            "dispatched": 3,
+            "colonizers_built": 4,
+            "dispatched": 4,
             "colonies_founded": 0
         },
         "mission_8_recycle": {
@@ -1714,618 +1716,617 @@
     "decision_log_audit": {
         "counts_by_type": {
             "civics_assigned": 1,
-            "mine_upgrade": 86,
-            "achievements_sync": 21,
-            "research_enqueued": 25,
-            "savings_lock_engaged": 2,
-            "savings_antifarm_abort": 1,
-            "colonizer_recruit": 3,
-            "colonization_dispatch": 3
+            "mine_upgrade": 91,
+            "achievements_sync": 23,
+            "research_enqueued": 29,
+            "savings_lock_engaged": 1,
+            "colonizer_recruit": 4,
+            "colonization_dispatch": 4
         },
         "internal_bucket_swaps_in_memory": 6,
-        "total_decisions_recorded": 142,
+        "total_decisions_recorded": 153,
         "sample_decisions": [
             {
-                "virtual_timestamp": 1792199230,
-                "virtual_time_iso": "2026-10-17T03:07:10+02:00",
+                "virtual_timestamp": 1792273016,
+                "virtual_time_iso": "2026-10-17T23:36:56+02:00",
                 "decision_type": "civics_assigned",
                 "chosen_action": "civics_1504_1601",
                 "chosen_score": 6000,
                 "context_summary": "Matriz Cívica Establecida: Asignado perfil Militar Ofensivo (Kratonianos + Imperio + Maldad)"
             },
             {
-                "virtual_timestamp": 1792199230,
-                "virtual_time_iso": "2026-10-17T03:07:10+02:00",
+                "virtual_timestamp": 1792273016,
+                "virtual_time_iso": "2026-10-17T23:36:56+02:00",
                 "decision_type": "mine_upgrade",
-                "chosen_action": "build_2_body_89740",
+                "chosen_action": "build_2_body_89868",
                 "chosen_score": 2337505.31,
-                "context_summary": "Upgraded crystal_mine on planeta #89740 (Grandmaster Multi-Colony Parallel Execution)"
+                "context_summary": "Upgraded crystal_mine on planeta #89868 (Grandmaster Multi-Colony Parallel Execution)"
             },
             {
-                "virtual_timestamp": 1792199275,
-                "virtual_time_iso": "2026-10-17T03:07:55+02:00",
+                "virtual_timestamp": 1792273061,
+                "virtual_time_iso": "2026-10-17T23:37:41+02:00",
                 "decision_type": "mine_upgrade",
-                "chosen_action": "build_4_body_89740",
+                "chosen_action": "build_4_body_89868",
                 "chosen_score": 42500,
-                "context_summary": "Upgraded solar_plant on planeta #89740 (Grandmaster Multi-Colony Parallel Execution)"
+                "context_summary": "Upgraded solar_plant on planeta #89868 (Grandmaster Multi-Colony Parallel Execution)"
             },
             {
-                "virtual_timestamp": 1792199320,
-                "virtual_time_iso": "2026-10-17T03:08:40+02:00",
+                "virtual_timestamp": 1792273106,
+                "virtual_time_iso": "2026-10-17T23:38:26+02:00",
                 "decision_type": "mine_upgrade",
-                "chosen_action": "build_1_body_89740",
+                "chosen_action": "build_1_body_89868",
                 "chosen_score": 1870051,
-                "context_summary": "Upgraded metal_mine on planeta #89740 (Grandmaster Multi-Colony Parallel Execution)"
+                "context_summary": "Upgraded metal_mine on planeta #89868 (Grandmaster Multi-Colony Parallel Execution)"
             },
             {
-                "virtual_timestamp": 1792199365,
-                "virtual_time_iso": "2026-10-17T03:09:25+02:00",
+                "virtual_timestamp": 1792273151,
+                "virtual_time_iso": "2026-10-17T23:39:11+02:00",
                 "decision_type": "mine_upgrade",
-                "chosen_action": "build_2_body_89740",
+                "chosen_action": "build_2_body_89868",
                 "chosen_score": 1870051,
-                "context_summary": "Upgraded crystal_mine on planeta #89740 (Grandmaster Multi-Colony Parallel Execution)"
+                "context_summary": "Upgraded crystal_mine on planeta #89868 (Grandmaster Multi-Colony Parallel Execution)"
             },
             {
-                "virtual_timestamp": 1792199410,
-                "virtual_time_iso": "2026-10-17T03:10:10+02:00",
+                "virtual_timestamp": 1792273196,
+                "virtual_time_iso": "2026-10-17T23:39:56+02:00",
                 "decision_type": "mine_upgrade",
-                "chosen_action": "build_4_body_89740",
+                "chosen_action": "build_4_body_89868",
                 "chosen_score": 42500,
-                "context_summary": "Upgraded solar_plant on planeta #89740 (Grandmaster Multi-Colony Parallel Execution)"
+                "context_summary": "Upgraded solar_plant on planeta #89868 (Grandmaster Multi-Colony Parallel Execution)"
             },
             {
-                "virtual_timestamp": 1792199455,
-                "virtual_time_iso": "2026-10-17T03:10:55+02:00",
+                "virtual_timestamp": 1792273241,
+                "virtual_time_iso": "2026-10-17T23:40:41+02:00",
                 "decision_type": "mine_upgrade",
-                "chosen_action": "build_1_body_89740",
+                "chosen_action": "build_1_body_89868",
                 "chosen_score": 1496051,
-                "context_summary": "Upgraded metal_mine on planeta #89740 (Grandmaster Multi-Colony Parallel Execution)"
+                "context_summary": "Upgraded metal_mine on planeta #89868 (Grandmaster Multi-Colony Parallel Execution)"
             },
             {
-                "virtual_timestamp": 1792199500,
-                "virtual_time_iso": "2026-10-17T03:11:40+02:00",
+                "virtual_timestamp": 1792273286,
+                "virtual_time_iso": "2026-10-17T23:41:26+02:00",
                 "decision_type": "mine_upgrade",
-                "chosen_action": "build_4_body_89740",
+                "chosen_action": "build_4_body_89868",
                 "chosen_score": 42500,
-                "context_summary": "Upgraded solar_plant on planeta #89740 (Grandmaster Multi-Colony Parallel Execution)"
+                "context_summary": "Upgraded solar_plant on planeta #89868 (Grandmaster Multi-Colony Parallel Execution)"
             },
             {
-                "virtual_timestamp": 1792199545,
-                "virtual_time_iso": "2026-10-17T03:12:25+02:00",
+                "virtual_timestamp": 1792273331,
+                "virtual_time_iso": "2026-10-17T23:42:11+02:00",
                 "decision_type": "mine_upgrade",
-                "chosen_action": "build_2_body_89740",
+                "chosen_action": "build_2_body_89868",
                 "chosen_score": 1485662.11,
-                "context_summary": "Upgraded crystal_mine on planeta #89740 (Grandmaster Multi-Colony Parallel Execution)"
+                "context_summary": "Upgraded crystal_mine on planeta #89868 (Grandmaster Multi-Colony Parallel Execution)"
             },
             {
-                "virtual_timestamp": 1792199590,
-                "virtual_time_iso": "2026-10-17T03:13:10+02:00",
+                "virtual_timestamp": 1792273376,
+                "virtual_time_iso": "2026-10-17T23:42:56+02:00",
                 "decision_type": "mine_upgrade",
-                "chosen_action": "build_1_body_89740",
+                "chosen_action": "build_1_body_89868",
                 "chosen_score": 1188539.89,
-                "context_summary": "Upgraded metal_mine on planeta #89740 (Grandmaster Multi-Colony Parallel Execution)"
+                "context_summary": "Upgraded metal_mine on planeta #89868 (Grandmaster Multi-Colony Parallel Execution)"
             },
             {
-                "virtual_timestamp": 1792199590,
-                "virtual_time_iso": "2026-10-17T03:13:10+02:00",
+                "virtual_timestamp": 1792273376,
+                "virtual_time_iso": "2026-10-17T23:42:56+02:00",
                 "decision_type": "achievements_sync",
                 "chosen_action": "achieved",
                 "chosen_score": 1,
                 "context_summary": "Logros sincronizados a niveles legítimos: achievements_2 -> Niv. 1"
             },
             {
-                "virtual_timestamp": 1792199635,
-                "virtual_time_iso": "2026-10-17T03:13:55+02:00",
+                "virtual_timestamp": 1792273421,
+                "virtual_time_iso": "2026-10-17T23:43:41+02:00",
                 "decision_type": "mine_upgrade",
-                "chosen_action": "build_4_body_89740",
+                "chosen_action": "build_4_body_89868",
                 "chosen_score": 42500,
-                "context_summary": "Upgraded solar_plant on planeta #89740 (Grandmaster Multi-Colony Parallel Execution)"
+                "context_summary": "Upgraded solar_plant on planeta #89868 (Grandmaster Multi-Colony Parallel Execution)"
             },
             {
-                "virtual_timestamp": 1792199635,
-                "virtual_time_iso": "2026-10-17T03:13:55+02:00",
+                "virtual_timestamp": 1792273421,
+                "virtual_time_iso": "2026-10-17T23:43:41+02:00",
                 "decision_type": "achievements_sync",
                 "chosen_action": "achieved",
                 "chosen_score": 1,
                 "context_summary": "Logros sincronizados a niveles legítimos: achievements_1 -> Niv. 1"
             },
             {
-                "virtual_timestamp": 1792199680,
-                "virtual_time_iso": "2026-10-17T03:14:40+02:00",
+                "virtual_timestamp": 1792273466,
+                "virtual_time_iso": "2026-10-17T23:44:26+02:00",
                 "decision_type": "mine_upgrade",
-                "chosen_action": "build_2_body_89740",
+                "chosen_action": "build_2_body_89868",
                 "chosen_score": 1208500.41,
-                "context_summary": "Upgraded crystal_mine on planeta #89740 (Grandmaster Multi-Colony Parallel Execution)"
+                "context_summary": "Upgraded crystal_mine on planeta #89868 (Grandmaster Multi-Colony Parallel Execution)"
             },
             {
-                "virtual_timestamp": 1792199725,
-                "virtual_time_iso": "2026-10-17T03:15:25+02:00",
+                "virtual_timestamp": 1792273511,
+                "virtual_time_iso": "2026-10-17T23:45:11+02:00",
                 "decision_type": "mine_upgrade",
-                "chosen_action": "build_3_body_89740",
-                "chosen_score": 1085437.8,
-                "context_summary": "Upgraded deuterium_sintetizer on planeta #89740 (Grandmaster Multi-Colony Parallel Execution)"
+                "chosen_action": "build_3_body_89868",
+                "chosen_score": 1094941.8,
+                "context_summary": "Upgraded deuterium_sintetizer on planeta #89868 (Grandmaster Multi-Colony Parallel Execution)"
             },
             {
-                "virtual_timestamp": 1792199770,
-                "virtual_time_iso": "2026-10-17T03:16:10+02:00",
+                "virtual_timestamp": 1792273556,
+                "virtual_time_iso": "2026-10-17T23:45:56+02:00",
                 "decision_type": "mine_upgrade",
-                "chosen_action": "build_4_body_89740",
+                "chosen_action": "build_4_body_89868",
                 "chosen_score": 42500,
-                "context_summary": "Upgraded solar_plant on planeta #89740 (Grandmaster Multi-Colony Parallel Execution)"
+                "context_summary": "Upgraded solar_plant on planeta #89868 (Grandmaster Multi-Colony Parallel Execution)"
             },
             {
-                "virtual_timestamp": 1792199815,
-                "virtual_time_iso": "2026-10-17T03:16:55+02:00",
+                "virtual_timestamp": 1792273601,
+                "virtual_time_iso": "2026-10-17T23:46:41+02:00",
                 "decision_type": "mine_upgrade",
-                "chosen_action": "build_1_body_89740",
+                "chosen_action": "build_1_body_89868",
                 "chosen_score": 966810.53,
-                "context_summary": "Upgraded metal_mine on planeta #89740 (Grandmaster Multi-Colony Parallel Execution)"
+                "context_summary": "Upgraded metal_mine on planeta #89868 (Grandmaster Multi-Colony Parallel Execution)"
             },
             {
-                "virtual_timestamp": 1792199860,
-                "virtual_time_iso": "2026-10-17T03:17:40+02:00",
+                "virtual_timestamp": 1792273646,
+                "virtual_time_iso": "2026-10-17T23:47:26+02:00",
                 "decision_type": "mine_upgrade",
-                "chosen_action": "build_2_body_89740",
+                "chosen_action": "build_2_body_89868",
                 "chosen_score": 949546.96,
-                "context_summary": "Upgraded crystal_mine on planeta #89740 (Grandmaster Multi-Colony Parallel Execution)"
+                "context_summary": "Upgraded crystal_mine on planeta #89868 (Grandmaster Multi-Colony Parallel Execution)"
             },
             {
-                "virtual_timestamp": 1792199905,
-                "virtual_time_iso": "2026-10-17T03:18:25+02:00",
+                "virtual_timestamp": 1792273691,
+                "virtual_time_iso": "2026-10-17T23:48:11+02:00",
                 "decision_type": "mine_upgrade",
-                "chosen_action": "build_4_body_89740",
+                "chosen_action": "build_4_body_89868",
                 "chosen_score": 42500,
-                "context_summary": "Upgraded solar_plant on planeta #89740 (Grandmaster Multi-Colony Parallel Execution)"
+                "context_summary": "Upgraded solar_plant on planeta #89868 (Grandmaster Multi-Colony Parallel Execution)"
             },
             {
-                "virtual_timestamp": 1792199950,
-                "virtual_time_iso": "2026-10-17T03:19:10+02:00",
+                "virtual_timestamp": 1792273736,
+                "virtual_time_iso": "2026-10-17T23:48:56+02:00",
                 "decision_type": "mine_upgrade",
-                "chosen_action": "build_3_body_89740",
-                "chosen_score": 868366.44,
-                "context_summary": "Upgraded deuterium_sintetizer on planeta #89740 (Grandmaster Multi-Colony Parallel Execution)"
+                "chosen_action": "build_3_body_89868",
+                "chosen_score": 875969.64,
+                "context_summary": "Upgraded deuterium_sintetizer on planeta #89868 (Grandmaster Multi-Colony Parallel Execution)"
             },
             {
-                "virtual_timestamp": 1792199995,
-                "virtual_time_iso": "2026-10-17T03:19:55+02:00",
+                "virtual_timestamp": 1792273781,
+                "virtual_time_iso": "2026-10-17T23:49:41+02:00",
                 "decision_type": "mine_upgrade",
-                "chosen_action": "build_1_body_89740",
+                "chosen_action": "build_1_body_89868",
                 "chosen_score": 759647.77,
-                "context_summary": "Upgraded metal_mine on planeta #89740 (Grandmaster Multi-Colony Parallel Execution)"
+                "context_summary": "Upgraded metal_mine on planeta #89868 (Grandmaster Multi-Colony Parallel Execution)"
             },
             {
-                "virtual_timestamp": 1792200040,
-                "virtual_time_iso": "2026-10-17T03:20:40+02:00",
+                "virtual_timestamp": 1792273826,
+                "virtual_time_iso": "2026-10-17T23:50:26+02:00",
                 "decision_type": "mine_upgrade",
-                "chosen_action": "build_4_body_89740",
+                "chosen_action": "build_4_body_89868",
                 "chosen_score": 42500,
-                "context_summary": "Upgraded solar_plant on planeta #89740 (Grandmaster Multi-Colony Parallel Execution)"
+                "context_summary": "Upgraded solar_plant on planeta #89868 (Grandmaster Multi-Colony Parallel Execution)"
             },
             {
-                "virtual_timestamp": 1792200085,
-                "virtual_time_iso": "2026-10-17T03:21:25+02:00",
+                "virtual_timestamp": 1792273871,
+                "virtual_time_iso": "2026-10-17T23:51:11+02:00",
                 "decision_type": "mine_upgrade",
-                "chosen_action": "build_2_body_89740",
+                "chosen_action": "build_2_body_89868",
                 "chosen_score": 742767.84,
-                "context_summary": "Upgraded crystal_mine on planeta #89740 (Grandmaster Multi-Colony Parallel Execution)"
+                "context_summary": "Upgraded crystal_mine on planeta #89868 (Grandmaster Multi-Colony Parallel Execution)"
             },
             {
-                "virtual_timestamp": 1792200130,
-                "virtual_time_iso": "2026-10-17T03:22:10+02:00",
+                "virtual_timestamp": 1792273916,
+                "virtual_time_iso": "2026-10-17T23:51:56+02:00",
                 "decision_type": "mine_upgrade",
-                "chosen_action": "build_3_body_89740",
-                "chosen_score": 689885.54,
-                "context_summary": "Upgraded deuterium_sintetizer on planeta #89740 (Grandmaster Multi-Colony Parallel Execution)"
+                "chosen_action": "build_3_body_89868",
+                "chosen_score": 695925.86,
+                "context_summary": "Upgraded deuterium_sintetizer on planeta #89868 (Grandmaster Multi-Colony Parallel Execution)"
             },
             {
-                "virtual_timestamp": 1792200130,
-                "virtual_time_iso": "2026-10-17T03:22:10+02:00",
+                "virtual_timestamp": 1792273916,
+                "virtual_time_iso": "2026-10-17T23:51:56+02:00",
                 "decision_type": "achievements_sync",
                 "chosen_action": "achieved",
                 "chosen_score": 1,
                 "context_summary": "Logros sincronizados a niveles legítimos: achievements_2 -> Niv. 2"
             },
             {
-                "virtual_timestamp": 1792202380,
-                "virtual_time_iso": "2026-10-17T03:59:40+02:00",
-                "decision_type": "mine_upgrade",
-                "chosen_action": "build_14_body_89740",
-                "chosen_score": 37451,
-                "context_summary": "Upgraded robot_factory on planeta #89740 (Grandmaster Multi-Colony Parallel Execution)"
-            },
-            {
-                "virtual_timestamp": 1792202380,
-                "virtual_time_iso": "2026-10-17T03:59:40+02:00",
+                "virtual_timestamp": 1792276436,
+                "virtual_time_iso": "2026-10-18T00:33:56+02:00",
                 "decision_type": "research_enqueued",
                 "chosen_action": "research_117",
                 "chosen_score": 41586.75,
-                "context_summary": "Queued research impulse_motor_tech on planet #89740 (Grandmaster Intelligence)"
+                "context_summary": "Queued research impulse_motor_tech on planet #89868 (Grandmaster Intelligence)"
             },
             {
-                "virtual_timestamp": 1792202425,
-                "virtual_time_iso": "2026-10-17T04:00:25+02:00",
+                "virtual_timestamp": 1792276511,
+                "virtual_time_iso": "2026-10-18T00:35:11+02:00",
                 "decision_type": "mine_upgrade",
-                "chosen_action": "build_31_body_89740",
-                "chosen_score": 24650,
-                "context_summary": "Upgraded laboratory on planeta #89740 (Grandmaster Multi-Colony Parallel Execution)"
+                "chosen_action": "build_1_body_89868",
+                "chosen_score": 61970.43,
+                "context_summary": "Upgraded metal_mine on planeta #89868 (Grandmaster Multi-Colony Parallel Execution)"
             },
             {
-                "virtual_timestamp": 1792202470,
-                "virtual_time_iso": "2026-10-17T04:01:10+02:00",
-                "decision_type": "mine_upgrade",
-                "chosen_action": "build_31_body_89740",
-                "chosen_score": 24650,
-                "context_summary": "Upgraded laboratory on planeta #89740 (Grandmaster Multi-Colony Parallel Execution)"
-            },
-            {
-                "virtual_timestamp": 1792202515,
-                "virtual_time_iso": "2026-10-17T04:01:55+02:00",
-                "decision_type": "mine_upgrade",
-                "chosen_action": "build_31_body_89740",
-                "chosen_score": 24650,
-                "context_summary": "Upgraded laboratory on planeta #89740 (Grandmaster Multi-Colony Parallel Execution)"
-            },
-            {
-                "virtual_timestamp": 1792202560,
-                "virtual_time_iso": "2026-10-17T04:02:40+02:00",
-                "decision_type": "mine_upgrade",
-                "chosen_action": "build_14_body_89740",
-                "chosen_score": 37451,
-                "context_summary": "Upgraded robot_factory on planeta #89740 (Grandmaster Multi-Colony Parallel Execution)"
-            },
-            {
-                "virtual_timestamp": 1792202560,
-                "virtual_time_iso": "2026-10-17T04:02:40+02:00",
-                "decision_type": "research_enqueued",
-                "chosen_action": "research_109",
-                "chosen_score": 58919.4,
-                "context_summary": "Queued research military_tech on planet #89740 (Grandmaster Intelligence)"
-            },
-            {
-                "virtual_timestamp": 1792202605,
-                "virtual_time_iso": "2026-10-17T04:03:25+02:00",
-                "decision_type": "mine_upgrade",
-                "chosen_action": "build_31_body_89740",
-                "chosen_score": 10676,
-                "context_summary": "Upgraded laboratory on planeta #89740 (Grandmaster Multi-Colony Parallel Execution)"
-            },
-            {
-                "virtual_timestamp": 1792202605,
-                "virtual_time_iso": "2026-10-17T04:03:25+02:00",
+                "virtual_timestamp": 1792276556,
+                "virtual_time_iso": "2026-10-18T00:35:56+02:00",
                 "decision_type": "research_enqueued",
                 "chosen_action": "research_109",
                 "chosen_score": 38669.4,
-                "context_summary": "Queued research military_tech on planet #89740 (Grandmaster Intelligence)"
+                "context_summary": "Queued research military_tech on planet #89868 (Grandmaster Intelligence)"
             },
             {
-                "virtual_timestamp": 1792202650,
-                "virtual_time_iso": "2026-10-17T04:04:10+02:00",
-                "decision_type": "savings_lock_engaged",
-                "chosen_action": "save_21",
-                "chosen_score": 73811.25,
-                "context_summary": "Engaged savings lock for hangar on body #89740 (ETA: 349.43s)"
-            },
-            {
-                "virtual_timestamp": 1792202650,
-                "virtual_time_iso": "2026-10-17T04:04:10+02:00",
-                "decision_type": "research_enqueued",
-                "chosen_action": "research_117",
-                "chosen_score": 41586.75,
-                "context_summary": "Queued research impulse_motor_tech on planet #89740 (Grandmaster Intelligence)"
-            },
-            {
-                "virtual_timestamp": 1792202722,
-                "virtual_time_iso": "2026-10-17T04:05:22+02:00",
-                "decision_type": "mine_upgrade",
-                "chosen_action": "build_44_body_89740",
-                "chosen_score": 1326,
-                "context_summary": "Upgraded silo on planeta #89740 (Grandmaster Multi-Colony Parallel Execution)"
-            },
-            {
-                "virtual_timestamp": 1792202767,
-                "virtual_time_iso": "2026-10-17T04:06:07+02:00",
-                "decision_type": "research_enqueued",
-                "chosen_action": "research_117",
-                "chosen_score": 41586.75,
-                "context_summary": "Queued research impulse_motor_tech on planet #89740 (Grandmaster Intelligence)"
-            },
-            {
-                "virtual_timestamp": 1792202943,
-                "virtual_time_iso": "2026-10-17T04:09:03+02:00",
-                "decision_type": "mine_upgrade",
-                "chosen_action": "build_31_body_89740",
-                "chosen_score": 10523,
-                "context_summary": "Upgraded laboratory on planeta #89740 (Grandmaster Multi-Colony Parallel Execution)"
-            },
-            {
-                "virtual_timestamp": 1792202943,
-                "virtual_time_iso": "2026-10-17T04:09:03+02:00",
-                "decision_type": "research_enqueued",
-                "chosen_action": "research_113",
-                "chosen_score": 30396,
-                "context_summary": "Queued research energy_tech on planet #89740 (Grandmaster Intelligence)"
-            },
-            {
-                "virtual_timestamp": 1792202988,
-                "virtual_time_iso": "2026-10-17T04:09:48+02:00",
-                "decision_type": "research_enqueued",
-                "chosen_action": "research_120",
-                "chosen_score": 31058.1,
-                "context_summary": "Queued research laser_tech on planet #89740 (Grandmaster Intelligence)"
-            },
-            {
-                "virtual_timestamp": 1792203033,
-                "virtual_time_iso": "2026-10-17T04:10:33+02:00",
-                "decision_type": "mine_upgrade",
-                "chosen_action": "build_1_body_89740",
-                "chosen_score": 61970.43,
-                "context_summary": "Upgraded metal_mine on planeta #89740 (Grandmaster Multi-Colony Parallel Execution)"
-            },
-            {
-                "virtual_timestamp": 1792203033,
-                "virtual_time_iso": "2026-10-17T04:10:33+02:00",
-                "decision_type": "research_enqueued",
-                "chosen_action": "research_113",
-                "chosen_score": 30396,
-                "context_summary": "Queued research energy_tech on planet #89740 (Grandmaster Intelligence)"
-            },
-            {
-                "virtual_timestamp": 1792203078,
-                "virtual_time_iso": "2026-10-17T04:11:18+02:00",
-                "decision_type": "mine_upgrade",
-                "chosen_action": "build_3_body_89740",
-                "chosen_score": 61562.27,
-                "context_summary": "Upgraded deuterium_sintetizer on planeta #89740 (Grandmaster Multi-Colony Parallel Execution)"
-            },
-            {
-                "virtual_timestamp": 1792203078,
-                "virtual_time_iso": "2026-10-17T04:11:18+02:00",
-                "decision_type": "research_enqueued",
-                "chosen_action": "research_110",
-                "chosen_score": 56219.4,
-                "context_summary": "Queued research defence_tech on planet #89740 (Grandmaster Intelligence)"
-            },
-            {
-                "virtual_timestamp": 1792203078,
-                "virtual_time_iso": "2026-10-17T04:11:18+02:00",
+                "virtual_timestamp": 1792276556,
+                "virtual_time_iso": "2026-10-18T00:35:56+02:00",
                 "decision_type": "achievements_sync",
                 "chosen_action": "achieved",
                 "chosen_score": 1,
                 "context_summary": "Logros sincronizados a niveles legítimos: achievements_1 -> Niv. 5"
             },
             {
-                "virtual_timestamp": 1792203123,
-                "virtual_time_iso": "2026-10-17T04:12:03+02:00",
+                "virtual_timestamp": 1792276601,
+                "virtual_time_iso": "2026-10-18T00:36:41+02:00",
                 "decision_type": "mine_upgrade",
-                "chosen_action": "build_2_body_89740",
+                "chosen_action": "build_2_body_89868",
                 "chosen_score": 60662.01,
-                "context_summary": "Upgraded crystal_mine on planeta #89740 (Grandmaster Multi-Colony Parallel Execution)"
+                "context_summary": "Upgraded crystal_mine on planeta #89868 (Grandmaster Multi-Colony Parallel Execution)"
             },
             {
-                "virtual_timestamp": 1792203123,
-                "virtual_time_iso": "2026-10-17T04:12:03+02:00",
+                "virtual_timestamp": 1792276601,
+                "virtual_time_iso": "2026-10-18T00:36:41+02:00",
+                "decision_type": "research_enqueued",
+                "chosen_action": "research_120",
+                "chosen_score": 31058.1,
+                "context_summary": "Queued research laser_tech on planet #89868 (Grandmaster Intelligence)"
+            },
+            {
+                "virtual_timestamp": 1792276646,
+                "virtual_time_iso": "2026-10-18T00:37:26+02:00",
+                "decision_type": "research_enqueued",
+                "chosen_action": "research_113",
+                "chosen_score": 30396,
+                "context_summary": "Queued research energy_tech on planet #89868 (Grandmaster Intelligence)"
+            },
+            {
+                "virtual_timestamp": 1792276691,
+                "virtual_time_iso": "2026-10-18T00:38:11+02:00",
+                "decision_type": "mine_upgrade",
+                "chosen_action": "build_12_body_89868",
+                "chosen_score": 42500,
+                "context_summary": "Upgraded fusion_plant on planeta #89868 (Grandmaster Multi-Colony Parallel Execution)"
+            },
+            {
+                "virtual_timestamp": 1792276691,
+                "virtual_time_iso": "2026-10-18T00:38:11+02:00",
+                "decision_type": "research_enqueued",
+                "chosen_action": "research_110",
+                "chosen_score": 56219.4,
+                "context_summary": "Queued research defence_tech on planet #89868 (Grandmaster Intelligence)"
+            },
+            {
+                "virtual_timestamp": 1792276736,
+                "virtual_time_iso": "2026-10-18T00:38:56+02:00",
+                "decision_type": "mine_upgrade",
+                "chosen_action": "build_3_body_89868",
+                "chosen_score": 62100.63,
+                "context_summary": "Upgraded deuterium_sintetizer on planeta #89868 (Grandmaster Multi-Colony Parallel Execution)"
+            },
+            {
+                "virtual_timestamp": 1792276736,
+                "virtual_time_iso": "2026-10-18T00:38:56+02:00",
                 "decision_type": "research_enqueued",
                 "chosen_action": "research_110",
                 "chosen_score": 35969.4,
-                "context_summary": "Queued research defence_tech on planet #89740 (Grandmaster Intelligence)"
+                "context_summary": "Queued research defence_tech on planet #89868 (Grandmaster Intelligence)"
             },
             {
-                "virtual_timestamp": 1792203123,
-                "virtual_time_iso": "2026-10-17T04:12:03+02:00",
+                "virtual_timestamp": 1792276736,
+                "virtual_time_iso": "2026-10-18T00:38:56+02:00",
                 "decision_type": "achievements_sync",
                 "chosen_action": "achieved",
                 "chosen_score": 1,
                 "context_summary": "Logros sincronizados a niveles legítimos: achievements_11 -> Niv. 1"
             },
             {
-                "virtual_timestamp": 1792203168,
-                "virtual_time_iso": "2026-10-17T04:12:48+02:00",
-                "decision_type": "savings_antifarm_abort",
-                "chosen_action": "abort_savings_defend",
-                "chosen_score": 20000,
-                "context_summary": "Watchdog Anti-Farm triggered on planet #89740: 3 consecutive cycles (135s) with non-growing stock. Aborting savings to recruit defenses and fighters."
+                "virtual_timestamp": 1792276781,
+                "virtual_time_iso": "2026-10-18T00:39:41+02:00",
+                "decision_type": "mine_upgrade",
+                "chosen_action": "build_1_body_89868",
+                "chosen_score": 48539.81,
+                "context_summary": "Upgraded metal_mine on planeta #89868 (Grandmaster Multi-Colony Parallel Execution)"
             },
             {
-                "virtual_timestamp": 1792203168,
-                "virtual_time_iso": "2026-10-17T04:12:48+02:00",
-                "decision_type": "savings_lock_engaged",
-                "chosen_action": "save_21",
-                "chosen_score": 73872,
-                "context_summary": "Engaged savings lock for hangar on body #89740 (ETA: 268.75s)"
-            },
-            {
-                "virtual_timestamp": 1792203168,
-                "virtual_time_iso": "2026-10-17T04:12:48+02:00",
+                "virtual_timestamp": 1792276781,
+                "virtual_time_iso": "2026-10-18T00:39:41+02:00",
                 "decision_type": "research_enqueued",
                 "chosen_action": "research_106",
                 "chosen_score": 19541.5,
-                "context_summary": "Queued research spy_tech on planet #89740 (Grandmaster Intelligence)"
+                "context_summary": "Queued research spy_tech on planet #89868 (Grandmaster Intelligence)"
             },
             {
-                "virtual_timestamp": 1792203168,
-                "virtual_time_iso": "2026-10-17T04:12:48+02:00",
+                "virtual_timestamp": 1792276781,
+                "virtual_time_iso": "2026-10-18T00:39:41+02:00",
                 "decision_type": "achievements_sync",
                 "chosen_action": "achieved",
                 "chosen_score": 1,
                 "context_summary": "Logros sincronizados a niveles legítimos: achievements_11 -> Niv. 2"
             },
             {
-                "virtual_timestamp": 1792203213,
-                "virtual_time_iso": "2026-10-17T04:13:33+02:00",
+                "virtual_timestamp": 1792276826,
+                "virtual_time_iso": "2026-10-18T00:40:26+02:00",
                 "decision_type": "research_enqueued",
                 "chosen_action": "research_108",
                 "chosen_score": 14013,
-                "context_summary": "Queued research computer_tech on planet #89740 (Grandmaster Intelligence)"
+                "context_summary": "Queued research computer_tech on planet #89868 (Grandmaster Intelligence)"
             },
             {
-                "virtual_timestamp": 1792203213,
-                "virtual_time_iso": "2026-10-17T04:13:33+02:00",
+                "virtual_timestamp": 1792276826,
+                "virtual_time_iso": "2026-10-18T00:40:26+02:00",
                 "decision_type": "colonizer_recruit",
-                "chosen_action": "recruit_colonizer_89740",
+                "chosen_action": "recruit_colonizer_89868",
                 "chosen_score": 10000,
-                "context_summary": "Queued 1 Colony Ship (#208) on planet #89740 (Open slots: 8, In-Flight: 0)"
+                "context_summary": "Queued 1 Colony Ship (#208) on planet #89868 (Open slots: 8, In-Flight: 0)"
             },
             {
-                "virtual_timestamp": 1792203213,
-                "virtual_time_iso": "2026-10-17T04:13:33+02:00",
+                "virtual_timestamp": 1792276826,
+                "virtual_time_iso": "2026-10-18T00:40:26+02:00",
                 "decision_type": "achievements_sync",
                 "chosen_action": "achieved",
                 "chosen_score": 1,
                 "context_summary": "Logros sincronizados a niveles legítimos: achievements_9 -> Niv. 1"
             },
             {
-                "virtual_timestamp": 1792203258,
-                "virtual_time_iso": "2026-10-17T04:14:18+02:00",
+                "virtual_timestamp": 1792276871,
+                "virtual_time_iso": "2026-10-18T00:41:11+02:00",
+                "decision_type": "mine_upgrade",
+                "chosen_action": "build_44_body_89868",
+                "chosen_score": 1326,
+                "context_summary": "Upgraded silo on planeta #89868 (Grandmaster Multi-Colony Parallel Execution)"
+            },
+            {
+                "virtual_timestamp": 1792276871,
+                "virtual_time_iso": "2026-10-18T00:41:11+02:00",
                 "decision_type": "research_enqueued",
                 "chosen_action": "research_108",
                 "chosen_score": 14904,
-                "context_summary": "Queued research computer_tech on planet #89740 (Grandmaster Intelligence)"
+                "context_summary": "Queued research computer_tech on planet #89868 (Grandmaster Intelligence)"
             },
             {
-                "virtual_timestamp": 1792203258,
-                "virtual_time_iso": "2026-10-17T04:14:18+02:00",
-                "decision_type": "colonizer_recruit",
-                "chosen_action": "recruit_colonizer_89740",
-                "chosen_score": 10000,
-                "context_summary": "Queued 1 Colony Ship (#208) on planet #89740 (Open slots: 8, In-Flight: 0)"
-            },
-            {
-                "virtual_timestamp": 1792203258,
-                "virtual_time_iso": "2026-10-17T04:14:18+02:00",
+                "virtual_timestamp": 1792276871,
+                "virtual_time_iso": "2026-10-18T00:41:11+02:00",
                 "decision_type": "colonization_dispatch",
                 "chosen_action": "colonize_1_336_8",
                 "chosen_score": 20000,
-                "context_summary": "Dispatched Colony Ship (#208) from Planet #89740 to optimal coordinates [1:336:8] (Mission 7)"
+                "context_summary": "Dispatched Colony Ship (#208) from Planet #89868 to optimal coordinates [1:336:8] (Mission 7)"
             },
             {
-                "virtual_timestamp": 1792203258,
-                "virtual_time_iso": "2026-10-17T04:14:18+02:00",
+                "virtual_timestamp": 1792276871,
+                "virtual_time_iso": "2026-10-18T00:41:11+02:00",
                 "decision_type": "achievements_sync",
                 "chosen_action": "achieved",
                 "chosen_score": 1,
                 "context_summary": "Logros sincronizados a niveles legítimos: achievements_10 -> Niv. 2"
             },
             {
-                "virtual_timestamp": 1792203303,
-                "virtual_time_iso": "2026-10-17T04:15:03+02:00",
+                "virtual_timestamp": 1792276916,
+                "virtual_time_iso": "2026-10-18T00:41:56+02:00",
                 "decision_type": "mine_upgrade",
-                "chosen_action": "build_22_body_89740",
+                "chosen_action": "build_22_body_89868",
                 "chosen_score": 51,
-                "context_summary": "Upgraded metal_store on planeta #89740 (Grandmaster Multi-Colony Parallel Execution)"
+                "context_summary": "Upgraded metal_store on planeta #89868 (Grandmaster Multi-Colony Parallel Execution)"
             },
             {
-                "virtual_timestamp": 1792203303,
-                "virtual_time_iso": "2026-10-17T04:15:03+02:00",
+                "virtual_timestamp": 1792276916,
+                "virtual_time_iso": "2026-10-18T00:41:56+02:00",
                 "decision_type": "research_enqueued",
                 "chosen_action": "research_108",
                 "chosen_score": 15795,
-                "context_summary": "Queued research computer_tech on planet #89740 (Grandmaster Intelligence)"
+                "context_summary": "Queued research computer_tech on planet #89868 (Grandmaster Intelligence)"
             },
             {
-                "virtual_timestamp": 1792203303,
-                "virtual_time_iso": "2026-10-17T04:15:03+02:00",
+                "virtual_timestamp": 1792276916,
+                "virtual_time_iso": "2026-10-18T00:41:56+02:00",
                 "decision_type": "colonizer_recruit",
-                "chosen_action": "recruit_colonizer_89740",
+                "chosen_action": "recruit_colonizer_89868",
                 "chosen_score": 10000,
-                "context_summary": "Queued 1 Colony Ship (#208) on planet #89740 (Open slots: 7, In-Flight: 1)"
+                "context_summary": "Queued 1 Colony Ship (#208) on planet #89868 (Open slots: 7, In-Flight: 1)"
             },
             {
-                "virtual_timestamp": 1792203303,
-                "virtual_time_iso": "2026-10-17T04:15:03+02:00",
-                "decision_type": "colonization_dispatch",
-                "chosen_action": "colonize_1_336_7",
-                "chosen_score": 20000,
-                "context_summary": "Dispatched Colony Ship (#208) from Planet #89740 to optimal coordinates [1:336:7] (Mission 7)"
-            },
-            {
-                "virtual_timestamp": 1792203303,
-                "virtual_time_iso": "2026-10-17T04:15:03+02:00",
+                "virtual_timestamp": 1792276916,
+                "virtual_time_iso": "2026-10-18T00:41:56+02:00",
                 "decision_type": "achievements_sync",
                 "chosen_action": "achieved",
                 "chosen_score": 1,
                 "context_summary": "Logros sincronizados a niveles legítimos: achievements_10 -> Niv. 3"
             },
             {
-                "virtual_timestamp": 1792203348,
-                "virtual_time_iso": "2026-10-17T04:15:48+02:00",
+                "virtual_timestamp": 1792276961,
+                "virtual_time_iso": "2026-10-18T00:42:41+02:00",
                 "decision_type": "mine_upgrade",
-                "chosen_action": "build_22_body_89740",
+                "chosen_action": "build_22_body_89868",
                 "chosen_score": 51,
-                "context_summary": "Upgraded metal_store on planeta #89740 (Grandmaster Multi-Colony Parallel Execution)"
+                "context_summary": "Upgraded metal_store on planeta #89868 (Grandmaster Multi-Colony Parallel Execution)"
             },
             {
-                "virtual_timestamp": 1792203348,
-                "virtual_time_iso": "2026-10-17T04:15:48+02:00",
+                "virtual_timestamp": 1792276961,
+                "virtual_time_iso": "2026-10-18T00:42:41+02:00",
                 "decision_type": "research_enqueued",
                 "chosen_action": "research_109",
                 "chosen_score": 13019.4,
-                "context_summary": "Queued research military_tech on planet #89740 (Grandmaster Intelligence)"
+                "context_summary": "Queued research military_tech on planet #89868 (Grandmaster Intelligence)"
             },
             {
-                "virtual_timestamp": 1792203348,
-                "virtual_time_iso": "2026-10-17T04:15:48+02:00",
+                "virtual_timestamp": 1792276961,
+                "virtual_time_iso": "2026-10-18T00:42:41+02:00",
                 "decision_type": "colonization_dispatch",
-                "chosen_action": "colonize_1_336_9",
+                "chosen_action": "colonize_1_336_7",
                 "chosen_score": 20000,
-                "context_summary": "Dispatched Colony Ship (#208) from Planet #89740 to optimal coordinates [1:336:9] (Mission 7)"
+                "context_summary": "Dispatched Colony Ship (#208) from Planet #89868 to optimal coordinates [1:336:7] (Mission 7)"
             },
             {
-                "virtual_timestamp": 1792203348,
-                "virtual_time_iso": "2026-10-17T04:15:48+02:00",
+                "virtual_timestamp": 1792276961,
+                "virtual_time_iso": "2026-10-18T00:42:41+02:00",
                 "decision_type": "achievements_sync",
                 "chosen_action": "achieved",
                 "chosen_score": 1,
                 "context_summary": "Logros sincronizados a niveles legítimos: achievements_10 -> Niv. 4"
             },
             {
-                "virtual_timestamp": 1792203393,
-                "virtual_time_iso": "2026-10-17T04:16:33+02:00",
+                "virtual_timestamp": 1792277006,
+                "virtual_time_iso": "2026-10-18T00:43:26+02:00",
                 "decision_type": "mine_upgrade",
-                "chosen_action": "build_1_body_89740",
-                "chosen_score": 48539.81,
-                "context_summary": "Upgraded metal_mine on planeta #89740 (Grandmaster Multi-Colony Parallel Execution)"
-            },
-            {
-                "virtual_timestamp": 1792203393,
-                "virtual_time_iso": "2026-10-17T04:16:33+02:00",
-                "decision_type": "research_enqueued",
-                "chosen_action": "research_109",
-                "chosen_score": 13019.4,
-                "context_summary": "Queued research military_tech on planet #89740 (Grandmaster Intelligence)"
-            },
-            {
-                "virtual_timestamp": 1792203438,
-                "virtual_time_iso": "2026-10-17T04:17:18+02:00",
-                "decision_type": "mine_upgrade",
-                "chosen_action": "build_22_body_89740",
+                "chosen_action": "build_22_body_89868",
                 "chosen_score": 51,
-                "context_summary": "Upgraded metal_store on planeta #89740 (Grandmaster Multi-Colony Parallel Execution)"
+                "context_summary": "Upgraded metal_store on planeta #89868 (Grandmaster Multi-Colony Parallel Execution)"
             },
             {
-                "virtual_timestamp": 1792203438,
-                "virtual_time_iso": "2026-10-17T04:17:18+02:00",
+                "virtual_timestamp": 1792277006,
+                "virtual_time_iso": "2026-10-18T00:43:26+02:00",
                 "decision_type": "research_enqueued",
                 "chosen_action": "research_109",
                 "chosen_score": 13019.4,
-                "context_summary": "Queued research military_tech on planet #89740 (Grandmaster Intelligence)"
+                "context_summary": "Queued research military_tech on planet #89868 (Grandmaster Intelligence)"
             },
             {
-                "virtual_timestamp": 1792203483,
-                "virtual_time_iso": "2026-10-17T04:18:03+02:00",
+                "virtual_timestamp": 1792277051,
+                "virtual_time_iso": "2026-10-18T00:44:11+02:00",
                 "decision_type": "mine_upgrade",
-                "chosen_action": "build_23_body_89740",
+                "chosen_action": "build_22_body_89868",
                 "chosen_score": 51,
-                "context_summary": "Upgraded crystal_store on planeta #89740 (Grandmaster Multi-Colony Parallel Execution)"
+                "context_summary": "Upgraded metal_store on planeta #89868 (Grandmaster Multi-Colony Parallel Execution)"
             },
             {
-                "virtual_timestamp": 1792203483,
-                "virtual_time_iso": "2026-10-17T04:18:03+02:00",
+                "virtual_timestamp": 1792277051,
+                "virtual_time_iso": "2026-10-18T00:44:11+02:00",
                 "decision_type": "research_enqueued",
                 "chosen_action": "research_109",
                 "chosen_score": 13019.4,
-                "context_summary": "Queued research military_tech on planet #89740 (Grandmaster Intelligence)"
+                "context_summary": "Queued research military_tech on planet #89868 (Grandmaster Intelligence)"
+            },
+            {
+                "virtual_timestamp": 1792277096,
+                "virtual_time_iso": "2026-10-18T00:44:56+02:00",
+                "decision_type": "mine_upgrade",
+                "chosen_action": "build_23_body_89868",
+                "chosen_score": 51,
+                "context_summary": "Upgraded crystal_store on planeta #89868 (Grandmaster Multi-Colony Parallel Execution)"
+            },
+            {
+                "virtual_timestamp": 1792277096,
+                "virtual_time_iso": "2026-10-18T00:44:56+02:00",
+                "decision_type": "research_enqueued",
+                "chosen_action": "research_109",
+                "chosen_score": 13019.4,
+                "context_summary": "Queued research military_tech on planet #89868 (Grandmaster Intelligence)"
+            },
+            {
+                "virtual_timestamp": 1792277141,
+                "virtual_time_iso": "2026-10-18T00:45:41+02:00",
+                "decision_type": "mine_upgrade",
+                "chosen_action": "build_23_body_89868",
+                "chosen_score": 51,
+                "context_summary": "Upgraded crystal_store on planeta #89868 (Grandmaster Multi-Colony Parallel Execution)"
+            },
+            {
+                "virtual_timestamp": 1792277141,
+                "virtual_time_iso": "2026-10-18T00:45:41+02:00",
+                "decision_type": "research_enqueued",
+                "chosen_action": "research_110",
+                "chosen_score": 13019.4,
+                "context_summary": "Queued research defence_tech on planet #89868 (Grandmaster Intelligence)"
+            },
+            {
+                "virtual_timestamp": 1792277141,
+                "virtual_time_iso": "2026-10-18T00:45:41+02:00",
+                "decision_type": "colonizer_recruit",
+                "chosen_action": "recruit_colonizer_89868",
+                "chosen_score": 10000,
+                "context_summary": "Queued 1 Colony Ship (#208) on planet #89868 (Open slots: 6, In-Flight: 2)"
+            },
+            {
+                "virtual_timestamp": 1792277186,
+                "virtual_time_iso": "2026-10-18T00:46:26+02:00",
+                "decision_type": "mine_upgrade",
+                "chosen_action": "build_23_body_89868",
+                "chosen_score": 51,
+                "context_summary": "Upgraded crystal_store on planeta #89868 (Grandmaster Multi-Colony Parallel Execution)"
+            },
+            {
+                "virtual_timestamp": 1792277186,
+                "virtual_time_iso": "2026-10-18T00:46:26+02:00",
+                "decision_type": "research_enqueued",
+                "chosen_action": "research_110",
+                "chosen_score": 13019.4,
+                "context_summary": "Queued research defence_tech on planet #89868 (Grandmaster Intelligence)"
+            },
+            {
+                "virtual_timestamp": 1792277186,
+                "virtual_time_iso": "2026-10-18T00:46:26+02:00",
+                "decision_type": "colonizer_recruit",
+                "chosen_action": "recruit_colonizer_89868",
+                "chosen_score": 10000,
+                "context_summary": "Queued 1 Colony Ship (#208) on planet #89868 (Open slots: 6, In-Flight: 2)"
+            },
+            {
+                "virtual_timestamp": 1792277186,
+                "virtual_time_iso": "2026-10-18T00:46:26+02:00",
+                "decision_type": "colonization_dispatch",
+                "chosen_action": "colonize_1_336_9",
+                "chosen_score": 20000,
+                "context_summary": "Dispatched Colony Ship (#208) from Planet #89868 to optimal coordinates [1:336:9] (Mission 7)"
+            },
+            {
+                "virtual_timestamp": 1792277186,
+                "virtual_time_iso": "2026-10-18T00:46:26+02:00",
+                "decision_type": "achievements_sync",
+                "chosen_action": "achieved",
+                "chosen_score": 1,
+                "context_summary": "Logros sincronizados a niveles legítimos: achievements_11 -> Niv. 3"
+            },
+            {
+                "virtual_timestamp": 1792277231,
+                "virtual_time_iso": "2026-10-18T00:47:11+02:00",
+                "decision_type": "mine_upgrade",
+                "chosen_action": "build_23_body_89868",
+                "chosen_score": 51,
+                "context_summary": "Upgraded crystal_store on planeta #89868 (Grandmaster Multi-Colony Parallel Execution)"
+            },
+            {
+                "virtual_timestamp": 1792277231,
+                "virtual_time_iso": "2026-10-18T00:47:11+02:00",
+                "decision_type": "research_enqueued",
+                "chosen_action": "research_120",
+                "chosen_score": 11699.1,
+                "context_summary": "Queued research laser_tech on planet #89868 (Grandmaster Intelligence)"
+            },
+            {
+                "virtual_timestamp": 1792277231,
+                "virtual_time_iso": "2026-10-18T00:47:11+02:00",
+                "decision_type": "achievements_sync",
+                "chosen_action": "achieved",
+                "chosen_score": 1,
+                "context_summary": "Logros sincronizados a niveles legítimos: achievements_11 -> Niv. 4"
+            },
+            {
+                "virtual_timestamp": 1792277276,
+                "virtual_time_iso": "2026-10-18T00:47:56+02:00",
+                "decision_type": "mine_upgrade",
+                "chosen_action": "build_24_body_89868",
+                "chosen_score": 51,
+                "context_summary": "Upgraded deuterium_store on planeta #89868 (Grandmaster Multi-Colony Parallel Execution)"
+            },
+            {
+                "virtual_timestamp": 1792277276,
+                "virtual_time_iso": "2026-10-18T00:47:56+02:00",
+                "decision_type": "research_enqueued",
+                "chosen_action": "research_110",
+                "chosen_score": 13019.4,
+                "context_summary": "Queued research defence_tech on planet #89868 (Grandmaster Intelligence)"
+            },
+            {
+                "virtual_timestamp": 1792277276,
+                "virtual_time_iso": "2026-10-18T00:47:56+02:00",
+                "decision_type": "colonization_dispatch",
+                "chosen_action": "colonize_1_336_6",
+                "chosen_score": 20000,
+                "context_summary": "Dispatched Colony Ship (#208) from Planet #89868 to optimal coordinates [1:336:6] (Mission 7)"
             }
         ]
     },
-    "integrity_sha256": "da9bf9d38542a5d48d7aaa29843edac3687333b39031554fca96163018e9a3e0"
+    "integrity_sha256": "ec5e5d4e2e1758b44fe0d20ae5332c3ef13b15979dbb0018fc7e4e152b9e9ef6"
 }

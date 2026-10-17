@@ -672,6 +672,12 @@ class BotLogisticsPlanner
         }
         $fobData = $fobBody['data'];
 
+        // Histéresis Anti-Ping-Pong: Demanda de military_fuel solo si deuterio físico en destino < 15M
+        $curFobDeut = (float)($fobData['deuterium'] ?? 0.0);
+        if ($curFobDeut >= 15000000.0) {
+            return null;
+        }
+
         $intel = null;
         if ($world !== null && isset($world->intel)) {
             $intelHalfLife = isset($this->ctx->difficulty->intelMaxAgeHours) ? (float)$this->ctx->difficulty->intelMaxAgeHours : 16.0;
@@ -761,7 +767,7 @@ class BotLogisticsPlanner
             }
 
             $deutAvail = (float)($pData['deuterium'] ?? 0.0);
-            if ($combatShipsCount >= 5000 && $deutAvail < 100000000.0) {
+            if ($combatShipsCount >= 5000 && $deutAvail < 15000000.0) {
                 $demands[] = array(
                     'target_planet_id' => $pId,
                     'type'             => 'military_fuel',
@@ -1177,6 +1183,19 @@ class BotLogisticsPlanner
                 $surplusD = max(0.0, (float)$dData['deuterium'] - $reserveD);
             }
 
+            // Histéresis de Ping-Pong de Deuterio:
+            // Donante solo dona deuterio si su propio deuterio físico es >= 65M (65,000,000).
+            // Y siempre retiene al menos 45M (45,000,000) de deuterio físico tras el despacho.
+            if ($category === 'fleet') {
+                $physD = (float)($dData['deuterium'] ?? 0.0);
+                if ($physD < 65000000.0) {
+                    $surplusD = 0.0;
+                } else {
+                    $maxDonateD = max(0.0, $physD - 45000000.0);
+                    $surplusD = min($surplusD, $maxDonateD);
+                }
+            }
+
             if ($surplusM <= 0 && $surplusC <= 0 && $surplusD <= 0) {
                 continue;
             }
@@ -1249,6 +1268,18 @@ class BotLogisticsPlanner
         $giveM = min($remainingM, $donor['surplus']['metal']);
         $giveC = min($remainingC, $donor['surplus']['crystal']);
         $giveD = min($remainingD, $donor['surplus']['deuterium']);
+
+        // Histéresis de Ping-Pong de Deuterio:
+        if ($category === 'fleet' || ($demand['type'] ?? '') === 'military_fuel') {
+            $donorPhysD = (float)($donor['data']['deuterium'] ?? 0.0);
+            if ($donorPhysD < 65000000.0) {
+                $giveD = 0.0;
+            } else {
+                $maxDonateD = max(0.0, $donorPhysD - 45000000.0);
+                $giveD = min($giveD, $maxDonateD);
+            }
+        }
+
         $totalToGive = $giveM + $giveC + $giveD;
 
         if ($totalToGive <= 0) {

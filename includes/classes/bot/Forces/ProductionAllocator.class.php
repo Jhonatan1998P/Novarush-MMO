@@ -557,6 +557,20 @@ class BotProductionAllocator
                     $lvl3 = (int)($pData[$resource[$m3]] ?? 0);
                     $lvl4 = (int)($pData[$resource[$m4]] ?? 0);
 
+                    // Requisito de Almacenes Mínimos en Colonias:
+                    // Antes de escalar módulos 82, 83, 84 por encima de nivel 4, exigir almacenes mínimos (metal_store >= 6, crystal_store >= 5, deuterium_store >= 5)
+                    if (in_array($mId, array(82, 83, 84))) {
+                        $curModLvl = (int)($pData[$resource[$mId]] ?? 0);
+                        if ($curModLvl >= 4) {
+                            $mStoreLvl = (int)($pData['metal_store'] ?? ($pData[$resource[22]] ?? 0));
+                            $cStoreLvl = (int)($pData['crystal_store'] ?? ($pData[$resource[23]] ?? 0));
+                            $dStoreLvl = (int)($pData['deuterium_store'] ?? ($pData[$resource[24]] ?? 0));
+                            if ($mStoreLvl < 6 || $cStoreLvl < 5 || $dStoreLvl < 5) {
+                                continue;
+                            }
+                        }
+                    }
+
                     if ($mId === $m2 && $lvl2 >= max(1, $lvl1 - 2)) {
                         continue;
                     } elseif ($mId === $m3 && $lvl3 >= max(1, $lvl2 - 2)) {
