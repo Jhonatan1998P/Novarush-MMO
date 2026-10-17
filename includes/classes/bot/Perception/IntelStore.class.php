@@ -65,7 +65,7 @@ class BotIntelStore
             ':defense_data'     => ($defenses !== null && is_array($defenses)) ? json_encode($defenses) : null,
             ':building_data'    => ($buildings !== null && is_array($buildings)) ? json_encode($buildings) : null,
             ':tech_data'        => ($techs !== null && is_array($techs)) ? json_encode($techs) : null,
-            ':scanned_at'       => TIMESTAMP,
+            ':scanned_at'       => class_exists('BotClock') ? BotClock::now() : TIMESTAMP,
             ':incomplete_intel' => $isIncomplete,
         ));
     }
@@ -103,7 +103,7 @@ class BotIntelStore
             return null;
         }
 
-        $ageHours = max(0.0, (TIMESTAMP - (int)$row['scanned_at']) / 3600.0);
+        $ageHours = max(0.0, ((class_exists('BotClock') ? BotClock::now() : TIMESTAMP) - (int)$row['scanned_at']) / 3600.0);
         // Regla estricta universal: La inteligencia de espionaje caduca a los 60 minutos (1 hora)
         if ($ageHours >= 1.0) {
             $this->deleteIntel((int)$row['galaxy'], (int)$row['system'], (int)$row['planet'], (int)$row['planet_type']);
@@ -182,7 +182,7 @@ class BotIntelStore
               AND planet = :planet 
               AND planet_type = :planet_type;", array(
             ':data'        => json_encode($def),
-            ':now'         => TIMESTAMP,
+            ':now'         => class_exists('BotClock') ? BotClock::now() : TIMESTAMP,
             ':bot_id'      => $this->botId,
             ':galaxy'      => (int)$galaxy,
             ':system'      => (int)$system,

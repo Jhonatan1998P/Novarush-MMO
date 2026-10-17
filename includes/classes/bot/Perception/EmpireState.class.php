@@ -124,6 +124,29 @@ class BotEmpireState
         return null;
     }
 
+    public function updateBodyData($planetId, array $changes)
+    {
+        $planetId = (int)$planetId;
+        if (isset($this->planets[$planetId])) {
+            foreach ($changes as $k => $v) {
+                $this->planets[$planetId]['data'][$k] = $v;
+                if (isset($this->planets[$planetId][$k])) {
+                    $this->planets[$planetId][$k] = $v;
+                }
+            }
+            return true;
+        } elseif (isset($this->moons[$planetId])) {
+            foreach ($changes as $k => $v) {
+                $this->moons[$planetId]['data'][$k] = $v;
+                if (isset($this->moons[$planetId][$k])) {
+                    $this->moons[$planetId][$k] = $v;
+                }
+            }
+            return true;
+        }
+        return false;
+    }
+
     public function getUser()
     {
         return $this->user;

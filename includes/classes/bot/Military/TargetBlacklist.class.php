@@ -53,7 +53,7 @@ class BotTargetBlacklist
      */
     public static function isPlayerBlacklisted($botId, $targetUserId, $now = null)
     {
-        $now = ($now === null) ? TIMESTAMP : (int)$now;
+        $now = ($now === null) ? (class_exists('BotClock') ? BotClock::now() : TIMESTAMP) : (int)$now;
         $botId = (int)$botId;
         $targetUserId = (int)$targetUserId;
 
@@ -92,7 +92,7 @@ class BotTargetBlacklist
      */
     public static function isBlacklisted($botId, $targetUserId = 0, $planetId = 0, $galaxy = 0, $system = 0, $planet = 0, $now = null)
     {
-        $now = ($now === null) ? TIMESTAMP : (int)$now;
+        $now = ($now === null) ? (class_exists('BotClock') ? BotClock::now() : TIMESTAMP) : (int)$now;
         $botId = (int)$botId;
         $targetUserId = (int)$targetUserId;
         $planetId = (int)$planetId;
@@ -195,7 +195,7 @@ class BotTargetBlacklist
      */
     public static function getRemainingAttacks($botId, $targetUserId, $now = null)
     {
-        $now = ($now === null) ? TIMESTAMP : (int)$now;
+        $now = ($now === null) ? (class_exists('BotClock') ? BotClock::now() : TIMESTAMP) : (int)$now;
         $botId = (int)$botId;
         $targetUserId = (int)$targetUserId;
 
@@ -243,7 +243,7 @@ class BotTargetBlacklist
      */
     public static function recordAttackVictory($botId, $targetUserId = 0, $planetId = 0, $galaxy = 0, $system = 0, $planet = 0, $now = null)
     {
-        $now = ($now === null) ? TIMESTAMP : (int)$now;
+        $now = ($now === null) ? (class_exists('BotClock') ? BotClock::now() : TIMESTAMP) : (int)$now;
         $botId = (int)$botId;
         $targetUserId = (int)$targetUserId;
         $planetId = (int)$planetId;
@@ -367,7 +367,7 @@ class BotTargetBlacklist
      */
     public static function addCooldown($botId, $targetUserId = 0, $planetId = 0, $galaxy = 0, $system = 0, $planet = 0, $duration = 3600, $reason = '')
     {
-        $now = TIMESTAMP;
+        $now = class_exists('BotClock') ? BotClock::now() : TIMESTAMP;
         $botId = (int)$botId;
         $planetId = (int)$planetId;
         $galaxy = (int)$galaxy;
@@ -518,7 +518,7 @@ class BotTargetBlacklist
      */
     public static function isGlobalScanOnCooldown($botId, $now = null)
     {
-        $now = ($now === null) ? TIMESTAMP : (int)$now;
+        $now = ($now === null) ? (class_exists('BotClock') ? BotClock::now() : TIMESTAMP) : (int)$now;
         $botId = (int)$botId;
         if ($botId <= 0) return false;
 
@@ -546,7 +546,7 @@ class BotTargetBlacklist
      */
     public static function isOnCooldown($botId, $galaxy, $system, $planet, $now = null)
     {
-        $now = ($now === null) ? TIMESTAMP : (int)$now;
+        $now = ($now === null) ? (class_exists('BotClock') ? BotClock::now() : TIMESTAMP) : (int)$now;
         self::ensureCooldownTableExists();
         $db = Database::get();
         $cooldownTable = DB_PREFIX . 'bot_planet_cooldown';

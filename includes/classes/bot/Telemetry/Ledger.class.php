@@ -26,7 +26,7 @@ class BotLedger
             ':bot_id'  => $this->botId,
             ':type'    => (string)$eventType,
             ':details' => json_encode(array('amount_mse' => (float)$amountMSE, 'notes' => $notes)),
-            ':time'    => TIMESTAMP,
+            ':time'    => class_exists('BotClock') ? BotClock::now() : TIMESTAMP,
         ));
     }
 }

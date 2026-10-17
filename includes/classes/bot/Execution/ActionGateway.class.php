@@ -15,6 +15,10 @@ require_once 'includes/classes/bot/Kernel/BotClock.class.php';
  */
 class BotActionGateway
 {
+    public static $jumpGateExecutions = 0;
+    public static $jumpGateShipsTransferred = 0;
+    public static $jumpGateLog = array();
+
     private $ctx;
 
     public function __construct(BotContext $ctx)
@@ -288,8 +292,15 @@ class BotActionGateway
                 return false;
             }
 
+            if (!isset($user['factor'])) {
+                $user['factor'] = getFactors($user, 'basic', class_exists('BotClock') ? BotClock::get() : TIMESTAMP);
+            }
+
             $updater = new ResourceUpdate();
             list($u, $p) = $updater->CalcResource($user, $planet, true, BotClock::get());
+            if (!isset($u['factor'])) {
+                $u['factor'] = $user['factor'];
+            }
 
             if (!BuildFunctions::isTechnologieAccessible($u, $p, $techId, array())) {
                 if (!$isOuterTx) $db->rollBack();
@@ -441,7 +452,7 @@ class BotActionGateway
         if ($mission == 4 && ($maxSlots <= $actualFleets || $activeNonExp >= $sMilitary)) {
             $db = Database::get();
             $preempt = $db->selectSingle(
-                "SELECT fleet_id, fleet_start_id, fleet_array, fleet_resource_metal, fleet_resource_crystal, fleet_resource_deuter 
+                "SELECT fleet_id, fleet_start_id, fleet_array, fleet_resource_metal, fleet_resource_crystal, fleet_resource_deuterium 
                  FROM %%FLEETS%% 
                  WHERE fleet_owner = :bid AND fleet_mission = 3 
                  ORDER BY fleet_id DESC 
@@ -471,7 +482,7 @@ class BotActionGateway
                     WHERE id = :pid;", array(
                     ':m'   => (float)$preempt['fleet_resource_metal'],
                     ':c'   => (float)$preempt['fleet_resource_crystal'],
-                    ':d'   => (float)$preempt['fleet_resource_deuter'],
+                    ':d'   => (float)$preempt['fleet_resource_deuterium'],
                     ':pid' => (int)$preempt['fleet_start_id'],
                 ));
                 $db->delete("DELETE FROM %%FLEETS%% WHERE fleet_id = :fid;", array(':fid' => (int)$preempt['fleet_id']));
@@ -709,6 +720,110 @@ class BotActionGateway
             $targetPlanet,
             $targetType,
             $primaryTarget
+        );
+    }
+
+    /**
+     * Execute Quantum Jump Gate between two moons
+     *
+     * @param int $sourceMoonId
+     * @param int $targetMoonId
+     * @param array $ships [shipId => count]
+     * @return array|false Transferred ship details or false
+     */
+    public function executeJumpGate($sourceMoonId, $targetMoonId, array $ships)
+    {
+        global $resource;
+
+        $result = BotGameServices::executeJumpGate($this->ctx->botId, $sourceMoonId, $targetMoonId, $ships);
+        if (!$result) {
+            return false;
+        }
+
+        self::$jumpGateExecutions++;
+        self::$jumpGateShipsTransferred += (int)($result['total_ships'] ?? 0);
+        self::$jumpGateLog[] = $result;
+
+        // Synchronize in-memory empire state if available
+        if (isset($this->ctx->empire)) {
+            $srcPlanet = $this->ctx->empire->getPlanet($sourceMoonId);
+            $tgtPlanet = $this->ctx->empire->getPlanet($targetMoonId);
+            if ($srcPlanet !== null && $tgtPlanet !== null) {
+                $srcChanges = array('last_jump_time' => $result['jump_time']);
+                $tgtChanges = array('last_jump_time' => $result['jump_time']);
+                foreach ($result['ships'] as $sId => $sCnt) {
+                    $col = $resource[$sId] ?? '';
+                    if (!empty($col)) {
+                        $curSrc = (int)($srcPlanet['data'][$col] ?? 0);
+                        $curTgt = (int)($tgtPlanet['data'][$col] ?? 0);
+                        $srcChanges[$col] = max(0, $curSrc - $sCnt);
+                        $tgtChanges[$col] = $curTgt + $sCnt;
+                    }
+                }
+                if (method_exists($this->ctx->empire, 'updateBodyData')) {
+                    $this->ctx->empire->updateBodyData($sourceMoonId, $srcChanges);
+                    $this->ctx->empire->updateBodyData($targetMoonId, $tgtChanges);
+                }
+            }
+        }
+
+        // Telemetry & Decision Log
+        if (isset($this->ctx->decisionLog)) {
+            $this->ctx->decisionLog->record(
+                'quantum_jump_gate',
+                "Quantum Jump executed from Moon #{$sourceMoonId} to Moon #{$targetMoonId}: " . number_format($result['total_ships']) . " ships transferred (0 Deuterium, " . number_format($result['mse']) . " MSE)",
+                array(
+                    'source_moon_id' => $sourceMoonId,
+                    'target_moon_id' => $targetMoonId,
+                    'ships'          => $result['ships'],
+                    'total_ships'    => $result['total_ships'],
+                    'mse'            => $result['mse'],
+                ),
+                "jump_{$sourceMoonId}_{$targetMoonId}",
+                $result['total_ships']
+            );
+        }
+
+        if (isset($this->ctx->telemetry) && method_exists($this->ctx->telemetry, 'logFleetMission')) {
+            $this->ctx->telemetry->logFleetMission(
+                "Luna #{$sourceMoonId}",
+                "[Moon]",
+                "Luna #{$targetMoonId}",
+                "[Moon]",
+                43, // Jump Gate
+                $result['ships'],
+                array(901 => 0, 902 => 0, 903 => 0),
+                0,
+                "Salto Cuántico inter-lunar a 0 Deuterio"
+            );
+        }
+
+        return $result;
+    }
+
+    /**
+     * Dispatch colonization mission (Mission 7) with 1 Colony Ship (208)
+     *
+     * @param int $originPlanetId
+     * @param int $targetG
+     * @param int $targetS
+     * @param int $targetP
+     * @return int|false Fleet ID or false
+     */
+    public function dispatchColonization($originPlanetId, $targetG, $targetS, $targetP)
+    {
+        return $this->launchFleet(
+            array(208 => 1),
+            7, // Mission 7: Colonisation
+            $originPlanetId,
+            0, // Target planet ID (does not exist yet)
+            0, // Target owner ID (unclaimed)
+            (int)$targetG,
+            (int)$targetS,
+            (int)$targetP,
+            1, // Target type 1: Planet
+            array(),
+            10 // 100% speed
         );
     }
 }

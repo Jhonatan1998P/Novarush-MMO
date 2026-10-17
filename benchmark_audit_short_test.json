@@ -1,0 +1,2333 @@
+{
+    "meta": {
+        "personality": "aggressive",
+        "difficulty": "nightmare",
+        "simulated_days": 0.05,
+        "virtual_seconds": 4350,
+        "real_execution_seconds": 4.52,
+        "total_kernel_turns_executed": 95,
+        "used_full_bot_kernel_process_turn": true,
+        "generated_at_iso": "2026-10-16T18:06:49+02:00",
+        "benchmark_name": "NovaRush Zero-to-Empire 7-Day Simulation Benchmark",
+        "engine_version": "2Moons NovaRush AI Kernel v2.5",
+        "bot_username": "TestZeroBot",
+        "bot_id": 88949,
+        "virtual_start_time": 1792166805,
+        "virtual_end_time": 1792171155,
+        "virtual_start_iso": "2026-10-16T18:06:45+02:00",
+        "virtual_end_iso": "2026-10-16T19:19:15+02:00",
+        "home_coordinate": "[1:337:8]",
+        "rivals_coordinates": [
+            "[1:334:8]",
+            "[1:340:8]"
+        ]
+    },
+    "daily_snapshots": [],
+    "final_db_state_before_rollback": {
+        "user_technologies": {
+            "spy_tech": 1,
+            "computer_tech": 4,
+            "military_tech": 6,
+            "defence_tech": 4,
+            "shield_tech": 4,
+            "energy_tech": 3,
+            "hyperspace_tech": 0,
+            "combustion_tech": 0,
+            "impulse_motor_tech": 4,
+            "hyperspace_motor_tech": 0,
+            "laser_tech": 2,
+            "ionic_tech": 0,
+            "buster_tech": 0,
+            "intergalactic_tech": 0,
+            "expedition_tech": 0,
+            "metal_proc_tech": 0,
+            "crystal_proc_tech": 0,
+            "deuterium_proc_tech": 0,
+            "fuel_optim_tech": 0,
+            "graviton_tech": 0,
+            "b_tech": 0
+        },
+        "full_technologies_report": [
+            {
+                "id": 106,
+                "code": "spy_tech",
+                "name": "Tecnología espía",
+                "level": 1
+            },
+            {
+                "id": 108,
+                "code": "computer_tech",
+                "name": "Tecnología informática",
+                "level": 4
+            },
+            {
+                "id": 109,
+                "code": "military_tech",
+                "name": "Tecnología de armas",
+                "level": 6
+            },
+            {
+                "id": 110,
+                "code": "defence_tech",
+                "name": "Tecnología Shield",
+                "level": 4
+            },
+            {
+                "id": 111,
+                "code": "shield_tech",
+                "name": "Tecnología de armadura",
+                "level": 4
+            },
+            {
+                "id": 113,
+                "code": "energy_tech",
+                "name": "Tecnología energética",
+                "level": 3
+            },
+            {
+                "id": 114,
+                "code": "hyperspace_tech",
+                "name": "Tecnología hiperespacial",
+                "level": 0
+            },
+            {
+                "id": 115,
+                "code": "combustion_tech",
+                "name": "Motor de combustión",
+                "level": 0
+            },
+            {
+                "id": 117,
+                "code": "impulse_motor_tech",
+                "name": "Motor de impulso",
+                "level": 4
+            },
+            {
+                "id": 118,
+                "code": "hyperspace_motor_tech",
+                "name": "Motor hiperespacial",
+                "level": 0
+            },
+            {
+                "id": 120,
+                "code": "laser_tech",
+                "name": "Tecnología láser",
+                "level": 2
+            },
+            {
+                "id": 121,
+                "code": "ionic_tech",
+                "name": "Tecnología de iones",
+                "level": 0
+            },
+            {
+                "id": 122,
+                "code": "buster_tech",
+                "name": "Tecnología Plasma",
+                "level": 0
+            },
+            {
+                "id": 123,
+                "code": "intergalactic_tech",
+                "name": "Red de investigación intergaláctica",
+                "level": 0
+            },
+            {
+                "id": 124,
+                "code": "expedition_tech",
+                "name": "Investigación de expedición",
+                "level": 0
+            },
+            {
+                "id": 131,
+                "code": "metal_proc_tech",
+                "name": "Investigación Mineral",
+                "level": 0
+            },
+            {
+                "id": 132,
+                "code": "crystal_proc_tech",
+                "name": "Investigación de semicristales",
+                "level": 0
+            },
+            {
+                "id": 133,
+                "code": "deuterium_proc_tech",
+                "name": "Investigación de combustibles",
+                "level": 0
+            },
+            {
+                "id": 134,
+                "code": "fuel_optim_tech",
+                "name": "Optimización de combustible",
+                "level": 0
+            },
+            {
+                "id": 199,
+                "code": "graviton_tech",
+                "name": "Investigación de gravitones",
+                "level": 0
+            }
+        ],
+        "full_buildings_report": {
+            "planets": [
+                {
+                    "planet_id": 89697,
+                    "coords": "[1:337:8]",
+                    "name": "Genesis-Prime",
+                    "buildings": {
+                        "metal_mine": 16,
+                        "crystal_mine": 16,
+                        "deuterium_sintetizer": 13,
+                        "solar_plant": 18,
+                        "university": 0,
+                        "fusion_plant": 1,
+                        "robot_factory": 5,
+                        "nano_factory": 0,
+                        "hangar": 4,
+                        "metal_store": 4,
+                        "crystal_store": 4,
+                        "deuterium_store": 0,
+                        "laboratory": 8,
+                        "terraformer": 0,
+                        "ally_deposit": 0,
+                        "mondbasis": 0,
+                        "phalanx": 0,
+                        "sprungtor": 0,
+                        "silo": 1,
+                        "resource_module": 0,
+                        "defensive_module": 0,
+                        "military_module": 0,
+                        "research_module": 0
+                    }
+                }
+            ],
+            "moons": [],
+            "empire_totals": [
+                {
+                    "id": 1,
+                    "code": "metal_mine",
+                    "name": "Mina de metal",
+                    "total_level": 16
+                },
+                {
+                    "id": 2,
+                    "code": "crystal_mine",
+                    "name": "Mina de cristal",
+                    "total_level": 16
+                },
+                {
+                    "id": 3,
+                    "code": "deuterium_sintetizer",
+                    "name": "Refinería de deuterio",
+                    "total_level": 13
+                },
+                {
+                    "id": 4,
+                    "code": "solar_plant",
+                    "name": "Planta de energía solar",
+                    "total_level": 18
+                },
+                {
+                    "id": 6,
+                    "code": "university",
+                    "name": "Universidad",
+                    "total_level": 0
+                },
+                {
+                    "id": 12,
+                    "code": "fusion_plant",
+                    "name": "Planta de energía de deuterio",
+                    "total_level": 1
+                },
+                {
+                    "id": 14,
+                    "code": "robot_factory",
+                    "name": "Fábrica de robots",
+                    "total_level": 5
+                },
+                {
+                    "id": 15,
+                    "code": "nano_factory",
+                    "name": "Fábrica de nanitos",
+                    "total_level": 0
+                },
+                {
+                    "id": 21,
+                    "code": "hangar",
+                    "name": "Astillero",
+                    "total_level": 4
+                },
+                {
+                    "id": 22,
+                    "code": "metal_store",
+                    "name": "Almacenamiento de metal",
+                    "total_level": 4
+                },
+                {
+                    "id": 23,
+                    "code": "crystal_store",
+                    "name": "Almacenamiento de cristal",
+                    "total_level": 4
+                },
+                {
+                    "id": 24,
+                    "code": "deuterium_store",
+                    "name": "Almacenamiento de deuterio",
+                    "total_level": 0
+                },
+                {
+                    "id": 31,
+                    "code": "laboratory",
+                    "name": "Laboratorio de investigación",
+                    "total_level": 8
+                },
+                {
+                    "id": 33,
+                    "code": "terraformer",
+                    "name": "Terraformador",
+                    "total_level": 0
+                },
+                {
+                    "id": 34,
+                    "code": "ally_deposit",
+                    "name": "Depósito de la Alianza",
+                    "total_level": 0
+                },
+                {
+                    "id": 41,
+                    "code": "mondbasis",
+                    "name": "Base lunar",
+                    "total_level": 0
+                },
+                {
+                    "id": 42,
+                    "code": "phalanx",
+                    "name": "Sensor Phalax",
+                    "total_level": 0
+                },
+                {
+                    "id": 43,
+                    "code": "sprungtor",
+                    "name": "Puerta de salto",
+                    "total_level": 0
+                },
+                {
+                    "id": 44,
+                    "code": "silo",
+                    "name": "Silo de misiles",
+                    "total_level": 1
+                },
+                {
+                    "id": 81,
+                    "code": "resource_module",
+                    "name": "Módulo de recursos",
+                    "total_level": 0
+                },
+                {
+                    "id": 82,
+                    "code": "defensive_module",
+                    "name": "Módulo defensivo",
+                    "total_level": 0
+                },
+                {
+                    "id": 83,
+                    "code": "military_module",
+                    "name": "Módulo militar",
+                    "total_level": 0
+                },
+                {
+                    "id": 84,
+                    "code": "research_module",
+                    "name": "Módulo de investigación",
+                    "total_level": 0
+                }
+            ]
+        },
+        "full_ships_inventory": [
+            {
+                "id": 210,
+                "code": "spy_sonde",
+                "name": "Sonda de Espionaje",
+                "parked_planets": 0,
+                "parked_moons": 0,
+                "in_flight": 0,
+                "total_units": 0,
+                "mse_per_unit": 3000,
+                "total_mse": 0
+            },
+            {
+                "id": 212,
+                "code": "solar_satelit",
+                "name": "Satélite Solar",
+                "parked_planets": 11,
+                "parked_moons": 0,
+                "in_flight": 0,
+                "total_units": 11,
+                "mse_per_unit": 6000,
+                "total_mse": 66000
+            },
+            {
+                "id": 233,
+                "code": "scout",
+                "name": "Explorador Ligero",
+                "parked_planets": 0,
+                "parked_moons": 0,
+                "in_flight": 0,
+                "total_units": 0,
+                "mse_per_unit": 1400,
+                "total_mse": 0
+            },
+            {
+                "id": 244,
+                "code": "brig",
+                "name": "Balandra de Reconocimiento",
+                "parked_planets": 0,
+                "parked_moons": 0,
+                "in_flight": 0,
+                "total_units": 0,
+                "mse_per_unit": 1300,
+                "total_mse": 0
+            },
+            {
+                "id": 261,
+                "code": "corvette",
+                "name": "Corbeta Ligera",
+                "parked_planets": 0,
+                "parked_moons": 0,
+                "in_flight": 0,
+                "total_units": 0,
+                "mse_per_unit": 1500,
+                "total_mse": 0
+            },
+            {
+                "id": 204,
+                "code": "light_hunter",
+                "name": "Cazador Ligero",
+                "parked_planets": 0,
+                "parked_moons": 0,
+                "in_flight": 0,
+                "total_units": 0,
+                "mse_per_unit": 5000,
+                "total_mse": 0
+            },
+            {
+                "id": 202,
+                "code": "small_ship_cargo",
+                "name": "Nave Pequeña de Carga",
+                "parked_planets": 0,
+                "parked_moons": 0,
+                "in_flight": 0,
+                "total_units": 0,
+                "mse_per_unit": 6000,
+                "total_mse": 0
+            },
+            {
+                "id": 243,
+                "code": "hawk",
+                "name": "Interceptor Halcón",
+                "parked_planets": 0,
+                "parked_moons": 0,
+                "in_flight": 0,
+                "total_units": 0,
+                "mse_per_unit": 7600,
+                "total_mse": 0
+            },
+            {
+                "id": 262,
+                "code": "thunder",
+                "name": "Caza Trueno",
+                "parked_planets": 0,
+                "parked_moons": 0,
+                "in_flight": 0,
+                "total_units": 0,
+                "mse_per_unit": 7860,
+                "total_mse": 0
+            },
+            {
+                "id": 253,
+                "code": "flute",
+                "name": "Corbeta Flauta",
+                "parked_planets": 0,
+                "parked_moons": 0,
+                "in_flight": 0,
+                "total_units": 0,
+                "mse_per_unit": 7800,
+                "total_mse": 0
+            },
+            {
+                "id": 232,
+                "code": "cog",
+                "name": "Urca Ligera",
+                "parked_planets": 0,
+                "parked_moons": 0,
+                "in_flight": 0,
+                "total_units": 0,
+                "mse_per_unit": 8400,
+                "total_mse": 0
+            },
+            {
+                "id": 203,
+                "code": "big_ship_cargo",
+                "name": "Nave Grande de Carga",
+                "parked_planets": 0,
+                "parked_moons": 0,
+                "in_flight": 0,
+                "total_units": 0,
+                "mse_per_unit": 18000,
+                "total_mse": 0
+            },
+            {
+                "id": 205,
+                "code": "heavy_hunter",
+                "name": "Cazador Pesado",
+                "parked_planets": 0,
+                "parked_moons": 0,
+                "in_flight": 0,
+                "total_units": 0,
+                "mse_per_unit": 16000,
+                "total_mse": 0
+            },
+            {
+                "id": 229,
+                "code": "M7",
+                "name": "Interceptor M-7",
+                "parked_planets": 0,
+                "parked_moons": 0,
+                "in_flight": 0,
+                "total_units": 0,
+                "mse_per_unit": 20100,
+                "total_mse": 0
+            },
+            {
+                "id": 254,
+                "code": "knarr",
+                "name": "Carguero Knarr",
+                "parked_planets": 0,
+                "parked_moons": 0,
+                "in_flight": 0,
+                "total_units": 0,
+                "mse_per_unit": 17300,
+                "total_mse": 0
+            },
+            {
+                "id": 231,
+                "code": "torpedo",
+                "name": "Torpedero Estelar",
+                "parked_planets": 0,
+                "parked_moons": 0,
+                "in_flight": 0,
+                "total_units": 0,
+                "mse_per_unit": 17500,
+                "total_mse": 0
+            },
+            {
+                "id": 208,
+                "code": "colonizer",
+                "name": "Colonizador",
+                "parked_planets": 0,
+                "parked_moons": 0,
+                "in_flight": 4,
+                "total_units": 4,
+                "mse_per_unit": 90000,
+                "total_mse": 360000
+            },
+            {
+                "id": 209,
+                "code": "recycler",
+                "name": "Reciclador",
+                "parked_planets": 0,
+                "parked_moons": 0,
+                "in_flight": 0,
+                "total_units": 0,
+                "mse_per_unit": 30000,
+                "total_mse": 0
+            },
+            {
+                "id": 242,
+                "code": "phoenix",
+                "name": "Caza Fénix",
+                "parked_planets": 0,
+                "parked_moons": 0,
+                "in_flight": 0,
+                "total_units": 0,
+                "mse_per_unit": 19200,
+                "total_mse": 0
+            },
+            {
+                "id": 206,
+                "code": "crusher",
+                "name": "Crucero",
+                "parked_planets": 0,
+                "parked_moons": 0,
+                "in_flight": 0,
+                "total_units": 0,
+                "mse_per_unit": 42000,
+                "total_mse": 0
+            },
+            {
+                "id": 217,
+                "code": "ev_transporter",
+                "name": "Megatransportador",
+                "parked_planets": 0,
+                "parked_moons": 0,
+                "in_flight": 0,
+                "total_units": 0,
+                "mse_per_unit": 81000,
+                "total_mse": 0
+            },
+            {
+                "id": 207,
+                "code": "battle_ship",
+                "name": "Nave de Batalla",
+                "parked_planets": 0,
+                "parked_moons": 0,
+                "in_flight": 0,
+                "total_units": 0,
+                "mse_per_unit": 75000,
+                "total_mse": 0
+            },
+            {
+                "id": 215,
+                "code": "battleship",
+                "name": "Acorazado",
+                "parked_planets": 0,
+                "parked_moons": 0,
+                "in_flight": 0,
+                "total_units": 0,
+                "mse_per_unit": 170000,
+                "total_mse": 0
+            },
+            {
+                "id": 213,
+                "code": "destructor",
+                "name": "Destructor",
+                "parked_planets": 0,
+                "parked_moons": 0,
+                "in_flight": 0,
+                "total_units": 0,
+                "mse_per_unit": 220000,
+                "total_mse": 0
+            },
+            {
+                "id": 211,
+                "code": "bomber_ship",
+                "name": "Bombardero",
+                "parked_planets": 0,
+                "parked_moons": 0,
+                "in_flight": 0,
+                "total_units": 0,
+                "mse_per_unit": 180000,
+                "total_mse": 0
+            },
+            {
+                "id": 234,
+                "code": "fury",
+                "name": "Caza Furia",
+                "parked_planets": 0,
+                "parked_moons": 0,
+                "in_flight": 0,
+                "total_units": 0,
+                "mse_per_unit": 400000,
+                "total_mse": 0
+            },
+            {
+                "id": 224,
+                "code": "M19",
+                "name": "Fragata M-19",
+                "parked_planets": 0,
+                "parked_moons": 0,
+                "in_flight": 0,
+                "total_units": 0,
+                "mse_per_unit": 460000,
+                "total_mse": 0
+            },
+            {
+                "id": 255,
+                "code": "avenger",
+                "name": "Vengador Estelar",
+                "parked_planets": 0,
+                "parked_moons": 0,
+                "in_flight": 0,
+                "total_units": 0,
+                "mse_per_unit": 420000,
+                "total_mse": 0
+            },
+            {
+                "id": 245,
+                "code": "defender",
+                "name": "Fragata Defensora",
+                "parked_planets": 0,
+                "parked_moons": 0,
+                "in_flight": 0,
+                "total_units": 0,
+                "mse_per_unit": 370000,
+                "total_mse": 0
+            },
+            {
+                "id": 263,
+                "code": "hunter",
+                "name": "Caza Cazador",
+                "parked_planets": 0,
+                "parked_moons": 0,
+                "in_flight": 0,
+                "total_units": 0,
+                "mse_per_unit": 640000,
+                "total_mse": 0
+            },
+            {
+                "id": 235,
+                "code": "guardian",
+                "name": "Guardián Estelar",
+                "parked_planets": 0,
+                "parked_moons": 0,
+                "in_flight": 0,
+                "total_units": 0,
+                "mse_per_unit": 605000,
+                "total_mse": 0
+            },
+            {
+                "id": 246,
+                "code": "dreadnought",
+                "name": "Dreadnought Imperial",
+                "parked_planets": 0,
+                "parked_moons": 0,
+                "in_flight": 0,
+                "total_units": 0,
+                "mse_per_unit": 625000,
+                "total_mse": 0
+            },
+            {
+                "id": 256,
+                "code": "hammer",
+                "name": "Martillo de Guerra",
+                "parked_planets": 0,
+                "parked_moons": 0,
+                "in_flight": 0,
+                "total_units": 0,
+                "mse_per_unit": 1005000,
+                "total_mse": 0
+            },
+            {
+                "id": 236,
+                "code": "cutter",
+                "name": "Cúter de Asalto",
+                "parked_planets": 0,
+                "parked_moons": 0,
+                "in_flight": 0,
+                "total_units": 0,
+                "mse_per_unit": 1095000,
+                "total_mse": 0
+            },
+            {
+                "id": 247,
+                "code": "galleass",
+                "name": "Galeaza de Combate",
+                "parked_planets": 0,
+                "parked_moons": 0,
+                "in_flight": 0,
+                "total_units": 0,
+                "mse_per_unit": 1020000,
+                "total_mse": 0
+            },
+            {
+                "id": 264,
+                "code": "leviathan",
+                "name": "Leviatán Cósmico",
+                "parked_planets": 0,
+                "parked_moons": 0,
+                "in_flight": 0,
+                "total_units": 0,
+                "mse_per_unit": 1240000,
+                "total_mse": 0
+            },
+            {
+                "id": 237,
+                "code": "brigantine",
+                "name": "Bergantín de Guerra",
+                "parked_planets": 0,
+                "parked_moons": 0,
+                "in_flight": 0,
+                "total_units": 0,
+                "mse_per_unit": 1300000,
+                "total_mse": 0
+            },
+            {
+                "id": 248,
+                "code": "ketch",
+                "name": "Queche Artillado",
+                "parked_planets": 0,
+                "parked_moons": 0,
+                "in_flight": 0,
+                "total_units": 0,
+                "mse_per_unit": 1320000,
+                "total_mse": 0
+            },
+            {
+                "id": 257,
+                "code": "poleaxe",
+                "name": "Alabarda de Combate",
+                "parked_planets": 0,
+                "parked_moons": 0,
+                "in_flight": 0,
+                "total_units": 0,
+                "mse_per_unit": 1370000,
+                "total_mse": 0
+            },
+            {
+                "id": 265,
+                "code": "bunyip",
+                "name": "Destructor Bunyip",
+                "parked_planets": 0,
+                "parked_moons": 0,
+                "in_flight": 0,
+                "total_units": 0,
+                "mse_per_unit": 1680000,
+                "total_mse": 0
+            },
+            {
+                "id": 225,
+                "code": "galleon",
+                "name": "Galeón Espacial",
+                "parked_planets": 0,
+                "parked_moons": 0,
+                "in_flight": 0,
+                "total_units": 0,
+                "mse_per_unit": 3100000,
+                "total_mse": 0
+            },
+            {
+                "id": 219,
+                "code": "giga_recykler",
+                "name": "Reciclador Pesado",
+                "parked_planets": 0,
+                "parked_moons": 0,
+                "in_flight": 0,
+                "total_units": 0,
+                "mse_per_unit": 3000000,
+                "total_mse": 0
+            },
+            {
+                "id": 223,
+                "code": "scrappy",
+                "name": "Dron Señuelo",
+                "parked_planets": 0,
+                "parked_moons": 0,
+                "in_flight": 0,
+                "total_units": 0,
+                "mse_per_unit": 10000000,
+                "total_mse": 0
+            },
+            {
+                "id": 226,
+                "code": "destroyer",
+                "name": "Superdestructor",
+                "parked_planets": 0,
+                "parked_moons": 0,
+                "in_flight": 0,
+                "total_units": 0,
+                "mse_per_unit": 7800000,
+                "total_mse": 0
+            },
+            {
+                "id": 214,
+                "code": "dearth_star",
+                "name": "Estrella de la Muerte",
+                "parked_planets": 0,
+                "parked_moons": 0,
+                "in_flight": 0,
+                "total_units": 0,
+                "mse_per_unit": 17000000,
+                "total_mse": 0
+            },
+            {
+                "id": 220,
+                "code": "dm_ship",
+                "name": "Extractor de Materia Oscura",
+                "parked_planets": 0,
+                "parked_moons": 0,
+                "in_flight": 0,
+                "total_units": 0,
+                "mse_per_unit": 32000000,
+                "total_mse": 0
+            },
+            {
+                "id": 216,
+                "code": "lune_noir",
+                "name": "Luna Negra",
+                "parked_planets": 0,
+                "parked_moons": 0,
+                "in_flight": 0,
+                "total_units": 0,
+                "mse_per_unit": 18000000,
+                "total_mse": 0
+            },
+            {
+                "id": 227,
+                "code": "frigate",
+                "name": "Fragata Pesada",
+                "parked_planets": 0,
+                "parked_moons": 0,
+                "in_flight": 0,
+                "total_units": 0,
+                "mse_per_unit": 58000000,
+                "total_mse": 0
+            },
+            {
+                "id": 228,
+                "code": "black_wanderer",
+                "name": "Nómada Negro",
+                "parked_planets": 0,
+                "parked_moons": 0,
+                "in_flight": 0,
+                "total_units": 0,
+                "mse_per_unit": 188000000,
+                "total_mse": 0
+            },
+            {
+                "id": 222,
+                "code": "flying_death",
+                "name": "Parca Estelar",
+                "parked_planets": 0,
+                "parked_moons": 0,
+                "in_flight": 0,
+                "total_units": 0,
+                "mse_per_unit": 560000000,
+                "total_mse": 0
+            },
+            {
+                "id": 218,
+                "code": "star_crasher",
+                "name": "Devastador Estelar",
+                "parked_planets": 0,
+                "parked_moons": 0,
+                "in_flight": 0,
+                "total_units": 0,
+                "mse_per_unit": 775000000,
+                "total_mse": 0
+            },
+            {
+                "id": 258,
+                "code": "erehon",
+                "name": "Destructor Erehon",
+                "parked_planets": 0,
+                "parked_moons": 0,
+                "in_flight": 0,
+                "total_units": 0,
+                "mse_per_unit": 1010000000,
+                "total_mse": 0
+            },
+            {
+                "id": 238,
+                "code": "raptor",
+                "name": "Crucero Raptor",
+                "parked_planets": 0,
+                "parked_moons": 0,
+                "in_flight": 0,
+                "total_units": 0,
+                "mse_per_unit": 1240000000,
+                "total_mse": 0
+            },
+            {
+                "id": 249,
+                "code": "titan",
+                "name": "Titán de Batalla",
+                "parked_planets": 0,
+                "parked_moons": 0,
+                "in_flight": 0,
+                "total_units": 0,
+                "mse_per_unit": 1070000000,
+                "total_mse": 0
+            },
+            {
+                "id": 259,
+                "code": "isis",
+                "name": "Crucero de Batalla Isis",
+                "parked_planets": 0,
+                "parked_moons": 0,
+                "in_flight": 0,
+                "total_units": 0,
+                "mse_per_unit": 1380000000,
+                "total_mse": 0
+            },
+            {
+                "id": 239,
+                "code": "aircraft",
+                "name": "Cañonera de Asalto",
+                "parked_planets": 0,
+                "parked_moons": 0,
+                "in_flight": 0,
+                "total_units": 0,
+                "mse_per_unit": 1650000000,
+                "total_mse": 0
+            },
+            {
+                "id": 230,
+                "code": "M32",
+                "name": "Crucero Pesado M-32",
+                "parked_planets": 0,
+                "parked_moons": 0,
+                "in_flight": 0,
+                "total_units": 0,
+                "mse_per_unit": 1640000000,
+                "total_mse": 0
+            },
+            {
+                "id": 250,
+                "code": "typhoon",
+                "name": "Acorazado Tifón",
+                "parked_planets": 0,
+                "parked_moons": 0,
+                "in_flight": 0,
+                "total_units": 0,
+                "mse_per_unit": 1500000000,
+                "total_mse": 0
+            },
+            {
+                "id": 240,
+                "code": "ranger",
+                "name": "Crucero Ranger",
+                "parked_planets": 0,
+                "parked_moons": 0,
+                "in_flight": 0,
+                "total_units": 0,
+                "mse_per_unit": 2400000000,
+                "total_mse": 0
+            },
+            {
+                "id": 251,
+                "code": "orion",
+                "name": "Fortaleza Orión",
+                "parked_planets": 0,
+                "parked_moons": 0,
+                "in_flight": 0,
+                "total_units": 0,
+                "mse_per_unit": 2300000000,
+                "total_mse": 0
+            },
+            {
+                "id": 260,
+                "code": "iron",
+                "name": "Acorazado Blindado",
+                "parked_planets": 0,
+                "parked_moons": 0,
+                "in_flight": 0,
+                "total_units": 0,
+                "mse_per_unit": 2200000000,
+                "total_mse": 0
+            },
+            {
+                "id": 266,
+                "code": "dragon",
+                "name": "Dragón Estelar",
+                "parked_planets": 0,
+                "parked_moons": 0,
+                "in_flight": 0,
+                "total_units": 0,
+                "mse_per_unit": 2100000000,
+                "total_mse": 0
+            },
+            {
+                "id": 221,
+                "code": "bs_class_oneil",
+                "name": "Acorazado Clase O'Neill",
+                "parked_planets": 0,
+                "parked_moons": 0,
+                "in_flight": 0,
+                "total_units": 0,
+                "mse_per_unit": 3784000000,
+                "total_mse": 0
+            },
+            {
+                "id": 241,
+                "code": "reaver",
+                "name": "Acorazado Reaver",
+                "parked_planets": 0,
+                "parked_moons": 0,
+                "in_flight": 0,
+                "total_units": 0,
+                "mse_per_unit": 3400000000,
+                "total_mse": 0
+            },
+            {
+                "id": 252,
+                "code": "mirage",
+                "name": "Espejismo Sigiloso",
+                "parked_planets": 0,
+                "parked_moons": 0,
+                "in_flight": 0,
+                "total_units": 0,
+                "mse_per_unit": 3700000000,
+                "total_mse": 0
+            },
+            {
+                "id": 267,
+                "code": "predator",
+                "name": "Depredador Alfa",
+                "parked_planets": 0,
+                "parked_moons": 0,
+                "in_flight": 0,
+                "total_units": 0,
+                "mse_per_unit": 3400000000,
+                "total_mse": 0
+            }
+        ],
+        "full_defenses_inventory": [
+            {
+                "id": 423,
+                "code": "landing",
+                "name": "Batería Antidesembarco",
+                "total_units": 0,
+                "mse_per_unit": 1100,
+                "total_mse": 0
+            },
+            {
+                "id": 445,
+                "code": "vector",
+                "name": "Torreta Vector",
+                "total_units": 0,
+                "mse_per_unit": 4600,
+                "total_mse": 0
+            },
+            {
+                "id": 434,
+                "code": "squadron",
+                "name": "Batería de Drones Defensivos",
+                "total_units": 0,
+                "mse_per_unit": 1040,
+                "total_mse": 0
+            },
+            {
+                "id": 454,
+                "code": "droid",
+                "name": "Droide de Defensa Perimetral",
+                "total_units": 0,
+                "mse_per_unit": 1000,
+                "total_mse": 0
+            },
+            {
+                "id": 402,
+                "code": "small_laser",
+                "name": "Láser Pequeño",
+                "total_units": 0,
+                "mse_per_unit": 2500,
+                "total_mse": 0
+            },
+            {
+                "id": 401,
+                "code": "misil_launcher",
+                "name": "Lanzamisiles",
+                "total_units": 1,
+                "mse_per_unit": 2000,
+                "total_mse": 2000
+            },
+            {
+                "id": 405,
+                "code": "ionic_canyon",
+                "name": "Cañón Iónico",
+                "total_units": 0,
+                "mse_per_unit": 14000,
+                "total_mse": 0
+            },
+            {
+                "id": 453,
+                "code": "robot",
+                "name": "Centinela Mecanizado",
+                "total_units": 0,
+                "mse_per_unit": 4600,
+                "total_mse": 0
+            },
+            {
+                "id": 424,
+                "code": "rocket",
+                "name": "Complejo de Misiles de Defensa",
+                "total_units": 0,
+                "mse_per_unit": 5100,
+                "total_mse": 0
+            },
+            {
+                "id": 436,
+                "code": "torpedos",
+                "name": "Lanzatorpedos Orbital",
+                "total_units": 0,
+                "mse_per_unit": 5000,
+                "total_mse": 0
+            },
+            {
+                "id": 420,
+                "code": "slim_mehador",
+                "name": "Torreta Mechador Ligera",
+                "total_units": 0,
+                "mse_per_unit": 18500,
+                "total_mse": 0
+            },
+            {
+                "id": 425,
+                "code": "charybdis",
+                "name": "Torreta Caribdis",
+                "total_units": 0,
+                "mse_per_unit": 15000,
+                "total_mse": 0
+            },
+            {
+                "id": 446,
+                "code": "agat",
+                "name": "Batería Ágata",
+                "total_units": 0,
+                "mse_per_unit": 16200,
+                "total_mse": 0
+            },
+            {
+                "id": 403,
+                "code": "big_laser",
+                "name": "Láser Grande",
+                "total_units": 0,
+                "mse_per_unit": 10000,
+                "total_mse": 0
+            },
+            {
+                "id": 435,
+                "code": "neon",
+                "name": "Torreta de Neón",
+                "total_units": 0,
+                "mse_per_unit": 16000,
+                "total_mse": 0
+            },
+            {
+                "id": 404,
+                "code": "gauss_canyon",
+                "name": "Cañón Gauss",
+                "total_units": 0,
+                "mse_per_unit": 58000,
+                "total_mse": 0
+            },
+            {
+                "id": 406,
+                "code": "buster_canyon",
+                "name": "Cañón de Plasma",
+                "total_units": 0,
+                "mse_per_unit": 270000,
+                "total_mse": 0
+            },
+            {
+                "id": 416,
+                "code": "hydrogen_gun",
+                "name": "Batería de Hidrógeno",
+                "total_units": 0,
+                "mse_per_unit": 700000,
+                "total_mse": 0
+            },
+            {
+                "id": 417,
+                "code": "dora_gun",
+                "name": "Supercañón Dora",
+                "total_units": 0,
+                "mse_per_unit": 950000,
+                "total_mse": 0
+            },
+            {
+                "id": 421,
+                "code": "iron_mehador",
+                "name": "Batería Mechador Blindada",
+                "total_units": 0,
+                "mse_per_unit": 1060000,
+                "total_mse": 0
+            },
+            {
+                "id": 426,
+                "code": "uranus",
+                "name": "Batería Urano",
+                "total_units": 0,
+                "mse_per_unit": 1080000,
+                "total_mse": 0
+            },
+            {
+                "id": 437,
+                "code": "palatine",
+                "name": "Torreta Palatina",
+                "total_units": 0,
+                "mse_per_unit": 1100000,
+                "total_mse": 0
+            },
+            {
+                "id": 427,
+                "code": "achilles",
+                "name": "Torreta Aquiles",
+                "total_units": 0,
+                "mse_per_unit": 1640000,
+                "total_mse": 0
+            },
+            {
+                "id": 455,
+                "code": "flame",
+                "name": "Proyector Ígneo de Plasma",
+                "total_units": 0,
+                "mse_per_unit": 1650000,
+                "total_mse": 0
+            },
+            {
+                "id": 428,
+                "code": "phaser",
+                "name": "Batería Fáser",
+                "total_units": 0,
+                "mse_per_unit": 2800000,
+                "total_mse": 0
+            },
+            {
+                "id": 438,
+                "code": "installation",
+                "name": "Complejo de Misiles Burán",
+                "total_units": 0,
+                "mse_per_unit": 1640000,
+                "total_mse": 0
+            },
+            {
+                "id": 447,
+                "code": "lightning",
+                "name": "Complejo Relámpago",
+                "total_units": 0,
+                "mse_per_unit": 1600000,
+                "total_mse": 0
+            },
+            {
+                "id": 456,
+                "code": "spotlight",
+                "name": "Foco Vórtice Defensivo",
+                "total_units": 0,
+                "mse_per_unit": 2700000,
+                "total_mse": 0
+            },
+            {
+                "id": 407,
+                "code": "small_protection_shield",
+                "name": "Cúpula Pequeña de Protección",
+                "total_units": 0,
+                "mse_per_unit": 3000000,
+                "total_mse": 0
+            },
+            {
+                "id": 439,
+                "code": "atlantis",
+                "name": "Red Defensiva Atlántida",
+                "total_units": 0,
+                "mse_per_unit": 2900000,
+                "total_mse": 0
+            },
+            {
+                "id": 448,
+                "code": "volcano",
+                "name": "Cañón Volcán",
+                "total_units": 0,
+                "mse_per_unit": 2800000,
+                "total_mse": 0
+            },
+            {
+                "id": 418,
+                "code": "photon_cannon",
+                "name": "Batería Fotónica",
+                "total_units": 0,
+                "mse_per_unit": 6400000,
+                "total_mse": 0
+            },
+            {
+                "id": 408,
+                "code": "big_protection_shield",
+                "name": "Cúpula Grande de Protección",
+                "total_units": 0,
+                "mse_per_unit": 15000000,
+                "total_mse": 0
+            },
+            {
+                "id": 409,
+                "code": "planet_protector",
+                "name": "Escudo Planetario Atmosférico",
+                "total_units": 0,
+                "mse_per_unit": 30000000,
+                "total_mse": 0
+            },
+            {
+                "id": 412,
+                "code": "lepton_gun",
+                "name": "Cañón de Leptones",
+                "total_units": 0,
+                "mse_per_unit": 26000000,
+                "total_mse": 0
+            },
+            {
+                "id": 410,
+                "code": "graviton_canyon",
+                "name": "Cañón de Gravitones",
+                "total_units": 0,
+                "mse_per_unit": 45000000,
+                "total_mse": 0
+            },
+            {
+                "id": 413,
+                "code": "proton_gun",
+                "name": "Batería de Protones",
+                "total_units": 0,
+                "mse_per_unit": 73000000,
+                "total_mse": 0
+            },
+            {
+                "id": 419,
+                "code": "particle_emitter",
+                "name": "Emisor de Partículas",
+                "total_units": 0,
+                "mse_per_unit": 139000000,
+                "total_mse": 0
+            },
+            {
+                "id": 414,
+                "code": "canyon",
+                "name": "Cañón Pesado de Iones",
+                "total_units": 0,
+                "mse_per_unit": 280000000,
+                "total_mse": 0
+            },
+            {
+                "id": 422,
+                "code": "grand_mehador",
+                "name": "Fortaleza Mechador Pesada",
+                "total_units": 0,
+                "mse_per_unit": 331500000,
+                "total_mse": 0
+            },
+            {
+                "id": 430,
+                "code": "sphinx",
+                "name": "Torreta Esfinge",
+                "total_units": 0,
+                "mse_per_unit": 360000000,
+                "total_mse": 0
+            },
+            {
+                "id": 444,
+                "code": "orlan",
+                "name": "Complejo Orlán",
+                "total_units": 0,
+                "mse_per_unit": 398000000,
+                "total_mse": 0
+            },
+            {
+                "id": 449,
+                "code": "typhon",
+                "name": "Batería Tifón",
+                "total_units": 0,
+                "mse_per_unit": 410000000,
+                "total_mse": 0
+            },
+            {
+                "id": 415,
+                "code": "quantum_gun",
+                "name": "Cañón Cuántico",
+                "total_units": 0,
+                "mse_per_unit": 740000000,
+                "total_mse": 0
+            },
+            {
+                "id": 429,
+                "code": "armageddon",
+                "name": "Batería Pesada Armagedón",
+                "total_units": 0,
+                "mse_per_unit": 1430000000,
+                "total_mse": 0
+            },
+            {
+                "id": 443,
+                "code": "galactic",
+                "name": "Cañón Galáctico",
+                "total_units": 0,
+                "mse_per_unit": 1380000000,
+                "total_mse": 0
+            },
+            {
+                "id": 457,
+                "code": "kraken",
+                "name": "Red Defensiva Kraken",
+                "total_units": 0,
+                "mse_per_unit": 1220000000,
+                "total_mse": 0
+            },
+            {
+                "id": 450,
+                "code": "cerberus",
+                "name": "Complejo Cerbero",
+                "total_units": 0,
+                "mse_per_unit": 1790000000,
+                "total_mse": 0
+            },
+            {
+                "id": 431,
+                "code": "wyvern",
+                "name": "Cañón Guiverno",
+                "total_units": 0,
+                "mse_per_unit": 1900000000,
+                "total_mse": 0
+            },
+            {
+                "id": 451,
+                "code": "grad",
+                "name": "Batería de Saturación Grad",
+                "total_units": 0,
+                "mse_per_unit": 2800000000,
+                "total_mse": 0
+            },
+            {
+                "id": 458,
+                "code": "hydra",
+                "name": "Complejo Hidra",
+                "total_units": 0,
+                "mse_per_unit": 2180000000,
+                "total_mse": 0
+            },
+            {
+                "id": 440,
+                "code": "orbital_met",
+                "name": "Plataforma Orbital de Metal",
+                "total_units": 0,
+                "mse_per_unit": 2750000000,
+                "total_mse": 0
+            },
+            {
+                "id": 432,
+                "code": "icarus",
+                "name": "Complejo Ícaro",
+                "total_units": 0,
+                "mse_per_unit": 2490000000,
+                "total_mse": 0
+            },
+            {
+                "id": 459,
+                "code": "panzer",
+                "name": "Bastión Panzer Blindado",
+                "total_units": 0,
+                "mse_per_unit": 2700000000,
+                "total_mse": 0
+            },
+            {
+                "id": 433,
+                "code": "griffin",
+                "name": "Fortaleza Grifo",
+                "total_units": 0,
+                "mse_per_unit": 3240000000,
+                "total_mse": 0
+            },
+            {
+                "id": 441,
+                "code": "orbital_cry",
+                "name": "Plataforma Orbital de Cristal",
+                "total_units": 0,
+                "mse_per_unit": 4500000000,
+                "total_mse": 0
+            },
+            {
+                "id": 452,
+                "code": "starfall",
+                "name": "Red de Defensa Cascada Estelar",
+                "total_units": 0,
+                "mse_per_unit": 3200000000,
+                "total_mse": 0
+            },
+            {
+                "id": 460,
+                "code": "cthulhu",
+                "name": "Ciudadela Cthulhu",
+                "total_units": 0,
+                "mse_per_unit": 3800000000,
+                "total_mse": 0
+            },
+            {
+                "id": 442,
+                "code": "orbital_det",
+                "name": "Plataforma Orbital de Deuterio",
+                "total_units": 0,
+                "mse_per_unit": 6250000000,
+                "total_mse": 0
+            },
+            {
+                "id": 411,
+                "code": "orbital_station",
+                "name": "Estación Orbital de Defensa",
+                "total_units": 0,
+                "mse_per_unit": 11000000000,
+                "total_mse": 0
+            },
+            {
+                "id": 502,
+                "code": "interceptor_misil",
+                "name": "Misil de Intercepción",
+                "total_units": 0,
+                "mse_per_unit": 16000,
+                "total_mse": 0
+            },
+            {
+                "id": 503,
+                "code": "interplanetary_misil",
+                "name": "Misil Interplanetario",
+                "total_units": 0,
+                "mse_per_unit": 57500,
+                "total_mse": 0
+            }
+        ],
+        "planets_detail": [
+            {
+                "id": 89697,
+                "name": "Genesis-Prime",
+                "coords": "[1:337:8]",
+                "field_current": 90,
+                "field_max": 163,
+                "field_max_base": 163,
+                "fields_formatted": "90\/163 (base 163)",
+                "id_luna": 0,
+                "mines_and_buildings": {
+                    "metal_mine": 16,
+                    "crystal_mine": 16,
+                    "deuterium_sintetizer": 13,
+                    "solar_plant": 18,
+                    "fusion_plant": 1,
+                    "robot_factory": 5,
+                    "hangar": 4,
+                    "metal_store": 4,
+                    "crystal_store": 4,
+                    "laboratory": 8,
+                    "silo": 1
+                },
+                "resources_per_hour": {
+                    "metal_perhour": 1014570.035388,
+                    "crystal_perhour": 676380.023592,
+                    "deuterium_perhour": 225612.955202,
+                    "total_mse_perhour": 3269781.90338
+                },
+                "parked_ships": {
+                    "solar_satelit": 11
+                },
+                "parked_defenses": {
+                    "misil_launcher": 1
+                }
+            }
+        ],
+        "moons_detail": [],
+        "user_summary": {
+            "id": 88949,
+            "username": "TestZeroBot",
+            "darkmatter": 0
+        },
+        "bot_summary": {
+            "bot_id": 88949,
+            "personality": "aggressive",
+            "difficulty": "nightmare",
+            "doctrine": "aggressive",
+            "last_activity": 1792171155,
+            "budget_credits": {
+                "planets": {
+                    "89697": {
+                        "mines": {
+                            "metal": 2133.99,
+                            "crystal": 1331.12,
+                            "deuterium": 2466.79
+                        },
+                        "fleet": {
+                            "metal": 7824.64,
+                            "crystal": 4995.17,
+                            "deuterium": 0
+                        },
+                        "defense": {
+                            "metal": 0,
+                            "crystal": 5028.72,
+                            "deuterium": 3512.47
+                        }
+                    }
+                },
+                "research": {
+                    "metal": 3700.6,
+                    "crystal": 6400,
+                    "deuterium": 9600
+                },
+                "opportunity_fund": {
+                    "metal": 0,
+                    "crystal": 0,
+                    "deuterium": 0
+                },
+                "last_physical": {
+                    "89697": {
+                        "metal": 503.0178723459321,
+                        "crystal": 14193.763895897286,
+                        "deuterium": 1929.85
+                    }
+                },
+                "last_updated": 1792171155
+            }
+        },
+        "total_planets_count": 1,
+        "total_moons_count": 0,
+        "military_fleet_summary": {
+            "total_units": 0,
+            "total_mse": 0
+        },
+        "in_flight_fleets_count": 4
+    },
+    "missions_and_operations_ledger": {
+        "mission_1_attack": {
+            "dispatched": 0,
+            "combats_resolved": 0,
+            "loot_mse": 0
+        },
+        "mission_3_transport": {
+            "dispatched": 0,
+            "arrived": 0
+        },
+        "mission_4_deploy": {
+            "dispatched": 0,
+            "arrived": 0
+        },
+        "mission_6_spy": {
+            "dispatched": 0,
+            "reports_generated": 0,
+            "phalanx_scans": 0
+        },
+        "mission_7_colonization": {
+            "colonizers_built": 4,
+            "dispatched": 4,
+            "colonies_founded": 0
+        },
+        "mission_8_recycle": {
+            "dispatched": 0,
+            "debris_harvested_metal": 0,
+            "debris_harvested_crystal": 0
+        },
+        "mission_15_expedition": {
+            "dispatched": 0,
+            "completed": 0
+        },
+        "moonshots_audit": {
+            "attempts": 0,
+            "light_hunters_sacrificed": 0,
+            "debris_created_total": 0,
+            "moons_created": 0
+        },
+        "quantum_jump_gate_audit": {
+            "jumps_executed": 0,
+            "total_ships_jumped": 0,
+            "deuterium_consumed": 0,
+            "jump_events_log": []
+        }
+    },
+    "decision_log_audit": {
+        "counts_by_type": {
+            "civics_assigned": 1,
+            "mine_upgrade": 90,
+            "achievements_sync": 23,
+            "research_enqueued": 28,
+            "savings_lock_engaged": 3,
+            "colonizer_recruit": 4,
+            "colonization_dispatch": 4,
+            "savings_antifarm_abort": 1
+        },
+        "internal_bucket_swaps_in_memory": 11,
+        "total_decisions_recorded": 154,
+        "sample_decisions": [
+            {
+                "virtual_timestamp": 1792166895,
+                "virtual_time_iso": "2026-10-16T18:08:15+02:00",
+                "decision_type": "civics_assigned",
+                "chosen_action": "civics_1504_1601",
+                "chosen_score": 6000,
+                "context_summary": "Matriz Cívica Establecida: Asignado perfil Militar Ofensivo (Kratonianos + Imperio + Maldad)"
+            },
+            {
+                "virtual_timestamp": 1792166895,
+                "virtual_time_iso": "2026-10-16T18:08:15+02:00",
+                "decision_type": "mine_upgrade",
+                "chosen_action": "build_2_body_89697",
+                "chosen_score": 2337505.31,
+                "context_summary": "Upgraded crystal_mine on planeta #89697 (Grandmaster Multi-Colony Parallel Execution)"
+            },
+            {
+                "virtual_timestamp": 1792166940,
+                "virtual_time_iso": "2026-10-16T18:09:00+02:00",
+                "decision_type": "mine_upgrade",
+                "chosen_action": "build_4_body_89697",
+                "chosen_score": 42500,
+                "context_summary": "Upgraded solar_plant on planeta #89697 (Grandmaster Multi-Colony Parallel Execution)"
+            },
+            {
+                "virtual_timestamp": 1792166985,
+                "virtual_time_iso": "2026-10-16T18:09:45+02:00",
+                "decision_type": "mine_upgrade",
+                "chosen_action": "build_1_body_89697",
+                "chosen_score": 1870051,
+                "context_summary": "Upgraded metal_mine on planeta #89697 (Grandmaster Multi-Colony Parallel Execution)"
+            },
+            {
+                "virtual_timestamp": 1792167030,
+                "virtual_time_iso": "2026-10-16T18:10:30+02:00",
+                "decision_type": "mine_upgrade",
+                "chosen_action": "build_2_body_89697",
+                "chosen_score": 1870051,
+                "context_summary": "Upgraded crystal_mine on planeta #89697 (Grandmaster Multi-Colony Parallel Execution)"
+            },
+            {
+                "virtual_timestamp": 1792167075,
+                "virtual_time_iso": "2026-10-16T18:11:15+02:00",
+                "decision_type": "mine_upgrade",
+                "chosen_action": "build_4_body_89697",
+                "chosen_score": 42500,
+                "context_summary": "Upgraded solar_plant on planeta #89697 (Grandmaster Multi-Colony Parallel Execution)"
+            },
+            {
+                "virtual_timestamp": 1792167120,
+                "virtual_time_iso": "2026-10-16T18:12:00+02:00",
+                "decision_type": "mine_upgrade",
+                "chosen_action": "build_1_body_89697",
+                "chosen_score": 1496051,
+                "context_summary": "Upgraded metal_mine on planeta #89697 (Grandmaster Multi-Colony Parallel Execution)"
+            },
+            {
+                "virtual_timestamp": 1792167165,
+                "virtual_time_iso": "2026-10-16T18:12:45+02:00",
+                "decision_type": "mine_upgrade",
+                "chosen_action": "build_4_body_89697",
+                "chosen_score": 42500,
+                "context_summary": "Upgraded solar_plant on planeta #89697 (Grandmaster Multi-Colony Parallel Execution)"
+            },
+            {
+                "virtual_timestamp": 1792167210,
+                "virtual_time_iso": "2026-10-16T18:13:30+02:00",
+                "decision_type": "mine_upgrade",
+                "chosen_action": "build_2_body_89697",
+                "chosen_score": 1485662.11,
+                "context_summary": "Upgraded crystal_mine on planeta #89697 (Grandmaster Multi-Colony Parallel Execution)"
+            },
+            {
+                "virtual_timestamp": 1792167255,
+                "virtual_time_iso": "2026-10-16T18:14:15+02:00",
+                "decision_type": "mine_upgrade",
+                "chosen_action": "build_1_body_89697",
+                "chosen_score": 1188539.89,
+                "context_summary": "Upgraded metal_mine on planeta #89697 (Grandmaster Multi-Colony Parallel Execution)"
+            },
+            {
+                "virtual_timestamp": 1792167255,
+                "virtual_time_iso": "2026-10-16T18:14:15+02:00",
+                "decision_type": "achievements_sync",
+                "chosen_action": "achieved",
+                "chosen_score": 1,
+                "context_summary": "Logros sincronizados a niveles legítimos: achievements_2 -> Niv. 1"
+            },
+            {
+                "virtual_timestamp": 1792167300,
+                "virtual_time_iso": "2026-10-16T18:15:00+02:00",
+                "decision_type": "mine_upgrade",
+                "chosen_action": "build_4_body_89697",
+                "chosen_score": 42500,
+                "context_summary": "Upgraded solar_plant on planeta #89697 (Grandmaster Multi-Colony Parallel Execution)"
+            },
+            {
+                "virtual_timestamp": 1792167300,
+                "virtual_time_iso": "2026-10-16T18:15:00+02:00",
+                "decision_type": "achievements_sync",
+                "chosen_action": "achieved",
+                "chosen_score": 1,
+                "context_summary": "Logros sincronizados a niveles legítimos: achievements_1 -> Niv. 1"
+            },
+            {
+                "virtual_timestamp": 1792167345,
+                "virtual_time_iso": "2026-10-16T18:15:45+02:00",
+                "decision_type": "mine_upgrade",
+                "chosen_action": "build_2_body_89697",
+                "chosen_score": 1208500.41,
+                "context_summary": "Upgraded crystal_mine on planeta #89697 (Grandmaster Multi-Colony Parallel Execution)"
+            },
+            {
+                "virtual_timestamp": 1792167390,
+                "virtual_time_iso": "2026-10-16T18:16:30+02:00",
+                "decision_type": "mine_upgrade",
+                "chosen_action": "build_3_body_89697",
+                "chosen_score": 1087338.6,
+                "context_summary": "Upgraded deuterium_sintetizer on planeta #89697 (Grandmaster Multi-Colony Parallel Execution)"
+            },
+            {
+                "virtual_timestamp": 1792167435,
+                "virtual_time_iso": "2026-10-16T18:17:15+02:00",
+                "decision_type": "mine_upgrade",
+                "chosen_action": "build_4_body_89697",
+                "chosen_score": 42500,
+                "context_summary": "Upgraded solar_plant on planeta #89697 (Grandmaster Multi-Colony Parallel Execution)"
+            },
+            {
+                "virtual_timestamp": 1792167480,
+                "virtual_time_iso": "2026-10-16T18:18:00+02:00",
+                "decision_type": "mine_upgrade",
+                "chosen_action": "build_1_body_89697",
+                "chosen_score": 966810.53,
+                "context_summary": "Upgraded metal_mine on planeta #89697 (Grandmaster Multi-Colony Parallel Execution)"
+            },
+            {
+                "virtual_timestamp": 1792167525,
+                "virtual_time_iso": "2026-10-16T18:18:45+02:00",
+                "decision_type": "mine_upgrade",
+                "chosen_action": "build_2_body_89697",
+                "chosen_score": 949546.96,
+                "context_summary": "Upgraded crystal_mine on planeta #89697 (Grandmaster Multi-Colony Parallel Execution)"
+            },
+            {
+                "virtual_timestamp": 1792167570,
+                "virtual_time_iso": "2026-10-16T18:19:30+02:00",
+                "decision_type": "mine_upgrade",
+                "chosen_action": "build_4_body_89697",
+                "chosen_score": 42500,
+                "context_summary": "Upgraded solar_plant on planeta #89697 (Grandmaster Multi-Colony Parallel Execution)"
+            },
+            {
+                "virtual_timestamp": 1792167615,
+                "virtual_time_iso": "2026-10-16T18:20:15+02:00",
+                "decision_type": "mine_upgrade",
+                "chosen_action": "build_3_body_89697",
+                "chosen_score": 869887.08,
+                "context_summary": "Upgraded deuterium_sintetizer on planeta #89697 (Grandmaster Multi-Colony Parallel Execution)"
+            },
+            {
+                "virtual_timestamp": 1792167660,
+                "virtual_time_iso": "2026-10-16T18:21:00+02:00",
+                "decision_type": "mine_upgrade",
+                "chosen_action": "build_1_body_89697",
+                "chosen_score": 759647.77,
+                "context_summary": "Upgraded metal_mine on planeta #89697 (Grandmaster Multi-Colony Parallel Execution)"
+            },
+            {
+                "virtual_timestamp": 1792167705,
+                "virtual_time_iso": "2026-10-16T18:21:45+02:00",
+                "decision_type": "mine_upgrade",
+                "chosen_action": "build_4_body_89697",
+                "chosen_score": 42500,
+                "context_summary": "Upgraded solar_plant on planeta #89697 (Grandmaster Multi-Colony Parallel Execution)"
+            },
+            {
+                "virtual_timestamp": 1792167750,
+                "virtual_time_iso": "2026-10-16T18:22:30+02:00",
+                "decision_type": "mine_upgrade",
+                "chosen_action": "build_2_body_89697",
+                "chosen_score": 742767.84,
+                "context_summary": "Upgraded crystal_mine on planeta #89697 (Grandmaster Multi-Colony Parallel Execution)"
+            },
+            {
+                "virtual_timestamp": 1792167795,
+                "virtual_time_iso": "2026-10-16T18:23:15+02:00",
+                "decision_type": "mine_upgrade",
+                "chosen_action": "build_3_body_89697",
+                "chosen_score": 691093.61,
+                "context_summary": "Upgraded deuterium_sintetizer on planeta #89697 (Grandmaster Multi-Colony Parallel Execution)"
+            },
+            {
+                "virtual_timestamp": 1792167795,
+                "virtual_time_iso": "2026-10-16T18:23:15+02:00",
+                "decision_type": "achievements_sync",
+                "chosen_action": "achieved",
+                "chosen_score": 1,
+                "context_summary": "Logros sincronizados a niveles legítimos: achievements_2 -> Niv. 2"
+            },
+            {
+                "virtual_timestamp": 1792170390,
+                "virtual_time_iso": "2026-10-16T19:06:30+02:00",
+                "decision_type": "mine_upgrade",
+                "chosen_action": "build_1_body_89697",
+                "chosen_score": 61970.43,
+                "context_summary": "Upgraded metal_mine on planeta #89697 (Grandmaster Multi-Colony Parallel Execution)"
+            },
+            {
+                "virtual_timestamp": 1792170435,
+                "virtual_time_iso": "2026-10-16T19:07:15+02:00",
+                "decision_type": "research_enqueued",
+                "chosen_action": "research_109",
+                "chosen_score": 38669.4,
+                "context_summary": "Queued research military_tech on planet #89697 (Grandmaster Intelligence)"
+            },
+            {
+                "virtual_timestamp": 1792170435,
+                "virtual_time_iso": "2026-10-16T19:07:15+02:00",
+                "decision_type": "achievements_sync",
+                "chosen_action": "achieved",
+                "chosen_score": 1,
+                "context_summary": "Logros sincronizados a niveles legítimos: achievements_1 -> Niv. 5"
+            },
+            {
+                "virtual_timestamp": 1792170480,
+                "virtual_time_iso": "2026-10-16T19:08:00+02:00",
+                "decision_type": "mine_upgrade",
+                "chosen_action": "build_2_body_89697",
+                "chosen_score": 60662.01,
+                "context_summary": "Upgraded crystal_mine on planeta #89697 (Grandmaster Multi-Colony Parallel Execution)"
+            },
+            {
+                "virtual_timestamp": 1792170480,
+                "virtual_time_iso": "2026-10-16T19:08:00+02:00",
+                "decision_type": "research_enqueued",
+                "chosen_action": "research_120",
+                "chosen_score": 31058.1,
+                "context_summary": "Queued research laser_tech on planet #89697 (Grandmaster Intelligence)"
+            },
+            {
+                "virtual_timestamp": 1792170525,
+                "virtual_time_iso": "2026-10-16T19:08:45+02:00",
+                "decision_type": "research_enqueued",
+                "chosen_action": "research_113",
+                "chosen_score": 30396,
+                "context_summary": "Queued research energy_tech on planet #89697 (Grandmaster Intelligence)"
+            },
+            {
+                "virtual_timestamp": 1792170570,
+                "virtual_time_iso": "2026-10-16T19:09:30+02:00",
+                "decision_type": "mine_upgrade",
+                "chosen_action": "build_12_body_89697",
+                "chosen_score": 42500,
+                "context_summary": "Upgraded fusion_plant on planeta #89697 (Grandmaster Multi-Colony Parallel Execution)"
+            },
+            {
+                "virtual_timestamp": 1792170570,
+                "virtual_time_iso": "2026-10-16T19:09:30+02:00",
+                "decision_type": "research_enqueued",
+                "chosen_action": "research_110",
+                "chosen_score": 56219.4,
+                "context_summary": "Queued research defence_tech on planet #89697 (Grandmaster Intelligence)"
+            },
+            {
+                "virtual_timestamp": 1792170615,
+                "virtual_time_iso": "2026-10-16T19:10:15+02:00",
+                "decision_type": "mine_upgrade",
+                "chosen_action": "build_3_body_89697",
+                "chosen_score": 61669.94,
+                "context_summary": "Upgraded deuterium_sintetizer on planeta #89697 (Grandmaster Multi-Colony Parallel Execution)"
+            },
+            {
+                "virtual_timestamp": 1792170615,
+                "virtual_time_iso": "2026-10-16T19:10:15+02:00",
+                "decision_type": "research_enqueued",
+                "chosen_action": "research_110",
+                "chosen_score": 35969.4,
+                "context_summary": "Queued research defence_tech on planet #89697 (Grandmaster Intelligence)"
+            },
+            {
+                "virtual_timestamp": 1792170615,
+                "virtual_time_iso": "2026-10-16T19:10:15+02:00",
+                "decision_type": "achievements_sync",
+                "chosen_action": "achieved",
+                "chosen_score": 1,
+                "context_summary": "Logros sincronizados a niveles legítimos: achievements_11 -> Niv. 1"
+            },
+            {
+                "virtual_timestamp": 1792170660,
+                "virtual_time_iso": "2026-10-16T19:11:00+02:00",
+                "decision_type": "mine_upgrade",
+                "chosen_action": "build_1_body_89697",
+                "chosen_score": 48539.81,
+                "context_summary": "Upgraded metal_mine on planeta #89697 (Grandmaster Multi-Colony Parallel Execution)"
+            },
+            {
+                "virtual_timestamp": 1792170660,
+                "virtual_time_iso": "2026-10-16T19:11:00+02:00",
+                "decision_type": "research_enqueued",
+                "chosen_action": "research_106",
+                "chosen_score": 19541.5,
+                "context_summary": "Queued research spy_tech on planet #89697 (Grandmaster Intelligence)"
+            },
+            {
+                "virtual_timestamp": 1792170660,
+                "virtual_time_iso": "2026-10-16T19:11:00+02:00",
+                "decision_type": "achievements_sync",
+                "chosen_action": "achieved",
+                "chosen_score": 1,
+                "context_summary": "Logros sincronizados a niveles legítimos: achievements_11 -> Niv. 2"
+            },
+            {
+                "virtual_timestamp": 1792170705,
+                "virtual_time_iso": "2026-10-16T19:11:45+02:00",
+                "decision_type": "research_enqueued",
+                "chosen_action": "research_108",
+                "chosen_score": 14013,
+                "context_summary": "Queued research computer_tech on planet #89697 (Grandmaster Intelligence)"
+            },
+            {
+                "virtual_timestamp": 1792170705,
+                "virtual_time_iso": "2026-10-16T19:11:45+02:00",
+                "decision_type": "colonizer_recruit",
+                "chosen_action": "recruit_colonizer_89697",
+                "chosen_score": 10000,
+                "context_summary": "Queued 1 Colony Ship (#208) on planet #89697 (Open slots: 8, In-Flight: 0)"
+            },
+            {
+                "virtual_timestamp": 1792170705,
+                "virtual_time_iso": "2026-10-16T19:11:45+02:00",
+                "decision_type": "achievements_sync",
+                "chosen_action": "achieved",
+                "chosen_score": 1,
+                "context_summary": "Logros sincronizados a niveles legítimos: achievements_9 -> Niv. 1"
+            },
+            {
+                "virtual_timestamp": 1792170750,
+                "virtual_time_iso": "2026-10-16T19:12:30+02:00",
+                "decision_type": "mine_upgrade",
+                "chosen_action": "build_44_body_89697",
+                "chosen_score": 1326,
+                "context_summary": "Upgraded silo on planeta #89697 (Grandmaster Multi-Colony Parallel Execution)"
+            },
+            {
+                "virtual_timestamp": 1792170750,
+                "virtual_time_iso": "2026-10-16T19:12:30+02:00",
+                "decision_type": "research_enqueued",
+                "chosen_action": "research_108",
+                "chosen_score": 14904,
+                "context_summary": "Queued research computer_tech on planet #89697 (Grandmaster Intelligence)"
+            },
+            {
+                "virtual_timestamp": 1792170750,
+                "virtual_time_iso": "2026-10-16T19:12:30+02:00",
+                "decision_type": "colonization_dispatch",
+                "chosen_action": "colonize_1_338_7",
+                "chosen_score": 20000,
+                "context_summary": "Dispatched Colony Ship (#208) from Planet #89697 to optimal coordinates [1:338:7] (Mission 7)"
+            },
+            {
+                "virtual_timestamp": 1792170750,
+                "virtual_time_iso": "2026-10-16T19:12:30+02:00",
+                "decision_type": "achievements_sync",
+                "chosen_action": "achieved",
+                "chosen_score": 1,
+                "context_summary": "Logros sincronizados a niveles legítimos: achievements_10 -> Niv. 2"
+            },
+            {
+                "virtual_timestamp": 1792170795,
+                "virtual_time_iso": "2026-10-16T19:13:15+02:00",
+                "decision_type": "mine_upgrade",
+                "chosen_action": "build_22_body_89697",
+                "chosen_score": 51,
+                "context_summary": "Upgraded metal_store on planeta #89697 (Grandmaster Multi-Colony Parallel Execution)"
+            },
+            {
+                "virtual_timestamp": 1792170795,
+                "virtual_time_iso": "2026-10-16T19:13:15+02:00",
+                "decision_type": "research_enqueued",
+                "chosen_action": "research_108",
+                "chosen_score": 15795,
+                "context_summary": "Queued research computer_tech on planet #89697 (Grandmaster Intelligence)"
+            },
+            {
+                "virtual_timestamp": 1792170795,
+                "virtual_time_iso": "2026-10-16T19:13:15+02:00",
+                "decision_type": "colonizer_recruit",
+                "chosen_action": "recruit_colonizer_89697",
+                "chosen_score": 10000,
+                "context_summary": "Queued 1 Colony Ship (#208) on planet #89697 (Open slots: 7, In-Flight: 1)"
+            },
+            {
+                "virtual_timestamp": 1792170795,
+                "virtual_time_iso": "2026-10-16T19:13:15+02:00",
+                "decision_type": "achievements_sync",
+                "chosen_action": "achieved",
+                "chosen_score": 1,
+                "context_summary": "Logros sincronizados a niveles legítimos: achievements_10 -> Niv. 3"
+            },
+            {
+                "virtual_timestamp": 1792170840,
+                "virtual_time_iso": "2026-10-16T19:14:00+02:00",
+                "decision_type": "mine_upgrade",
+                "chosen_action": "build_22_body_89697",
+                "chosen_score": 51,
+                "context_summary": "Upgraded metal_store on planeta #89697 (Grandmaster Multi-Colony Parallel Execution)"
+            },
+            {
+                "virtual_timestamp": 1792170840,
+                "virtual_time_iso": "2026-10-16T19:14:00+02:00",
+                "decision_type": "research_enqueued",
+                "chosen_action": "research_109",
+                "chosen_score": 13019.4,
+                "context_summary": "Queued research military_tech on planet #89697 (Grandmaster Intelligence)"
+            },
+            {
+                "virtual_timestamp": 1792170840,
+                "virtual_time_iso": "2026-10-16T19:14:00+02:00",
+                "decision_type": "colonization_dispatch",
+                "chosen_action": "colonize_1_338_9",
+                "chosen_score": 20000,
+                "context_summary": "Dispatched Colony Ship (#208) from Planet #89697 to optimal coordinates [1:338:9] (Mission 7)"
+            },
+            {
+                "virtual_timestamp": 1792170840,
+                "virtual_time_iso": "2026-10-16T19:14:00+02:00",
+                "decision_type": "achievements_sync",
+                "chosen_action": "achieved",
+                "chosen_score": 1,
+                "context_summary": "Logros sincronizados a niveles legítimos: achievements_10 -> Niv. 4"
+            },
+            {
+                "virtual_timestamp": 1792170885,
+                "virtual_time_iso": "2026-10-16T19:14:45+02:00",
+                "decision_type": "mine_upgrade",
+                "chosen_action": "build_22_body_89697",
+                "chosen_score": 51,
+                "context_summary": "Upgraded metal_store on planeta #89697 (Grandmaster Multi-Colony Parallel Execution)"
+            },
+            {
+                "virtual_timestamp": 1792170885,
+                "virtual_time_iso": "2026-10-16T19:14:45+02:00",
+                "decision_type": "research_enqueued",
+                "chosen_action": "research_109",
+                "chosen_score": 13019.4,
+                "context_summary": "Queued research military_tech on planet #89697 (Grandmaster Intelligence)"
+            },
+            {
+                "virtual_timestamp": 1792170885,
+                "virtual_time_iso": "2026-10-16T19:14:45+02:00",
+                "decision_type": "colonizer_recruit",
+                "chosen_action": "recruit_colonizer_89697",
+                "chosen_score": 10000,
+                "context_summary": "Queued 1 Colony Ship (#208) on planet #89697 (Open slots: 6, In-Flight: 2)"
+            },
+            {
+                "virtual_timestamp": 1792170930,
+                "virtual_time_iso": "2026-10-16T19:15:30+02:00",
+                "decision_type": "mine_upgrade",
+                "chosen_action": "build_22_body_89697",
+                "chosen_score": 51,
+                "context_summary": "Upgraded metal_store on planeta #89697 (Grandmaster Multi-Colony Parallel Execution)"
+            },
+            {
+                "virtual_timestamp": 1792170930,
+                "virtual_time_iso": "2026-10-16T19:15:30+02:00",
+                "decision_type": "research_enqueued",
+                "chosen_action": "research_110",
+                "chosen_score": 13019.4,
+                "context_summary": "Queued research defence_tech on planet #89697 (Grandmaster Intelligence)"
+            },
+            {
+                "virtual_timestamp": 1792170930,
+                "virtual_time_iso": "2026-10-16T19:15:30+02:00",
+                "decision_type": "colonization_dispatch",
+                "chosen_action": "colonize_1_338_6",
+                "chosen_score": 20000,
+                "context_summary": "Dispatched Colony Ship (#208) from Planet #89697 to optimal coordinates [1:338:6] (Mission 7)"
+            },
+            {
+                "virtual_timestamp": 1792170975,
+                "virtual_time_iso": "2026-10-16T19:16:15+02:00",
+                "decision_type": "mine_upgrade",
+                "chosen_action": "build_23_body_89697",
+                "chosen_score": 51,
+                "context_summary": "Upgraded crystal_store on planeta #89697 (Grandmaster Multi-Colony Parallel Execution)"
+            },
+            {
+                "virtual_timestamp": 1792170975,
+                "virtual_time_iso": "2026-10-16T19:16:15+02:00",
+                "decision_type": "research_enqueued",
+                "chosen_action": "research_109",
+                "chosen_score": 13019.4,
+                "context_summary": "Queued research military_tech on planet #89697 (Grandmaster Intelligence)"
+            },
+            {
+                "virtual_timestamp": 1792170975,
+                "virtual_time_iso": "2026-10-16T19:16:15+02:00",
+                "decision_type": "achievements_sync",
+                "chosen_action": "achieved",
+                "chosen_score": 1,
+                "context_summary": "Logros sincronizados a niveles legítimos: achievements_11 -> Niv. 3"
+            },
+            {
+                "virtual_timestamp": 1792171020,
+                "virtual_time_iso": "2026-10-16T19:17:00+02:00",
+                "decision_type": "mine_upgrade",
+                "chosen_action": "build_23_body_89697",
+                "chosen_score": 51,
+                "context_summary": "Upgraded crystal_store on planeta #89697 (Grandmaster Multi-Colony Parallel Execution)"
+            },
+            {
+                "virtual_timestamp": 1792171020,
+                "virtual_time_iso": "2026-10-16T19:17:00+02:00",
+                "decision_type": "research_enqueued",
+                "chosen_action": "research_109",
+                "chosen_score": 13019.4,
+                "context_summary": "Queued research military_tech on planet #89697 (Grandmaster Intelligence)"
+            },
+            {
+                "virtual_timestamp": 1792171065,
+                "virtual_time_iso": "2026-10-16T19:17:45+02:00",
+                "decision_type": "mine_upgrade",
+                "chosen_action": "build_23_body_89697",
+                "chosen_score": 51,
+                "context_summary": "Upgraded crystal_store on planeta #89697 (Grandmaster Multi-Colony Parallel Execution)"
+            },
+            {
+                "virtual_timestamp": 1792171065,
+                "virtual_time_iso": "2026-10-16T19:17:45+02:00",
+                "decision_type": "research_enqueued",
+                "chosen_action": "research_110",
+                "chosen_score": 13019.4,
+                "context_summary": "Queued research defence_tech on planet #89697 (Grandmaster Intelligence)"
+            },
+            {
+                "virtual_timestamp": 1792171065,
+                "virtual_time_iso": "2026-10-16T19:17:45+02:00",
+                "decision_type": "colonizer_recruit",
+                "chosen_action": "recruit_colonizer_89697",
+                "chosen_score": 10000,
+                "context_summary": "Queued 1 Colony Ship (#208) on planet #89697 (Open slots: 5, In-Flight: 3)"
+            },
+            {
+                "virtual_timestamp": 1792171110,
+                "virtual_time_iso": "2026-10-16T19:18:30+02:00",
+                "decision_type": "mine_upgrade",
+                "chosen_action": "build_23_body_89697",
+                "chosen_score": 51,
+                "context_summary": "Upgraded crystal_store on planeta #89697 (Grandmaster Multi-Colony Parallel Execution)"
+            },
+            {
+                "virtual_timestamp": 1792171110,
+                "virtual_time_iso": "2026-10-16T19:18:30+02:00",
+                "decision_type": "research_enqueued",
+                "chosen_action": "research_120",
+                "chosen_score": 11699.1,
+                "context_summary": "Queued research laser_tech on planet #89697 (Grandmaster Intelligence)"
+            },
+            {
+                "virtual_timestamp": 1792171110,
+                "virtual_time_iso": "2026-10-16T19:18:30+02:00",
+                "decision_type": "achievements_sync",
+                "chosen_action": "achieved",
+                "chosen_score": 1,
+                "context_summary": "Logros sincronizados a niveles legítimos: achievements_11 -> Niv. 4"
+            },
+            {
+                "virtual_timestamp": 1792171155,
+                "virtual_time_iso": "2026-10-16T19:19:15+02:00",
+                "decision_type": "savings_antifarm_abort",
+                "chosen_action": "abort_savings_defend",
+                "chosen_score": 20000,
+                "context_summary": "Watchdog Anti-Farm triggered on planet #89697: 3 consecutive cycles (135s) with non-growing stock. Aborting savings to recruit defenses and fighters."
+            },
+            {
+                "virtual_timestamp": 1792171155,
+                "virtual_time_iso": "2026-10-16T19:19:15+02:00",
+                "decision_type": "savings_lock_engaged",
+                "chosen_action": "save_3",
+                "chosen_score": 47209.93,
+                "context_summary": "Engaged savings lock for deuterium_sintetizer on body #89697 (ETA: 89.72s)"
+            },
+            {
+                "virtual_timestamp": 1792171155,
+                "virtual_time_iso": "2026-10-16T19:19:15+02:00",
+                "decision_type": "savings_lock_engaged",
+                "chosen_action": "save_research_108",
+                "chosen_score": 16686,
+                "context_summary": "Engaged research savings lock for computer_tech on planet #89697 (ETA: 0s)"
+            },
+            {
+                "virtual_timestamp": 1792171155,
+                "virtual_time_iso": "2026-10-16T19:19:15+02:00",
+                "decision_type": "colonization_dispatch",
+                "chosen_action": "colonize_1_338_10",
+                "chosen_score": 20000,
+                "context_summary": "Dispatched Colony Ship (#208) from Planet #89697 to optimal coordinates [1:338:10] (Mission 7)"
+            }
+        ]
+    },
+    "integrity_sha256": "16dec57847e1464586aa6241193819d691d2ed9ba96ee68ed97aae89c9dacc3b"
+}

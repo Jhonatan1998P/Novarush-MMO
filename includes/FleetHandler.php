@@ -29,7 +29,7 @@ while($loops < 10)
 	$token	= getRandomString();
 
 	$fleetResult	= $db->update("UPDATE %%FLEETS_EVENT%% SET `lock` = :token WHERE `lock` IS NULL AND `time` <= :time;", array(
-		':time'		=> BotClock::get(),
+		':time'		=> class_exists('BotClock') ? BotClock::now() : TIMESTAMP,
 		':token'	=> $token
 	));
 

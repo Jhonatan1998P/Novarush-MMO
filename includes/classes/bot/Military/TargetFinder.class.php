@@ -26,6 +26,7 @@ require_once 'includes/classes/bot/Military/TargetBlacklist.class.php';
  */
 class BotTargetFinder
 {
+    public static $phalanxScansCount = 0;
     private $ctx;
 
     public function __construct(BotContext $ctx)
@@ -152,7 +153,7 @@ class BotTargetFinder
               AND target_type = 'siege' 
               AND target_lock_time > :lockExpire;", array(
             ':selfBotId'  => $this->ctx->botId,
-            ':lockExpire' => TIMESTAMP - 21600
+            ':lockExpire' => (class_exists('BotClock') ? BotClock::now() : TIMESTAMP) - 21600
         ));
         $siegeLockedMap = array();
         if (is_array($otherBotSieges)) {
@@ -185,31 +186,38 @@ class BotTargetFinder
                     $phalanxLvl = isset($bData[$resource[42]]) ? (int)$bData[$resource[42]] : 0;
                     $deutStock  = isset($bData['deuterium']) ? (float)$bData['deuterium'] : 0.0;
 
-                    if ($phalanxLvl > 0 && $deutStock >= 25000.0) {
+                    if ($phalanxLvl > 0 && $deutStock >= 5000.0) {
                         $range = ($phalanxLvl == 1) ? 1 : max(0, pow($phalanxLvl, 2) - 1);
                         $mGalaxy = (int)$bData['galaxy'];
                         $mSystem = (int)$bData['system'];
                         $minSys  = max(1, $mSystem - $range);
                         $maxSys  = min(500, $mSystem + $range);
 
-                        $returningFleets = $db->select("SELECT fleet_start_galaxy, fleet_start_system, fleet_start_planet, fleet_start_type, fleet_array, fleet_end_time 
+                        $detectedFleets = $db->select("SELECT fleet_id, fleet_owner, fleet_mission, fleet_array, fleet_start_time, fleet_end_time, fleet_mess,
+                               fleet_start_galaxy, fleet_start_system, fleet_start_planet, fleet_start_type,
+                               fleet_end_galaxy, fleet_end_system, fleet_end_planet, fleet_end_type
                             FROM %%FLEETS%% 
                             WHERE fleet_mission != 6 
-                              AND fleet_mess = 1 
-                              AND fleet_start_type = 1 
-                              AND fleet_start_galaxy = :g 
-                              AND fleet_start_system BETWEEN :minS AND :maxS 
                               AND fleet_owner != :botId 
                               AND fleet_target_owner != :botId2 
+                              AND (
+                                   (fleet_start_type = 1 AND fleet_start_galaxy = :g AND fleet_start_system BETWEEN :minS AND :maxS)
+                                   OR
+                                   (fleet_end_type = 1 AND fleet_end_galaxy = :g2 AND fleet_end_system BETWEEN :minS2 AND :maxS2)
+                              )
                             LIMIT 10;", array(
                             ':g'      => $mGalaxy,
                             ':minS'   => $minSys,
                             ':maxS'   => $maxSys,
+                            ':g2'     => $mGalaxy,
+                            ':minS2'  => $minSys,
+                            ':maxS2'  => $maxSys,
                             ':botId'  => $this->ctx->botId,
                             ':botId2' => $this->ctx->botId
                         ));
 
-                        if (!empty($returningFleets)) {
+                        if (!empty($detectedFleets)) {
+                            self::$phalanxScansCount++;
                             // Deducción canónica de 5,000 de deuterio por escaneo de Phalanx
                             $db->update("UPDATE %%PLANETS%% SET deuterium = GREATEST(0, deuterium - 5000) WHERE id = :moonId;", array(
                                 ':moonId' => (int)$bData['id']
@@ -218,12 +226,28 @@ class BotTargetFinder
                                 $body['data']['deuterium'] -= 5000.0;
                             }
 
-                            foreach ($returningFleets as $rf) {
-                                $rfKey = (int)$rf['fleet_start_galaxy'] . ':' . (int)$rf['fleet_start_system'] . ':' . (int)$rf['fleet_start_planet'] . ':' . (int)$rf['fleet_start_type'];
-                                $phalanxPriorityTargets[$rfKey] = array(
-                                    'returning_at' => (int)$rf['fleet_end_time'],
-                                    'fleet_array'  => $rf['fleet_array']
-                                );
+                            $this->ctx->decisionLog->record(
+                                'phalanx_scan_executed',
+                                "Phalanx Sensor sweep from Moon #{$bData['id']} [{$mGalaxy}:{$mSystem}:{$bData['planet']}] detected " . count($detectedFleets) . " rival fleet movement(s) in range [{$minSys} - {$maxSys}] (-5,000 Deut)",
+                                array('moon_id' => (int)$bData['id'], 'detected_fleets_count' => count($detectedFleets), 'range_systems' => "{$minSys}-{$maxSys}"),
+                                "phalanx_scan_{$bData['id']}",
+                                3500.0
+                            );
+
+                            foreach ($detectedFleets as $rf) {
+                                if ((int)$rf['fleet_mess'] === 1) {
+                                    $rfKey = (int)$rf['fleet_start_galaxy'] . ':' . (int)$rf['fleet_start_system'] . ':' . (int)$rf['fleet_start_planet'] . ':' . (int)$rf['fleet_start_type'];
+                                    $phalanxPriorityTargets[$rfKey] = array(
+                                        'returning_at' => (int)$rf['fleet_end_time'],
+                                        'fleet_array'  => $rf['fleet_array']
+                                    );
+                                } else {
+                                    $rfKey = (int)$rf['fleet_end_galaxy'] . ':' . (int)$rf['fleet_end_system'] . ':' . (int)$rf['fleet_end_planet'] . ':' . (int)$rf['fleet_end_type'];
+                                    $phalanxPriorityTargets[$rfKey] = array(
+                                        'returning_at' => (int)$rf['fleet_start_time'],
+                                        'fleet_array'  => $rf['fleet_array']
+                                    );
+                                }
                             }
                         }
                     }
@@ -269,7 +293,7 @@ class BotTargetFinder
             // RECENT: Inactividad entre 900s y 2699s (15–45 min)
             // ONLINE: Actividad reciente < 900s (< 15 min, estrella (*) activa)
             $lastActivityTime = max((int)($p['last_update'] ?? 0), (int)($p['onlinetime'] ?? 0), (int)($p['last_fleet_out'] ?? 0));
-            $inactivitySeconds = ($lastActivityTime > 0) ? max(0, TIMESTAMP - $lastActivityTime) : 999999;
+            $inactivitySeconds = ($lastActivityTime > 0) ? max(0, (class_exists('BotClock') ? BotClock::now() : TIMESTAMP) - $lastActivityTime) : 999999;
             if ($inactivitySeconds < 900) {
                 $activityStatus = 'ONLINE';
             } elseif ($inactivitySeconds < 2700) {
@@ -363,8 +387,9 @@ class BotTargetFinder
                 }
 
                 // 2. Projected Loot at Impact (Section 2.2)
-                $scannedAt = !empty($intel['scanned_at']) ? (int)$intel['scanned_at'] : TIMESTAMP;
-                $deltaHours = max(0.0, (TIMESTAMP + $flightSecs - $scannedAt) / 3600.0);
+                $now = class_exists('BotClock') ? BotClock::now() : TIMESTAMP;
+                $scannedAt = !empty($intel['scanned_at']) ? (int)$intel['scanned_at'] : $now;
+                $deltaHours = max(0.0, ($now + $flightSecs - $scannedAt) / 3600.0);
 
                 // Estimate hourly production from buildings if scouted, else defaults
                 $prodM = 1000.0;

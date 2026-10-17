@@ -80,7 +80,7 @@ class BotFleetsaveCalculator
         }
 
         // Timing window: Fleetsave must launch randomly 1-3 minutes (60 to 180 seconds) before impact
-        $now = TIMESTAMP;
+        $now = class_exists('BotClock') ? BotClock::now() : TIMESTAMP;
         $timeUntilThreat = (int)$threatArrivalTime - $now;
         if ($timeUntilThreat <= 0) {
             return false;

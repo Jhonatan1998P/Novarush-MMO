@@ -31,7 +31,7 @@ class BotScheduler
             ':task_type'    => (string)$taskType,
             ':payload'      => json_encode($payload),
             ':scheduled_at' => (int)$scheduledAt,
-            ':created_at'   => TIMESTAMP,
+            ':created_at'   => class_exists('BotClock') ? BotClock::now() : TIMESTAMP,
         ));
 
         return (int)$db->lastInsertId();

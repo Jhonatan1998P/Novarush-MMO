@@ -85,45 +85,134 @@ class BotRecyclePlanner
      * @param array $targetCandidates
      * @return int Number of recycling fleets sent
      */
-    public function harvestDebris(BotWorldModel $world, array $basePlanet, array $targetCandidates)
+    public function harvestDebris(BotWorldModel $world, array $basePlanet, array $targetCandidates = array())
     {
         global $resource;
 
-        if (!is_array($targetCandidates) || empty($targetCandidates)) {
-            return 0;
-        }
-
         $sent = 0;
         $empirePlanets = $world->empire->getPlanets();
+        $empireMoons   = $world->empire->getMoons();
 
         // 1. Filtrar objetivos con escombros reales
         $debrisTargets = array();
-        foreach ($targetCandidates as $entry) {
-            $t = isset($entry['target']) ? $entry['target'] : array();
-            if (empty($t) || empty($t['has_debris'])) {
-                continue;
+        $seenCoords = array();
+
+        if (is_array($targetCandidates)) {
+            foreach ($targetCandidates as $entry) {
+                $t = isset($entry['target']) ? $entry['target'] : array();
+                if (empty($t) || empty($t['has_debris'])) {
+                    continue;
+                }
+
+                $coordKey = (int)$t['galaxy'] . ':' . (int)$t['system'] . ':' . (int)$t['planet'];
+                $seenCoords[$coordKey] = true;
+
+                $totalDebris = (float)$t['debris_metal'] + (float)$t['debris_crystal'];
+                if ($totalDebris < 50000.0) {
+                    continue;
+                }
+
+                // Chequeo Anti-Spam: Descontar capacidad ya en vuelo
+                $inFlightCap = $this->getInFlightRecyclerCapacity($t['galaxy'], $t['system'], $t['planet']);
+                $remDebris = $totalDebris - $inFlightCap;
+
+                // Si ya hay suficiente capacidad en vuelo para cubrir los escombros, ignorar
+                if ($remDebris <= 10000.0) {
+                    continue;
+                }
+
+                $debrisTargets[] = array(
+                    'target'      => $t,
+                    'totalDebris' => $totalDebris,
+                    'remDebris'   => $remDebris,
+                    'inFlightCap' => $inFlightCap
+                );
             }
+        }
 
-            $totalDebris = (float)$t['debris_metal'] + (float)$t['debris_crystal'];
-            if ($totalDebris < 50000.0) {
-                continue;
+        // Include local empire planets and moons in debris scans to harvest moonshot/combat debris
+        if (is_array($empirePlanets)) {
+            foreach ($empirePlanets as $p) {
+                $pData = $p['data'];
+                $coordKey = (int)$pData['galaxy'] . ':' . (int)$pData['system'] . ':' . (int)$pData['planet'];
+                if (isset($seenCoords[$coordKey])) {
+                    continue;
+                }
+                $seenCoords[$coordKey] = true;
+
+                $derM = (float)($pData['der_metal'] ?? 0);
+                $derC = (float)($pData['der_crystal'] ?? 0);
+                $totalDebris = $derM + $derC;
+                if ($totalDebris < 50000.0) {
+                    continue;
+                }
+
+                $inFlightCap = $this->getInFlightRecyclerCapacity($pData['galaxy'], $pData['system'], $pData['planet']);
+                $remDebris = $totalDebris - $inFlightCap;
+                if ($remDebris <= 10000.0) {
+                    continue;
+                }
+
+                $debrisTargets[] = array(
+                    'target' => array(
+                        'id'             => (int)$pData['id'],
+                        'planet_id'      => (int)$pData['id'],
+                        'id_owner'       => (int)$pData['id_owner'],
+                        'galaxy'         => (int)$pData['galaxy'],
+                        'system'         => (int)$pData['system'],
+                        'planet'         => (int)$pData['planet'],
+                        'planet_type'    => 2,
+                        'has_debris'     => true,
+                        'debris_metal'   => $derM,
+                        'debris_crystal' => $derC,
+                    ),
+                    'totalDebris' => $totalDebris,
+                    'remDebris'   => $remDebris,
+                    'inFlightCap' => $inFlightCap
+                );
             }
+        }
 
-            // Chequeo Anti-Spam: Descontar capacidad ya en vuelo
-            $inFlightCap = $this->getInFlightRecyclerCapacity($t['galaxy'], $t['system'], $t['planet']);
-            $remDebris = $totalDebris - $inFlightCap;
+        if (is_array($empireMoons)) {
+            foreach ($empireMoons as $m) {
+                $mData = $m['data'];
+                $coordKey = (int)$mData['galaxy'] . ':' . (int)$mData['system'] . ':' . (int)$mData['planet'];
+                if (isset($seenCoords[$coordKey])) {
+                    continue;
+                }
+                $seenCoords[$coordKey] = true;
 
-            // Si ya hay suficiente capacidad en vuelo para cubrir los escombros, ignorar
-            if ($remDebris <= 10000.0) {
-                continue;
+                $derM = (float)($mData['der_metal'] ?? 0);
+                $derC = (float)($mData['der_crystal'] ?? 0);
+                $totalDebris = $derM + $derC;
+                if ($totalDebris < 50000.0) {
+                    continue;
+                }
+
+                $inFlightCap = $this->getInFlightRecyclerCapacity($mData['galaxy'], $mData['system'], $mData['planet']);
+                $remDebris = $totalDebris - $inFlightCap;
+                if ($remDebris <= 10000.0) {
+                    continue;
+                }
+
+                $debrisTargets[] = array(
+                    'target' => array(
+                        'id'             => (int)$mData['id'],
+                        'planet_id'      => (int)$mData['id'],
+                        'id_owner'       => (int)$mData['id_owner'],
+                        'galaxy'         => (int)$mData['galaxy'],
+                        'system'         => (int)$mData['system'],
+                        'planet'         => (int)$mData['planet'],
+                        'planet_type'    => 2,
+                        'has_debris'     => true,
+                        'debris_metal'   => $derM,
+                        'debris_crystal' => $derC,
+                    ),
+                    'totalDebris' => $totalDebris,
+                    'remDebris'   => $remDebris,
+                    'inFlightCap' => $inFlightCap
+                );
             }
-
-            $debrisTargets[] = array(
-                'target'      => $t,
-                'totalDebris' => $totalDebris,
-                'remDebris'   => $remDebris,
-                'inFlightCap' => $inFlightCap
-            );
         }
 
         if (empty($debrisTargets)) {
@@ -217,7 +306,7 @@ class BotRecyclePlanner
                     $fleet,
                     8, // Mission 8: Recycling
                     $p['id'],
-                    $t['planet_id'],
+                    $t['planet_id'] ?? $t['id'] ?? 0,
                     0, // Target owner 0 for debris fields
                     $t['galaxy'],
                     $t['system'],

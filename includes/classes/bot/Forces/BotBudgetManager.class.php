@@ -28,6 +28,18 @@ class BotBudgetManager
 {
     const MAX_SAVINGS_LOCK_ETA = 14400; // 4 hours maximum reasonable savings lock horizon
 
+    public static $internalBucketSwapsCount = 0;
+
+    public static function getInternalBucketSwapsCount()
+    {
+        return self::$internalBucketSwapsCount;
+    }
+
+    public static function resetInternalBucketSwapsCount()
+    {
+        self::$internalBucketSwapsCount = 0;
+    }
+
     private $ctx;
     private $credits = array();
     private $savingsLock = null;
@@ -276,10 +288,11 @@ class BotBudgetManager
                 $mStockC = (float)($mData['crystal'] ?? 0.0);
                 $mStockD = max(0.0, (float)($mData['deuterium'] ?? 0.0) - 50000.0);
 
-                // On moons, mines category covers lunar buildings (Base Lunar, Jump Gate, Phalanx, Robots, Nano)
-                $this->credits['planets'][$mId]['mines']['metal']     = max((float)($this->credits['planets'][$mId]['mines']['metal'] ?? 0.0), $mStockM);
-                $this->credits['planets'][$mId]['mines']['crystal']   = max((float)($this->credits['planets'][$mId]['mines']['crystal'] ?? 0.0), $mStockC);
-                $this->credits['planets'][$mId]['mines']['deuterium'] = max((float)($this->credits['planets'][$mId]['mines']['deuterium'] ?? 0.0), $mStockD);
+                // On moons, mines category covers lunar buildings (Base Lunar, Jump Gate, Phalanx, Robots, Nano).
+                // Moon budget directly mirrors available physical stock to prevent phantom ratchet inflation when resources are transported away.
+                $this->credits['planets'][$mId]['mines']['metal']     = $mStockM;
+                $this->credits['planets'][$mId]['mines']['crystal']   = $mStockC;
+                $this->credits['planets'][$mId]['mines']['deuterium'] = $mStockD;
 
                 $this->credits['last_physical'][$mId] = array(
                     'metal'     => $mStockM,
@@ -549,6 +562,49 @@ class BotBudgetManager
                 'crystal'   => $curC,
                 'deuterium' => $curD,
             );
+        }
+
+        // Reconcile moons: strictly enforce that virtual moon credits never exceed actual physical stock
+        $moons = $empire->getMoons();
+        if (is_array($moons)) {
+            foreach ($moons as $mId => $mEntry) {
+                $mData = $mEntry['data'];
+                $mId   = (int)$mId;
+
+                if (!isset($this->credits['planets'][$mId])) {
+                    $this->credits['planets'][$mId] = array(
+                        'mines'   => array('metal' => 0.0, 'crystal' => 0.0, 'deuterium' => 0.0),
+                        'fleet'   => array('metal' => 0.0, 'crystal' => 0.0, 'deuterium' => 0.0),
+                        'defense' => array('metal' => 0.0, 'crystal' => 0.0, 'deuterium' => 0.0),
+                    );
+                }
+
+                $curM = max(0.0, (float)($mData['metal'] ?? 0.0));
+                $curC = max(0.0, (float)($mData['crystal'] ?? 0.0));
+                $curD = max(0.0, (float)($mData['deuterium'] ?? 0.0));
+
+                foreach (array('metal' => $curM, 'crystal' => $curC, 'deuterium' => $curD) as $resKey => $curPhys) {
+                    $sumVirt = (float)($this->credits['planets'][$mId]['mines'][$resKey] ?? 0.0)
+                             + (float)($this->credits['planets'][$mId]['fleet'][$resKey] ?? 0.0)
+                             + (float)($this->credits['planets'][$mId]['defense'][$resKey] ?? 0.0);
+
+                    if ($sumVirt > $curPhys && $sumVirt > 0.0) {
+                        $scale = $curPhys / $sumVirt;
+                        foreach (array('mines', 'fleet', 'defense') as $cat) {
+                            if (isset($this->credits['planets'][$mId][$cat][$resKey])) {
+                                $cur = (float)$this->credits['planets'][$mId][$cat][$resKey];
+                                $this->credits['planets'][$mId][$cat][$resKey] = round($cur * $scale, 2);
+                            }
+                        }
+                    }
+                }
+
+                $this->credits['last_physical'][$mId] = array(
+                    'metal'     => $curM,
+                    'crystal'   => $curC,
+                    'deuterium' => $curD,
+                );
+            }
         }
 
         // Reconcile Global Research against Empire-wide physical backing
@@ -904,19 +960,7 @@ class BotBudgetManager
                 }
             }
 
-            if (isset($this->ctx->decisionLog)) {
-                $this->ctx->decisionLog->record(
-                    'internal_bucket_swap',
-                    "Internal Bucket Swap: rebalanceo neutral en planeta #{$planetId} para {$targetCategory} (Coste 0 MO)",
-                    array(
-                        'planet_id'        => $planetId,
-                        'target_category'  => $targetCategory,
-                        'needed_resources' => $neededResources,
-                    ),
-                    "swap_{$targetCategory}_{$planetId}",
-                    2500.0
-                );
-            }
+            self::$internalBucketSwapsCount++;
 
             $this->saveState();
             return true;

@@ -64,7 +64,7 @@ class MissionCaseSpy extends MissionFunctions implements Mission
 
 		$targetStayFleets	= $db->select($sql, array(
 			':planetId'	=> $this->_fleet['fleet_end_id'],
-			':time'		=> TIMESTAMP,
+			':time'		=> class_exists('BotClock') ? BotClock::now() : TIMESTAMP,
 		));
 
 		foreach($targetStayFleets as $fleetRow)

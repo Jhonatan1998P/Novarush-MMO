@@ -41,12 +41,12 @@ class BotThreatBoard
 
         $rows = $db->select($sql, array(
             ':bot_id' => $this->botId,
-            ':now'    => TIMESTAMP,
+            ':now'    => class_exists('BotClock') ? BotClock::now() : TIMESTAMP,
         ));
 
         $threats = array();
         foreach ($rows as $row) {
-            $etaSeconds = max(0, (int)$row['fleet_start_time'] - TIMESTAMP);
+            $etaSeconds = max(0, (int)$row['fleet_start_time'] - (class_exists('BotClock') ? BotClock::now() : TIMESTAMP));
             $parsedFleet = FleetFunctions::unserialize($row['fleet_array']);
             if (!is_array($parsedFleet)) {
                 $parsedFleet = array();

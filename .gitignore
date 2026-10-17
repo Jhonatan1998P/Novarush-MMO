@@ -21,3 +21,6 @@ scratch_*
 includes/error.log
 Thumbs.db
 .DS_Store
+
+# Local database dump directory
+backups/

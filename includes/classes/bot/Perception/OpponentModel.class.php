@@ -62,7 +62,7 @@ class BotOpponentModel
         $db->insert($sql, array(
             ':bot_id'    => $this->botId,
             ':target_id' => (int)$targetUserId,
-            ':time'      => TIMESTAMP,
+            ':time'      => class_exists('BotClock') ? BotClock::now() : TIMESTAMP,
         ));
     }
 }

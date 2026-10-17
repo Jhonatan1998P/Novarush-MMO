@@ -71,7 +71,8 @@ class BotPublicDataReader
         foreach ($rows as $row) {
             // Activity marker strictly calculated from outgoing fleet activity
             $activityTime = max((int)($row['last_fleet_out'] ?? 0), (int)($row['m_last_fleet_out'] ?? 0));
-            $activityMinutes = ($activityTime > 0) ? floor((TIMESTAMP - $activityTime) / 60) : 999999;
+            $now = class_exists('BotClock') ? BotClock::now() : TIMESTAMP;
+            $activityMinutes = ($activityTime > 0) ? floor(($now - $activityTime) / 60) : 999999;
 
             // Compute standard 2Moons activity marker
             $activityMarker = 'none';
@@ -102,7 +103,7 @@ class BotPublicDataReader
                 'last_update'      => (int)($row['last_update'] ?? 0),
                 'onlinetime'       => (int)($row['onlinetime'] ?? 0),
                 'last_fleet_out'   => (int)($row['last_fleet_out'] ?? 0),
-                'is_vacation'      => (!empty($row['urlaubs_modus']) || (!empty($row['banaday']) && $row['banaday'] > TIMESTAMP)),
+                'is_vacation'      => (!empty($row['urlaubs_modus']) || (!empty($row['banaday']) && $row['banaday'] > $now)),
             );
         }
 
@@ -165,7 +166,8 @@ class BotPublicDataReader
         foreach ($rows as $row) {
             // Activity marker strictly calculated from outgoing fleet activity
             $activityTime = max((int)($row['last_fleet_out'] ?? 0), (int)($row['m_last_fleet_out'] ?? 0));
-            $activityMinutes = ($activityTime > 0) ? floor((TIMESTAMP - $activityTime) / 60) : 999999;
+            $now = class_exists('BotClock') ? BotClock::now() : TIMESTAMP;
+            $activityMinutes = ($activityTime > 0) ? floor(($now - $activityTime) / 60) : 999999;
 
             $activityMarker = 'none';
             if ($activityMinutes < 15) {
@@ -195,7 +197,7 @@ class BotPublicDataReader
                 'last_update'      => (int)($row['last_update'] ?? 0),
                 'onlinetime'       => (int)($row['onlinetime'] ?? 0),
                 'last_fleet_out'   => (int)($row['last_fleet_out'] ?? 0),
-                'is_vacation'      => (!empty($row['urlaubs_modus']) || (!empty($row['banaday']) && $row['banaday'] > TIMESTAMP)),
+                'is_vacation'      => (!empty($row['urlaubs_modus']) || (!empty($row['banaday']) && $row['banaday'] > $now)),
             );
         }
 
@@ -223,7 +225,8 @@ class BotPublicDataReader
      */
     public static function getPlayerStatus($lastActivityTime)
     {
-        $inactivity = ($lastActivityTime > 0) ? max(0, TIMESTAMP - (int)$lastActivityTime) : 999999;
+        $now = class_exists('BotClock') ? BotClock::now() : TIMESTAMP;
+        $inactivity = ($lastActivityTime > 0) ? max(0, $now - (int)$lastActivityTime) : 999999;
         if ($inactivity < 900) {
             return 'ONLINE';
         } elseif ($inactivity < 2700) {

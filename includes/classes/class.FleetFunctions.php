@@ -368,10 +368,11 @@ class FleetFunctions
 			}
 		}
 		
+		$now = class_exists('BotClock') ? BotClock::now() : TIMESTAMP;
 		if($fleetResult['fleet_mission'] == 5 && $fleetResult['fleet_mess'] == FLEET_HOLD) {
-			$fleetEndTime	= ($fleetResult['fleet_start_time'] - $fleetResult['start_time']) + TIMESTAMP;
+			$fleetEndTime	= ($fleetResult['fleet_start_time'] - $fleetResult['start_time']) + $now;
 		} else {
-			$fleetEndTime	= (TIMESTAMP - $fleetResult['start_time']) + TIMESTAMP;
+			$fleetEndTime	= ($now - $fleetResult['start_time']) + $now;
 		}
 		
 		$sql	= 'UPDATE %%FLEETS%%, %%FLEETS_EVENT%% SET
@@ -385,7 +386,7 @@ class FleetFunctions
 
 		$db->update($sql, array(
 			':id'			=> $FleetID,
-			':endStayTime'	=> TIMESTAMP,
+			':endStayTime'	=> $now,
 			':endTime'		=> $fleetEndTime,
 			':fleetGroup'	=> 0,
 			':hasCanceled'	=> 1,
@@ -535,8 +536,9 @@ class FleetFunctions
 			$params[':'.$resource[903]]	= $consumption;
 		}
 
+		$now = class_exists('BotClock') ? BotClock::now() : TIMESTAMP;
 		$planetQuery[] = "last_fleet_out = :timestamp_out";
-		$params[':timestamp_out'] = TIMESTAMP;
+		$params[':timestamp_out'] = $now;
 
 		$sql	= 'UPDATE %%PLANETS%% SET '.implode(', ', $planetQuery).' WHERE id = :planetId;';
 
@@ -594,7 +596,7 @@ class FleetFunctions
 			':fleetResource903'			=> $fleetResource[903],
 			':fleetGroup'				=> $fleetGroup,
 			':missileTarget'			=> $missileTarget,
-			':timestamp'				=> TIMESTAMP,
+			':timestamp'				=> $now,
 			':universe'	   				=> Universe::current(),
             ':sector'	   				=> $sector,
 		));
@@ -660,7 +662,7 @@ class FleetFunctions
 			':fleetResource903'			=> $fleetResource[903],
 			':fleetGroup'				=> $fleetGroup,
 			':missileTarget'			=> $missileTarget,
-			':timestamp'				=> TIMESTAMP,
+			':timestamp'				=> $now,
 			':universe'	   				=> Universe::current(),
 		));
 

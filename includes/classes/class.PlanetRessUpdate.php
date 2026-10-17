@@ -104,7 +104,7 @@ class ResourceUpdate
 		$this->isGlobalMode	= !isset($USER, $PLANET) ? true : false;
 		$this->USER			= $this->isGlobalMode ? $GLOBALS['USER'] : $USER;
 		$this->PLANET		= $this->isGlobalMode ? $GLOBALS['PLANET'] : $PLANET;
-		$this->TIME			= is_null($TIME) ? TIMESTAMP : $TIME;
+		$this->TIME			= is_null($TIME) ? (class_exists('BotClock') ? BotClock::now() : (defined('TIMESTAMP') ? TIMESTAMP : time())) : $TIME;
 		$this->config		= Config::get($this->USER['universe']);
 		
 		if($this->USER['urlaubs_modus'] == 1)

@@ -202,7 +202,7 @@ class BotIntelPolicy
 
         if (is_array($inboundAttacks)) {
             foreach ($inboundAttacks as $inAtt) {
-                $remTime = (int)$inAtt['fleet_start_time'] - TIMESTAMP;
+                $remTime = (int)$inAtt['fleet_start_time'] - (class_exists('BotClock') ? BotClock::now() : TIMESTAMP);
                 if ($remTime >= 30 && $remTime <= 360) {
                     $tgG = (int)$inAtt['fleet_end_galaxy'];
                     $tgS = (int)$inAtt['fleet_end_system'];

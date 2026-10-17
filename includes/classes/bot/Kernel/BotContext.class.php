@@ -47,7 +47,7 @@ class BotContext
 
         // Ensure user factor array is loaded
         if (!isset($this->user['factor'])) {
-            $this->user['factor'] = getFactors($this->user, 'basic', TIMESTAMP);
+            $this->user['factor'] = getFactors($this->user, 'basic', class_exists('BotClock') ? BotClock::get() : TIMESTAMP);
         }
     }
 

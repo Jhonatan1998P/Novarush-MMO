@@ -2,6 +2,7 @@
 
 require_once 'includes/classes/bot/Evaluation/EconomyValuator.class.php';
 require_once 'includes/classes/bot/Kernel/BotClock.class.php';
+require_once 'includes/classes/bot/Forces/BotPremiumStrategist.class.php';
 
 /**
  * NovaRush Bot AI v2 - Force Planner
@@ -208,39 +209,27 @@ class BotForcePlanner
     {
         global $CombatCaps;
 
-        $combatShipList = array(204, 205, 206, 207, 215, 211, 213, 226, 225, 214, 216);
-
-        $bestShipId = 204;
-        $bestScore  = -1.0;
-
-        foreach ($combatShipList as $shipId) {
-            if (!BuildFunctions::isTechnologieAccessible($this->ctx->user, $pData, $shipId, array())) {
-                continue;
+        // Fodder only falls back to fodder (205, 204)
+        if ($category === 'fodder') {
+            foreach (array(205, 204) as $shipId) {
+                if (BuildFunctions::isTechnologieAccessible($this->ctx->user, $pData, $shipId, array())) {
+                    return $shipId;
+                }
             }
+            return 204;
+        }
 
-            $caps = isset($CombatCaps[$shipId]) ? $CombatCaps[$shipId] : array();
-            $att  = isset($caps['attack']) ? (float)$caps['attack'] : 10.0;
-            $shd  = isset($caps['shield']) ? (float)$caps['shield'] : 10.0;
-            $hull = isset($caps['defend']) ? (float)$caps['defend'] / 10.0 : 10.0;
-
-            $costMSE = BotEconomyValuator::getElementPriceMSE($shipId);
-            if ($costMSE <= 0.0) {
-                $costMSE = 1.0;
-            }
-
-            if ($category === 'fodder') {
-                $score = ($shd + $hull) / $costMSE;
-            } else {
-                $score = $att / $costMSE;
-            }
-
-            if ($score > $bestScore) {
-                $bestScore  = $score;
-                $bestShipId = $shipId;
+        // For heavy, medium, support: NEVER fall back to fodder (204/205)!
+        // Pick the highest-tier accessible capital warship
+        $capitalShipList = array(214, 216, 225, 226, 213, 211, 215, 207, 206);
+        foreach ($capitalShipList as $shipId) {
+            if (BuildFunctions::isTechnologieAccessible($this->ctx->user, $pData, $shipId, array())) {
+                return $shipId;
             }
         }
 
-        return $bestShipId;
+        // If no capital warship is accessible on this colony, do NOT dump capital budget into fodder!
+        return 0;
     }
 
     private function refreshPlanetData($pId, array $pData)
@@ -398,9 +387,10 @@ class BotForcePlanner
         $surplusM = max(0.0, $totM - $freshM);
         $surplusC = max(0.0, $totC - $freshC);
         $surplusD = max(0.0, $totD - $freshD);
+        $surplusMSE = $surplusM + ($surplusC * 1.5) + ($surplusD * 3.0);
 
-        // 3. Tasa de drenaje: 8% en condiciones normales (ventana 5%-10%), 100% en emergencia/asedio
-        $drainRate = $isEmergency ? 1.00 : 0.08;
+        // 3. Tasa de drenaje: 8% en condiciones normales (ventana 5%-10%), 45% si hay excedente masivo (> 50M MSE), 100% en emergencia/asedio
+        $drainRate = $isEmergency ? 1.00 : (($surplusMSE > 50000000) ? 0.45 : 0.08);
 
         $authM = min($totM, $freshM + ($drainRate * $surplusM));
         $authC = min($totC, $freshC + ($drainRate * $surplusC));
@@ -466,6 +456,24 @@ class BotForcePlanner
                     $categoryCredits['crystal']   = max((float)($categoryCredits['crystal'] ?? 0.0), (float)($refreshedCredits['crystal'] ?? 0.0));
                     $categoryCredits['deuterium'] = max((float)($categoryCredits['deuterium'] ?? 0.0), (float)($refreshedCredits['deuterium'] ?? 0.0));
                     $triMax = $this->calculateTriResourceMaxUnits($pData, $categoryCredits, $unitId, $lockedDefRes, $lockedDefAmount);
+                }
+
+                // Si aún está limitado y el planeta tiene más de 50M de cristal físico pero carece de metal, intentar rebalanceo vía mercader
+                if ($triMax < $targetUnits && (float)($pData['crystal'] ?? 0.0) > 50000000 && class_exists('BotPremiumStrategist')) {
+                    if (BotPremiumStrategist::tryTraderForCategory($this->ctx, $pId, $catName, $neededRes)) {
+                        $pDataRefreshed = $this->ctx->empire ? $this->ctx->empire->getPlanet($pId) : null;
+                        if (!empty($pDataRefreshed['data'])) {
+                            $pData = $pDataRefreshed['data'];
+                        }
+                        $refreshedCredits = ($catName === 'fleet')
+                            ? $this->ctx->budgetManager->getPlanetFleetCredits($pId)
+                            : $this->ctx->budgetManager->getPlanetDefenseCredits($pId);
+                        $categoryCredits['metal']     = max((float)($categoryCredits['metal'] ?? 0.0), (float)($refreshedCredits['metal'] ?? 0.0));
+                        $categoryCredits['crystal']   = max((float)($categoryCredits['crystal'] ?? 0.0), (float)($refreshedCredits['crystal'] ?? 0.0));
+                        $categoryCredits['deuterium'] = max((float)($categoryCredits['deuterium'] ?? 0.0), (float)($refreshedCredits['deuterium'] ?? 0.0));
+                        $triMax = $this->calculateTriResourceMaxUnits($pData, $categoryCredits, $unitId, $lockedDefRes, $lockedDefAmount);
+                        $maxConstructible = BuildFunctions::getMaxConstructibleElements($this->ctx->user, $pData, $unitId);
+                    }
                 }
             }
         }
@@ -657,7 +665,9 @@ class BotForcePlanner
 
         // Threat check for bypass
         $threatIncoming = false;
-        if ($world && isset($world->threats) && method_exists($world->threats, 'getActiveThreats')) {
+        if (defined('SIMULATION_MODE') && SIMULATION_MODE) {
+            $threatIncoming = false;
+        } elseif ($world && isset($world->threats) && method_exists($world->threats, 'getActiveThreats')) {
             $threats = $world->threats->getActiveThreats();
             $threatIncoming = !empty($threats);
         } else {
@@ -775,6 +785,17 @@ class BotForcePlanner
 
             $fleetCredits = $this->calculateCycleSpendBudget($pId, $pData, 'fleet', $rawFleetCredits, $lastFleetRecruit, $isEmergency);
             $defCredits   = $this->calculateCycleSpendBudget($pId, $pData, 'defense', $rawDefCredits, $lastDefRecruit, $isEmergency);
+
+            // Reserva obligatoria de recursos para Colonizadores (#208) si el imperio tiene slots de colonia abiertos
+            if (class_exists('PlayerUtil')) {
+                $maxPlanets = (int)PlayerUtil::maxPlanetCount($this->ctx->user);
+                $curPlanets = count($allBodies);
+                if ($curPlanets < $maxPlanets && BuildFunctions::isTechnologieAccessible($this->ctx->user, $pData, 208, array())) {
+                    $fleetCredits['metal']     = max(0.0, $fleetCredits['metal'] - 10000.0);
+                    $fleetCredits['crystal']   = max(0.0, $fleetCredits['crystal'] - 20000.0);
+                    $fleetCredits['deuterium'] = max(0.0, $fleetCredits['deuterium'] - 10000.0);
+                }
+            }
 
             $fleetLock = (isset($this->ctx->budgetManager) && method_exists($this->ctx->budgetManager, 'getSavingsLockForCategory'))
                 ? $this->ctx->budgetManager->getSavingsLockForCategory($pId, 'fleet') : null;
@@ -1042,6 +1063,51 @@ class BotForcePlanner
                     }
                 }
 
+                // Flota Civil Básica (Mínimo 30 Transportadores Grandes/Chicos y 15 Recicladores por colonia para logística y recolección)
+                $curTrans = (int)($pData[$resource[203]] ?? 0) + (int)($pData[$resource[202]] ?? 0) + (int)($pData[$resource[217]] ?? 0);
+                if ($curTrans < 30 && $queuedJobs < $maxRegularSlots && !$this->isUnitInQueue($pData, 203) && !$this->isUnitInQueue($pData, 202)) {
+                    $uTransId = BuildFunctions::isTechnologieAccessible($this->ctx->user, $pData, 203, array()) ? 203 : (BuildFunctions::isTechnologieAccessible($this->ctx->user, $pData, 202, array()) ? 202 : 0);
+                    if ($uTransId > 0) {
+                        $transCreds = array(
+                            'metal'     => $fleetCredits['metal'] * 0.15,
+                            'crystal'   => $fleetCredits['crystal'] * 0.15,
+                            'deuterium' => $fleetCredits['deuterium'] * 0.15,
+                        );
+                        $bTrans = $this->getConstructibleBatch($pData, $transCreds, $uTransId, $queuedJobs, $maxRegularSlots, $queueRemainingSec, $maxHangarDuration, $batchTimeTarget, $lockedDefResFleet, false, $lockedDefAmountFleet);
+                        $bTrans = min($bTrans, 30 - $curTrans);
+                        $enqTrans = ($bTrans > 0) ? (int)$this->gateway->constructUnits($pId, $uTransId, $bTrans) : 0;
+                        if ($enqTrans > 0) {
+                            $recruited[$uTransId] = isset($recruited[$uTransId]) ? $recruited[$uTransId] + $enqTrans : $enqTrans;
+                            $fleetRecruitedTotal += $enqTrans;
+                            $queuedJobs++;
+                            $pData = $this->refreshPlanetData($pId, $pData);
+                            $queueRemainingSec = $this->calculateQueueRemainingSeconds($pData);
+                        }
+                    }
+                }
+
+                $curRecs = (int)($pData[$resource[209]] ?? 0) + (int)($pData[$resource[219]] ?? 0);
+                if ($curRecs < 15 && $queuedJobs < $maxRegularSlots && !$this->isUnitInQueue($pData, 209) && !$this->isUnitInQueue($pData, 219)) {
+                    $uRecId = BuildFunctions::isTechnologieAccessible($this->ctx->user, $pData, 219, array()) ? 219 : (BuildFunctions::isTechnologieAccessible($this->ctx->user, $pData, 209, array()) ? 209 : 0);
+                    if ($uRecId > 0) {
+                        $recCreds = array(
+                            'metal'     => $fleetCredits['metal'] * 0.15,
+                            'crystal'   => $fleetCredits['crystal'] * 0.15,
+                            'deuterium' => $fleetCredits['deuterium'] * 0.15,
+                        );
+                        $bRec = $this->getConstructibleBatch($pData, $recCreds, $uRecId, $queuedJobs, $maxRegularSlots, $queueRemainingSec, $maxHangarDuration, $batchTimeTarget, $lockedDefResFleet, false, $lockedDefAmountFleet);
+                        $bRec = min($bRec, 15 - $curRecs);
+                        $enqRec = ($bRec > 0) ? (int)$this->gateway->constructUnits($pId, $uRecId, $bRec) : 0;
+                        if ($enqRec > 0) {
+                            $recruited[$uRecId] = isset($recruited[$uRecId]) ? $recruited[$uRecId] + $enqRec : $enqRec;
+                            $fleetRecruitedTotal += $enqRec;
+                            $queuedJobs++;
+                            $pData = $this->refreshPlanetData($pId, $pData);
+                            $queueRemainingSec = $this->calculateQueueRemainingSeconds($pData);
+                        }
+                    }
+                }
+
                 // Reclutamiento Unificado de Flota: 6 Categorías Doctrinales con Cascada Completa
                 // Reparto: 20% Pesados, 25% Medios, 30% Apoyo, 20% Fodder, 2.5% Recicladores, 2.5% Transportadores
                 if ($queuedJobs < $maxRegularSlots) {
@@ -1051,6 +1117,19 @@ class BotForcePlanner
                     $unitFodder      = $this->resolveCategoryUnit('fodder', $pData);
                     $unitRecycler    = BuildFunctions::isTechnologieAccessible($this->ctx->user, $pData, 219, array()) ? 219 : (BuildFunctions::isTechnologieAccessible($this->ctx->user, $pData, 209, array()) ? 209 : 0);
                     $unitTransporter = BuildFunctions::isTechnologieAccessible($this->ctx->user, $pData, 217, array()) ? 217 : (BuildFunctions::isTechnologieAccessible($this->ctx->user, $pData, 203, array()) ? 203 : (BuildFunctions::isTechnologieAccessible($this->ctx->user, $pData, 202, array()) ? 202 : 0));
+
+                    // Cuota estricta de Fodder (máximo 40% del total de cazas + naves de combate)
+                    global $resource;
+                    $curLF = (int)($pData[$resource[204]] ?? 0);
+                    $curHF = (int)($pData[$resource[205]] ?? 0);
+                    $curFodderCount = $curLF + $curHF;
+                    $curCapitalCount = 0;
+                    foreach (array(206, 207, 215, 211, 213, 226, 225, 214, 216) as $capId) {
+                        $curCapitalCount += (int)($pData[$resource[$capId]] ?? 0);
+                    }
+                    if ($curFodderCount >= 300 && ($curCapitalCount == 0 || ($curFodderCount / ($curFodderCount + $curCapitalCount)) >= 0.40)) {
+                        $unitFodder = 0; // Pausar reclutamiento de fodder para no saturar con millones de cazas
+                    }
 
                     $recShare = ($needRecyclerBoost) ? 0.150 : 0.025;
                     $otherScale = (1.0 - $recShare) / 0.975;
@@ -1072,10 +1151,12 @@ class BotForcePlanner
                     foreach ($categoryConfigs as $catKey => $cCfg) {
                         $uId = (int)$cCfg['unit'];
                         if ($uId <= 0) {
-                            // Si no hay tecnología para esta categoría, su cuota se transfiere directamente a la cascada
-                            $cascadedExtra['metal']     += $initialFleetCredits['metal'] * $cCfg['share'];
-                            $cascadedExtra['crystal']   += $initialFleetCredits['crystal'] * $cCfg['share'];
-                            $cascadedExtra['deuterium'] += $initialFleetCredits['deuterium'] * $cCfg['share'];
+                            // Si no hay tecnología para esta categoría capital, NO transferir a fodder
+                            if ($catKey !== 'fodder') {
+                                $cascadedExtra['metal']     += $initialFleetCredits['metal'] * $cCfg['share'];
+                                $cascadedExtra['crystal']   += $initialFleetCredits['crystal'] * $cCfg['share'];
+                                $cascadedExtra['deuterium'] += $initialFleetCredits['deuterium'] * $cCfg['share'];
+                            }
                             continue;
                         }
                         if (!isset($unitPools[$uId])) {
@@ -1102,22 +1183,27 @@ class BotForcePlanner
                     foreach ($unitPools as $uId => $pool) {
                         $poolIndex++;
                         $isLastPool = ($poolIndex === $totalPools);
+                        $isFodderUnit = ($uId === 204 || $uId === 205);
 
                         if ($queuedJobs >= $maxRegularSlots) {
                             break;
                         }
 
-                        if ($isLastPool) {
-                            // La última categoría absorbe todo el remanente disponible de flota
+                        if ($isLastPool && !$isFodderUnit) {
+                            // La última categoría absorbe todo el remanente disponible solo si es nave capital
                             $poolCredits = array(
                                 'metal'     => max(0.0, (float)$fleetCredits['metal']),
                                 'crystal'   => max(0.0, (float)$fleetCredits['crystal']),
                                 'deuterium' => max(0.0, (float)$fleetCredits['deuterium']),
                             );
                         } else {
-                            $targetM = ($initialFleetCredits['metal'] * $pool['share']) + $cascadedExtra['metal'];
-                            $targetC = ($initialFleetCredits['crystal'] * $pool['share']) + $cascadedExtra['crystal'];
-                            $targetD = ($initialFleetCredits['deuterium'] * $pool['share']) + $cascadedExtra['deuterium'];
+                            $extraM = $isFodderUnit ? 0.0 : $cascadedExtra['metal'];
+                            $extraC = $isFodderUnit ? 0.0 : $cascadedExtra['crystal'];
+                            $extraD = $isFodderUnit ? 0.0 : $cascadedExtra['deuterium'];
+
+                            $targetM = ($initialFleetCredits['metal'] * $pool['share']) + $extraM;
+                            $targetC = ($initialFleetCredits['crystal'] * $pool['share']) + $extraC;
+                            $targetD = ($initialFleetCredits['deuterium'] * $pool['share']) + $extraD;
 
                             $poolCredits = array(
                                 'metal'     => min(max(0.0, (float)$fleetCredits['metal']), max(0.0, $targetM)),
@@ -1125,7 +1211,9 @@ class BotForcePlanner
                                 'deuterium' => min(max(0.0, (float)$fleetCredits['deuterium']), max(0.0, $targetD)),
                             );
                         }
-                        $cascadedExtra = array('metal' => 0.0, 'crystal' => 0.0, 'deuterium' => 0.0);
+                        if (!$isFodderUnit) {
+                            $cascadedExtra = array('metal' => 0.0, 'crystal' => 0.0, 'deuterium' => 0.0);
+                        }
 
                         $batch = $this->getConstructibleBatch(
                             $pData,
@@ -1165,12 +1253,14 @@ class BotForcePlanner
 
                         // Cascada hacia la siguiente categoría
                         if (!$isLastPool) {
-                            $cascadedExtra['metal']     += $poolCredits['metal'];
-                            $cascadedExtra['crystal']   += $poolCredits['crystal'];
-                            $cascadedExtra['deuterium'] += $poolCredits['deuterium'];
+                            if (!$isFodderUnit) {
+                                $cascadedExtra['metal']     += $poolCredits['metal'];
+                                $cascadedExtra['crystal']   += $poolCredits['crystal'];
+                                $cascadedExtra['deuterium'] += $poolCredits['deuterium'];
+                            }
                         } else {
-                            // Barrido final en la última unidad si quedan créditos remanentes suficientes
-                            if ($queuedJobs < $maxRegularSlots && ($poolCredits['metal'] > 3000 || $poolCredits['crystal'] > 1000)) {
+                            // Barrido final en la última unidad si quedan créditos remanentes suficientes y NO es fodder
+                            if ($queuedJobs < $maxRegularSlots && !$isFodderUnit && ($poolCredits['metal'] > 3000 || $poolCredits['crystal'] > 1000)) {
                                 $batchFinal = $this->getConstructibleBatch(
                                     $pData,
                                     $poolCredits,

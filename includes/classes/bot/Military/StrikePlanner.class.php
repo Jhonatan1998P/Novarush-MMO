@@ -1,5 +1,6 @@
 <?php
 
+require_once 'includes/classes/bot/Kernel/BotClock.class.php';
 require_once 'includes/classes/bot/Evaluation/CombatOracle.class.php';
 require_once 'includes/classes/bot/Evaluation/EconomyValuator.class.php';
 require_once 'includes/classes/bot/Military/TargetBlacklist.class.php';
@@ -33,6 +34,21 @@ require_once 'includes/classes/bot/Forces/BotPremiumStrategist.class.php';
  */
 class BotStrikePlanner
 {
+    private static function now()
+    {
+        return class_exists('BotClock') ? BotClock::now() : (defined('TIMESTAMP') ? TIMESTAMP : time());
+    }
+
+    private static function sleepIfReal($seconds)
+    {
+        if (defined('SIMULATION_MODE') && SIMULATION_MODE) {
+            return;
+        }
+        if ($seconds > 0) {
+            sleep($seconds);
+        }
+    }
+
     private $ctx;
     private $gateway;
 
@@ -82,16 +98,22 @@ class BotStrikePlanner
         // Si el bot lleva más de 2 horas sin realizar un ataque y no tiene ataques activos en vuelo,
         // purga los bloqueos temporales (no bashing) para desbloquear re-espionaje y re-evaluación inmediata.
         $lastAttack = isset($this->ctx->botRow['last_attack']) ? (int)$this->ctx->botRow['last_attack'] : 0;
-        if ($activeAttacks == 0 && (TIMESTAMP - $lastAttack) >= 7200) {
+        $refTime = ($lastAttack > 0) ? $lastAttack : (int)($this->ctx->botRow['created_at'] ?? ($this->ctx->user['register_time'] ?? self::now()));
+        if ($activeAttacks == 0 && (self::now() - $refTime) >= 7200) {
             $db->delete("DELETE FROM " . DB_PREFIX . "bot_planet_cooldown 
                 WHERE bot_id = :botId AND reason NOT LIKE '%bashing%' AND (planet_id = 0 OR cooldown_until < :futureMax);", array(
                 ':botId'     => $this->ctx->botId,
-                ':futureMax' => TIMESTAMP + 7200,
+                ':futureMax' => self::now() + 7200,
+            ));
+            $this->ctx->botRow['last_attack'] = self::now();
+            $db->update("UPDATE %%BOTS%% SET last_attack = :la WHERE bot_id = :bId;", array(
+                ':la'  => self::now(),
+                ':bId' => $this->ctx->botId
             ));
             $this->ctx->decisionLog->record(
                 'stagnation_watchdog_reset',
                 "Stagnation Watchdog: Bot sin ataques ofensivos en las últimas 2h. Purgados cooldowns temporales para reanálisis táctico inmediato.",
-                array('last_attack' => $lastAttack, 'elapsed' => (TIMESTAMP - $lastAttack)),
+                array('ref_time' => $refTime, 'elapsed' => (self::now() - $refTime)),
                 "stagnation_reset_{$this->ctx->botId}",
                 4000.0
             );
@@ -108,8 +130,8 @@ class BotStrikePlanner
         $spentSiege   = isset($this->ctx->botRow['siege_spent_mse']) ? (float)$this->ctx->botRow['siege_spent_mse'] : 0.0;
         $targetLockTime = isset($this->ctx->botRow['target_lock_time']) ? (int)$this->ctx->botRow['target_lock_time'] : 0;
         if ($targetLockTime <= 0 && $lockedGalaxy > 0 && $lockedSystem > 0 && $lockedPlanet > 0) {
-            $targetLockTime = TIMESTAMP;
-            $this->ctx->updateBotRow(array('target_lock_time' => TIMESTAMP));
+            $targetLockTime = self::now();
+            $this->ctx->updateBotRow(array('target_lock_time' => self::now()));
         }
 
         $targetLocked = false;
@@ -226,7 +248,7 @@ class BotStrikePlanner
                 }
 
                 // Wall-Clock Timeout: Horizon limit of 90 minutes (5400s) for any locked campaign target
-                if (!$release && $targetLockTime > 0 && (TIMESTAMP - $targetLockTime) >= 5400) {
+                if (!$release && $targetLockTime > 0 && (self::now() - $targetLockTime) >= 5400) {
                     $activeAssault = $db->selectSingle("SELECT COUNT(*) as cnt FROM %%FLEETS%% 
                         WHERE fleet_owner = :botId 
                           AND fleet_end_galaxy = :g 
@@ -587,7 +609,7 @@ class BotStrikePlanner
             'target_planet'      => $tP,
             'target_type'        => $cat,
             'target_initial_mse' => $initMse,
-            'target_lock_time'   => TIMESTAMP,
+            'target_lock_time'   => self::now(),
             'siege_cycles'       => 0,
             'fob_planet_id'      => $bestFobId,
             'siege_spent_mse'    => 0.0,
@@ -667,7 +689,7 @@ class BotStrikePlanner
         $targetActivity = isset($t['activity']) ? $t['activity'] : '';
         if (empty($targetActivity)) {
             $targetUserOnline = $db->selectSingle("SELECT onlinetime FROM %%USERS%% WHERE id = :uId LIMIT 1;", array(':uId' => $ownerId));
-            $idleSecs = !empty($targetUserOnline['onlinetime']) ? (TIMESTAMP - (int)$targetUserOnline['onlinetime']) : 99999;
+            $idleSecs = !empty($targetUserOnline['onlinetime']) ? (self::now() - (int)$targetUserOnline['onlinetime']) : 99999;
             if ($idleSecs < 900) {
                 $targetActivity = 'ONLINE';
             } elseif ($idleSecs >= 2700) {
@@ -1035,13 +1057,13 @@ class BotStrikePlanner
             }
 
             $fleetArrival = $lastMipImpact + 2;
-            $fleetDelay = $fleetArrival - $fleetDuration - TIMESTAMP;
+            $fleetDelay = $fleetArrival - $fleetDuration - self::now();
             $selectedSpeedFactor = 10;
 
             if ($fleetDelay > 5) {
                 for ($sp = 9; $sp >= 1; $sp--) {
                     $spDur = FleetFunctions::GetMissionDuration($sp, $fleetSpeed, $fDist, $gameSpeed, $this->ctx->user);
-                    $spArrival = TIMESTAMP + $spDur;
+                    $spArrival = self::now() + $spDur;
                     if ($spArrival >= ($lastMipImpact + 2) && $spArrival <= ($lastMipImpact + 3)) {
                         $selectedSpeedFactor = $sp;
                         $fleetArrival = $spArrival;
@@ -1054,7 +1076,7 @@ class BotStrikePlanner
 
             if ($fleetDelay <= 3) {
                 if ($fleetDelay > 0) {
-                    sleep($fleetDelay);
+                    self::sleepIfReal($fleetDelay);
                 }
                 $this->gateway->launchFleet(
                     $strikeFleet,
@@ -1083,7 +1105,7 @@ class BotStrikePlanner
                         'target_planet'    => $t['planet'],
                         'speed'            => $selectedSpeedFactor,
                     ),
-                    TIMESTAMP + $fleetDelay
+                    self::now() + $fleetDelay
                 );
             }
 
@@ -1344,22 +1366,22 @@ class BotStrikePlanner
                     : 0;
                 $extraLead = max($recSlowExtra, $mipSlowExtra);
 
-                $fleetArrival = TIMESTAMP + $fleetDuration + $extraLead;
+                $fleetArrival = self::now() + $fleetDuration + $extraLead;
                 $targetImpactTime = $fleetArrival - $mipLead;
                 $fleetDelay = $extraLead;
-                $recDelay = !empty($recyclerFleet) ? max(0, ($fleetArrival + $recOffset) - $dRec - TIMESTAMP) : 0;
+                $recDelay = !empty($recyclerFleet) ? max(0, ($fleetArrival + $recOffset) - $dRec - self::now()) : 0;
 
                 $firedImmediate = 0;
                 $scheduledCount = 0;
                 $totalFiredMips = 0;
 
                 foreach ($dispatches as $disp) {
-                    $dispDelay = max(0, $targetImpactTime - $disp['duration'] - TIMESTAMP);
+                    $dispDelay = max(0, $targetImpactTime - $disp['duration'] - self::now());
                     $totalFiredMips += $disp['count'];
 
                     if ($dispDelay <= 10) {
                         if ($dispDelay > 0) {
-                            sleep($dispDelay);
+                            self::sleepIfReal($dispDelay);
                         }
                         $ok = $this->gateway->launchMissileStrike(
                             $disp['colony_id'],
@@ -1387,7 +1409,7 @@ class BotStrikePlanner
                                 'count' => $disp['count'],
                                 'primary_target' => $primaryTarget,
                             ),
-                            TIMESTAMP + $dispDelay
+                            self::now() + $dispDelay
                         );
                         $scheduledCount++;
                     }
@@ -1396,7 +1418,7 @@ class BotStrikePlanner
                 // Despacho sincronizado: la flota despega primero (o los recicladores primero si son más lentos)
                 if (!empty($recyclerFleet) && $recDelay <= $fleetDelay) {
                     if ($recDelay <= 3) {
-                        if ($recDelay > 0) sleep($recDelay);
+                        if ($recDelay > 0) self::sleepIfReal($recDelay);
                         $this->gateway->launchFleet(
                             $recyclerFleet,
                             8, // Recycle
@@ -1424,7 +1446,7 @@ class BotStrikePlanner
                                 'target_planet'    => $t['planet'],
                                 'speed'            => 10,
                             ),
-                            TIMESTAMP + $recDelay
+                            self::now() + $recDelay
                         );
                     }
                 }
@@ -1432,7 +1454,7 @@ class BotStrikePlanner
                 // Launch coordinated siege fleet timed to arrive +mipLead post-missile impact
                 if ($fleetDelay <= 3) {
                     if ($fleetDelay > 0) {
-                        sleep($fleetDelay);
+                        self::sleepIfReal($fleetDelay);
                     }
                     $this->gateway->launchFleet(
                         $strikeFleet,
@@ -1461,13 +1483,13 @@ class BotStrikePlanner
                             'target_planet'    => $t['planet'],
                             'speed'            => $selectedSpeedFactor,
                         ),
-                        TIMESTAMP + $fleetDelay
+                        self::now() + $fleetDelay
                     );
                 }
 
                 if (!empty($recyclerFleet) && $recDelay > $fleetDelay) {
                     if ($recDelay <= 3) {
-                        if ($recDelay > 0) sleep($recDelay);
+                        if ($recDelay > 0) self::sleepIfReal($recDelay);
                         $this->gateway->launchFleet(
                             $recyclerFleet,
                             8, // Recycle
@@ -1495,7 +1517,7 @@ class BotStrikePlanner
                                 'target_planet'    => $t['planet'],
                                 'speed'            => 10,
                             ),
-                            TIMESTAMP + $recDelay
+                            self::now() + $recDelay
                         );
                     }
                 }
@@ -1616,7 +1638,7 @@ class BotStrikePlanner
         if (empty($targetActivity)) {
             $db = Database::get();
             $targetUserOnline = $db->selectSingle("SELECT onlinetime FROM %%USERS%% WHERE id = :uId LIMIT 1;", array(':uId' => (int)$t['owner_id']));
-            $idleSecs = !empty($targetUserOnline['onlinetime']) ? (TIMESTAMP - (int)$targetUserOnline['onlinetime']) : 99999;
+            $idleSecs = !empty($targetUserOnline['onlinetime']) ? (self::now() - (int)$targetUserOnline['onlinetime']) : 99999;
             $targetActivity = ($idleSecs < 900) ? 'ONLINE' : (($idleSecs >= 2700) ? 'OFFLINE' : 'RECENT');
         }
         $isOnline = ($targetActivity === 'ONLINE');
@@ -1779,7 +1801,7 @@ class BotStrikePlanner
         if (empty($targetActivity)) {
             $db = Database::get();
             $targetUserOnline = $db->selectSingle("SELECT onlinetime FROM %%USERS%% WHERE id = :uId LIMIT 1;", array(':uId' => (int)$t['owner_id']));
-            $idleSecs = !empty($targetUserOnline['onlinetime']) ? (TIMESTAMP - (int)$targetUserOnline['onlinetime']) : 99999;
+            $idleSecs = !empty($targetUserOnline['onlinetime']) ? (self::now() - (int)$targetUserOnline['onlinetime']) : 99999;
             $targetActivity = ($idleSecs < 900) ? 'ONLINE' : (($idleSecs >= 2700) ? 'OFFLINE' : 'RECENT');
         }
         $isOnline = ($targetActivity === 'ONLINE');
@@ -2179,7 +2201,7 @@ class BotStrikePlanner
                 $hourlyProd = isset($cand['prod_mse_hourly']) && $cand['prod_mse_hourly'] > 1000.0 ? (float)$cand['prod_mse_hourly'] : 50000.0;
                 $cooldownHours = max(1.0, min(72.0, $lootUmbral / $hourlyProd));
                 $cooldownSecs  = (int)round($cooldownHours * 3600.0);
-                $elapsed = TIMESTAMP - (int)$lastRaid['last_time'];
+                $elapsed = self::now() - (int)$lastRaid['last_time'];
                 if ($elapsed < $cooldownSecs) {
                     continue; // Skip: target resources are still regenerating under cooldown
                 }
@@ -2321,7 +2343,7 @@ class BotStrikePlanner
                             'target_system'    => (int)$t['system'],
                             'target_planet'    => (int)$t['planet'],
                             'speed'            => $speedToSend
-                        ), TIMESTAMP + 15);
+                        ), self::now() + 15);
                         $dispatchedFarms++;
                         BotTargetBlacklist::recordAttackVictory($this->ctx->botId, $ownerId, $tId, (int)$t['galaxy'], (int)$t['system'], (int)$t['planet']);
                     }
@@ -2340,7 +2362,7 @@ class BotStrikePlanner
                                 'target_system'    => (int)$t['system'],
                                 'target_planet'    => (int)$t['planet'],
                                 'speed'            => $speedToSend
-                            ), TIMESTAMP + 30);
+                            ), self::now() + 30);
                             $dispatchedFarms++;
                             BotTargetBlacklist::recordAttackVictory($this->ctx->botId, $ownerId, $tId, (int)$t['galaxy'], (int)$t['system'], (int)$t['planet']);
                         }
@@ -2387,7 +2409,7 @@ class BotStrikePlanner
             : true;
 
         foreach ($inFlight as $fleet) {
-            $timeToImpact = (int)$fleet['fleet_start_time'] - TIMESTAMP;
+            $timeToImpact = (int)$fleet['fleet_start_time'] - self::now();
             $tG = (int)$fleet['fleet_end_galaxy'];
             $tS = (int)$fleet['fleet_end_system'];
             $tP = (int)$fleet['fleet_end_planet'];
@@ -2485,7 +2507,7 @@ class BotStrikePlanner
                     WHERE fleet_end_id = :pId AND fleet_mission = 5 
                       AND fleet_start_time <= :now AND fleet_end_stay >= :now;", array(
                     ':pId' => $targetPlanetId,
-                    ':now' => TIMESTAMP
+                    ':now' => self::now()
                 ));
                 if (!empty($stayFleets) && is_array($stayFleets)) {
                     foreach ($stayFleets as $sf) {
@@ -3035,7 +3057,7 @@ class BotStrikePlanner
 
             if ($delaySeconds <= 10) {
                 if ($delaySeconds > 0) {
-                    sleep($delaySeconds);
+                    self::sleepIfReal($delaySeconds);
                 }
                 $ok = $this->gateway->launchFleet(
                     $strikeFleet,
@@ -3075,7 +3097,7 @@ class BotStrikePlanner
                         'target_planet'    => $t['planet'],
                         'speed'            => $sStrike,
                     ),
-                    TIMESTAMP + $delaySeconds
+                    self::now() + $delaySeconds
                 );
 
                 $this->ctx->decisionLog->record(
@@ -3119,7 +3141,7 @@ class BotStrikePlanner
 
             if ($delaySeconds <= 10) {
                 if ($delaySeconds > 0) {
-                    sleep($delaySeconds);
+                    self::sleepIfReal($delaySeconds);
                 }
                 $recOk = $this->gateway->launchFleet(
                     $recyclerFleet,
@@ -3157,7 +3179,7 @@ class BotStrikePlanner
                         'target_planet'    => $t['planet'],
                         'speed'            => $sRec,
                     ),
-                    TIMESTAMP + $delaySeconds
+                    self::now() + $delaySeconds
                 );
 
                 $this->ctx->decisionLog->record(

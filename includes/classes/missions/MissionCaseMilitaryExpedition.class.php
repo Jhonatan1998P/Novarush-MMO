@@ -201,7 +201,8 @@ class MissionCaseMilitaryExpedition extends MissionFunctions implements Mission
 		$reportData = GenerateReport($result, $reportInfo);
 
 		// save report to db
-        $reportID	= md5(uniqid('', true).TIMESTAMP);
+        $now = class_exists('BotClock') ? BotClock::now() : TIMESTAMP;
+        $reportID	= md5(uniqid('', true).$now);
 
 		$sql		= "INSERT INTO %%RW%% SET
 			rid			= :reportId,

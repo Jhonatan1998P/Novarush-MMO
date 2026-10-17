@@ -18,6 +18,7 @@
  */
 class BotTelemetryLogger
 {
+    public static $disabled = false;
     private static $instances = array();
     private static $botIdToUsername = null;
 
@@ -133,6 +134,9 @@ class BotTelemetryLogger
      */
     public function writeLog($tag, $location, $action, $detail = '', $costOrGain = '', $reason = '')
     {
+        if (self::$disabled) {
+            return;
+        }
         $now = date('Y-m-d H:i:s');
         $locStr = !empty($location) ? "[{$location}] " : "";
         $tagStr = "[{$tag}]";

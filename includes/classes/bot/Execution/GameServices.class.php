@@ -72,6 +72,146 @@ class BotGameServices
     }
 
     /**
+     * Execute Quantum Jump Gate between two moons belonging to the same user
+     * Instantaneous travel, 0 deuterium consumption, resets last_jump_time on both moons.
+     * Replicates native 2Moons ShowInformationPage::sendFleet logic.
+     *
+     * @param int $userId
+     * @param int $sourceMoonId
+     * @param int $targetMoonId
+     * @param array $ships [shipId => count]
+     * @return array|false Transferred ship details or false on failure
+     */
+    public static function executeJumpGate($userId, $sourceMoonId, $targetMoonId, array $ships)
+    {
+        global $resource, $reslist;
+
+        $userId       = (int)$userId;
+        $sourceMoonId = (int)$sourceMoonId;
+        $targetMoonId = (int)$targetMoonId;
+
+        if ($userId <= 0 || $sourceMoonId <= 0 || $targetMoonId <= 0 || $sourceMoonId === $targetMoonId) {
+            return false;
+        }
+
+        $db = Database::get();
+        $isOuterTx = $db->inTransaction();
+        if (!$isOuterTx) {
+            $db->beginTransaction();
+        }
+
+        try {
+            $sourceMoon = $db->selectSingle(
+                "SELECT * FROM %%PLANETS%% WHERE id = :id AND id_owner = :uid FOR UPDATE;",
+                array(':id' => $sourceMoonId, ':uid' => $userId)
+            );
+            $targetMoon = $db->selectSingle(
+                "SELECT * FROM %%PLANETS%% WHERE id = :id AND id_owner = :uid FOR UPDATE;",
+                array(':id' => $targetMoonId, ':uid' => $userId)
+            );
+
+            if (empty($sourceMoon) || empty($targetMoon)) {
+                if (!$isOuterTx && $db->inTransaction()) $db->rollBack();
+                return false;
+            }
+
+            // Must be active moons with jump gate
+            if ((int)$sourceMoon['planet_type'] !== 3 || (int)$targetMoon['planet_type'] !== 3 ||
+                (int)$sourceMoon['destruyed'] !== 0 || (int)$targetMoon['destruyed'] !== 0 ||
+                (int)($sourceMoon['sprungtor'] ?? 0) <= 0 || (int)($targetMoon['sprungtor'] ?? 0) <= 0) {
+                if (!$isOuterTx && $db->inTransaction()) $db->rollBack();
+                return false;
+            }
+
+            // Gate cooldown check
+            $config = Config::get();
+            $gateWaitTime = isset($config->gate_wait_time) ? (int)$config->gate_wait_time : 3600;
+            $now = class_exists('BotClock') ? BotClock::get() : TIMESTAMP;
+
+            if ($now < ((int)$sourceMoon['last_jump_time'] + $gateWaitTime) ||
+                $now < ((int)$targetMoon['last_jump_time'] + $gateWaitTime)) {
+                if (!$isOuterTx && $db->inTransaction()) $db->rollBack();
+                return false;
+            }
+
+            $shipArray = array();
+            $fleetAllowed = isset($reslist['fleet']) ? $reslist['fleet'] : array();
+            $paramsOri = array(':planetID' => $sourceMoonId, ':jumptime' => $now);
+            $paramsDes = array(':targetID' => $targetMoonId, ':jumptime' => $now);
+            $setOri = array();
+            $setDes = array();
+
+            foreach ($fleetAllowed as $shipId) {
+                $shipId = (int)$shipId;
+                if (!isset($ships[$shipId]) || $shipId == 212) {
+                    continue; // Solar satellites (212) cannot jump
+                }
+
+                $col = $resource[$shipId] ?? '';
+                if (empty($col) || !isset($sourceMoon[$col])) {
+                    continue;
+                }
+
+                $available = (int)$sourceMoon[$col];
+                $requested = (int)$ships[$shipId];
+                $toTransfer = max(0, min($requested, $available));
+
+                if ($toTransfer <= 0) {
+                    continue;
+                }
+
+                $shipArray[$shipId] = $toTransfer;
+                $setOri[] = "{$col} = GREATEST(0, {$col} - :sub_{$shipId})";
+                $paramsOri[":sub_{$shipId}"] = $toTransfer;
+                $setDes[] = "{$col} = {$col} + :add_{$shipId}";
+                $paramsDes[":add_{$shipId}"] = $toTransfer;
+            }
+
+            if (empty($shipArray) || array_sum($shipArray) <= 0) {
+                if (!$isOuterTx && $db->inTransaction()) $db->rollBack();
+                return false;
+            }
+
+            $setOri[] = "last_jump_time = :jumptime";
+            $setDes[] = "last_jump_time = :jumptime";
+
+            $sqlOri = "UPDATE %%PLANETS%% SET " . implode(', ', $setOri) . " WHERE id = :planetID;";
+            $sqlDes = "UPDATE %%PLANETS%% SET " . implode(', ', $setDes) . " WHERE id = :targetID;";
+
+            $db->update($sqlOri, $paramsOri);
+            $db->update($sqlDes, $paramsDes);
+
+            if (!$isOuterTx) {
+                $db->commit();
+            }
+
+            $transferredMSE = 0.0;
+            if (file_exists('includes/classes/bot/Evaluation/EconomyValuator.class.php')) {
+                require_once 'includes/classes/bot/Evaluation/EconomyValuator.class.php';
+            }
+            if (class_exists('BotEconomyValuator')) {
+                foreach ($shipArray as $sId => $cnt) {
+                    $transferredMSE += BotEconomyValuator::getElementPriceMSE($sId, $cnt);
+                }
+            }
+
+            return array(
+                'source_moon_id' => $sourceMoonId,
+                'target_moon_id' => $targetMoonId,
+                'ships'          => $shipArray,
+                'total_ships'    => array_sum($shipArray),
+                'mse'            => $transferredMSE,
+                'jump_time'      => $now,
+            );
+        } catch (Throwable $e) {
+            if (!$isOuterTx && $db->inTransaction()) {
+                $db->rollBack();
+            }
+            return false;
+        }
+    }
+
+    /**
      * Dispatch an interplanetary missile strike (Mission 10: MIP)
      */
     public static function dispatchMissiles(
@@ -322,6 +462,10 @@ class BotGameServices
     public static function enqueueResearch(array &$user, array &$planet, $elementId)
     {
         global $resource, $pricelist, $reslist;
+
+        if (!isset($user['factor'])) {
+            $user['factor'] = getFactors($user, 'basic', class_exists('BotClock') ? BotClock::get() : TIMESTAMP);
+        }
 
         if (!BuildFunctions::isTechnologieAccessible($user, $planet, $elementId, array())) {
             return false;

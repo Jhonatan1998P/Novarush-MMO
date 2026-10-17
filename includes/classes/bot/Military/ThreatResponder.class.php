@@ -119,12 +119,18 @@ class BotThreatResponder
                     }
                 }
             } elseif ($threat['visibility'] === 'types_only' && (int)$threat['visible_total'] > (array_sum($defenderUnits) * 0.7) && $this->ctx->personality->lossAversion >= 0.9) {
-                // Incomplete intel with massive incoming force: prudent fleetsave
-                $saved = $this->fleetsaver->executeFleetsave(
-                    $world->empire,
-                    $targetPlanetId,
-                    $threat['arrival_time']
-                );
+                // Incomplete intel with massive incoming force: try quantum jump evacuation first, then prudent fleetsave
+                $saved = false;
+                if ((int)($pData['planet_type'] ?? 1) === 3) {
+                    $saved = $this->tryQuantumJumpEvacuation($world, $targetPlanetId, $pData);
+                }
+                if (!$saved) {
+                    $saved = $this->fleetsaver->executeFleetsave(
+                        $world->empire,
+                        $targetPlanetId,
+                        $threat['arrival_time']
+                    );
+                }
                 if ($saved) {
                     $actionsExecuted++;
                 }
@@ -199,12 +205,19 @@ class BotThreatResponder
                     );
                     $actionsExecuted++;
                 } elseif ($botWinProb < 0.80) {
-                    // Bot cannot reliably win (win prob < 80%) y la trampa no es rentable. Fleetsave mobile fleet to avoid destruction!
-                    $saved = $this->fleetsaver->executeFleetsave(
-                        $world->empire,
-                        $targetPlanetId,
-                        $threat['arrival_time']
-                    );
+                    // Bot cannot reliably win (win prob < 80%) y la trampa no es rentable. Evacuate mobile fleet!
+                    $saved = false;
+                    if ((int)($pData['planet_type'] ?? 1) === 3) {
+                        $saved = $this->tryQuantumJumpEvacuation($world, $targetPlanetId, $pData);
+                    }
+
+                    if (!$saved) {
+                        $saved = $this->fleetsaver->executeFleetsave(
+                            $world->empire,
+                            $targetPlanetId,
+                            $threat['arrival_time']
+                        );
+                    }
 
                     if ($saved) {
                         $actionsExecuted++;
@@ -212,7 +225,7 @@ class BotThreatResponder
 
                     $this->ctx->decisionLog->record(
                         'threat_fleetsave_triggered',
-                        "Evaluated threat from player #{$threat['attacker_id']} to body #{$targetPlanetId}. Combined garrison win prob only " . round($botWinProb * 100, 1) . "% (<80%). Evacuating fleet via fleetsave.",
+                        "Evaluated threat from player #{$threat['attacker_id']} to body #{$targetPlanetId}. Combined garrison win prob only " . round($botWinProb * 100, 1) . "% (<80%). Evacuating fleet.",
                         array('threat' => $threat, 'defense_loss_ratio' => $defenseLossRatio, 'bot_win_prob' => $botWinProb, 'sim_iterations' => $simIterations),
                         'trigger_fleetsave',
                         1.0 - $botWinProb
@@ -550,7 +563,7 @@ class BotThreatResponder
 
         $tTargetRec = $tImpact + (int)$offsetDef;
         $tLaunch = $tTargetRec - $dRec;
-        $now = TIMESTAMP;
+        $now = class_exists('BotClock') ? BotClock::now() : TIMESTAMP;
 
         if ($tLaunch <= $now) {
             $ok = $this->gateway->launchFleet(
@@ -581,7 +594,7 @@ class BotThreatResponder
         } else {
             $delay = $tLaunch - $now;
             if ($delay <= 2) {
-                if ($delay > 0) {
+                if ($delay > 0 && !(defined('SIMULATION_MODE') && SIMULATION_MODE)) {
                     sleep($delay);
                 }
                 $ok = $this->gateway->launchFleet(
@@ -635,5 +648,82 @@ class BotThreatResponder
             );
             return true;
         }
+    }
+
+    /**
+     * Intento de evacuación táctica instantánea mediante Salto Cuántico a 0 Deuterio (Anti-Phalanx Stealth)
+     *
+     * @param BotWorldModel $world
+     * @param int $threatenedMoonId
+     * @param array $pData
+     * @return bool True if evacuated via Quantum Jump Gate
+     */
+    private function tryQuantumJumpEvacuation(BotWorldModel $world, $threatenedMoonId, array $pData)
+    {
+        global $resource, $reslist;
+
+        if ((int)($pData['planet_type'] ?? 1) !== 3) {
+            return false;
+        }
+
+        $now = class_exists('BotClock') ? BotClock::get() : TIMESTAMP;
+        $config = Config::get();
+        $gateWaitTime = isset($config->gate_wait_time) ? (int)$config->gate_wait_time : 3600;
+
+        // Check threatened moon Jump Gate
+        if ((int)($pData['sprungtor'] ?? 0) <= 0 || $now < ((int)($pData['last_jump_time'] ?? 0) + $gateWaitTime)) {
+            return false;
+        }
+
+        // Collect all mobile ships to evacuate
+        $evacShips = array();
+        $fleetList = (isset($reslist['fleet']) && is_array($reslist['fleet'])) ? $reslist['fleet'] : array();
+        foreach ($fleetList as $shipId) {
+            if ($shipId == 212) continue; // Solar satellites cannot jump
+            $qty = (int)($pData[$resource[$shipId]] ?? 0);
+            if ($qty > 0) {
+                $evacShips[$shipId] = $qty;
+            }
+        }
+
+        if (empty($evacShips) || array_sum($evacShips) <= 0) {
+            return false;
+        }
+
+        // Find a safe moon with Jump Gate ready
+        $allMoons = $world->empire->getMoons();
+        $activeThreats = $world->threats->getActiveThreats();
+        $threatenedMoonsMap = array();
+        foreach ($activeThreats as $t) {
+            $threatenedMoonsMap[(int)$t['target_planet']] = true;
+        }
+
+        foreach ($allMoons as $safeMoonId => $safeMoonEntry) {
+            if ($safeMoonId == $threatenedMoonId) continue;
+            if (isset($threatenedMoonsMap[$safeMoonId])) continue; // Moon also under attack
+
+            $sData = $safeMoonEntry['data'];
+            if ((int)($sData['sprungtor'] ?? 0) > 0 && $now >= ((int)($sData['last_jump_time'] ?? 0) + $gateWaitTime)) {
+                $jumpResult = $this->gateway->executeJumpGate($threatenedMoonId, $safeMoonId, $evacShips);
+                if ($jumpResult) {
+                    $this->ctx->decisionLog->record(
+                        'threat_quantum_jump_evac',
+                        "Tactical Jump Gate Evacuation: Evacuated " . number_format(array_sum($evacShips)) . " ships from threatened Moon #{$threatenedMoonId} to safe Moon #{$safeMoonId} (0 Deuterium, Anti-Phalanx Stealth)",
+                        array(
+                            'from_moon' => $threatenedMoonId,
+                            'to_moon'   => $safeMoonId,
+                            'ships'     => $evacShips,
+                            'total'     => array_sum($evacShips),
+                            'mse'       => $jumpResult['mse'] ?? 0,
+                        ),
+                        "jump_evac_{$threatenedMoonId}_to_{$safeMoonId}",
+                        25000.0
+                    );
+                    return true;
+                }
+            }
+        }
+
+        return false;
     }
 }

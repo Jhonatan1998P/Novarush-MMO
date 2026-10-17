@@ -232,6 +232,22 @@ class BotNameHelper
     }
 
     /**
+     * Alias for getRandomMoonName() for specification compatibility
+     */
+    public static function generateMoonName(array $exclude = array())
+    {
+        return self::getRandomMoonName($exclude);
+    }
+
+    /**
+     * Alias for getRandomPlanetName() for specification compatibility
+     */
+    public static function generatePlanetName(array $exclude = array())
+    {
+        return self::getRandomPlanetName($exclude);
+    }
+
+    /**
      * Valida si un nombre cumple con la regla de longitud de 8 a 12 caracteres y límites de BD
      */
     public static function isLengthValid($name)

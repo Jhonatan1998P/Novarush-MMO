@@ -16,6 +16,11 @@ class BotClock
         self::$simulatedTime = (int)$timestamp;
     }
 
+    public static function setNow($timestamp)
+    {
+        self::set($timestamp);
+    }
+
     public static function reset()
     {
         self::$simulatedTime = null;
@@ -27,5 +32,10 @@ class BotClock
             return self::$simulatedTime;
         }
         return defined('TIMESTAMP') ? TIMESTAMP : time();
+    }
+
+    public static function now()
+    {
+        return self::get();
     }
 }

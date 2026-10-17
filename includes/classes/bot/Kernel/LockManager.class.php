@@ -19,6 +19,10 @@ class BotLockManager
      */
     public static function acquireBotLock($botId, $timeoutSeconds = 5)
     {
+        if (defined('SIMULATION_MODE') && SIMULATION_MODE) {
+            return true;
+        }
+
         $db = Database::get();
         $lockName = 'novarush_bot_' . (int)$botId;
 
@@ -42,6 +46,10 @@ class BotLockManager
      */
     public static function releaseBotLock($botId)
     {
+        if (defined('SIMULATION_MODE') && SIMULATION_MODE) {
+            return;
+        }
+
         if (!isset(self::$acquiredLocks[$botId])) {
             return;
         }

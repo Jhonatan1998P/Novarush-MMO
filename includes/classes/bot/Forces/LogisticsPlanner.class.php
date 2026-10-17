@@ -205,8 +205,9 @@ class BotLogisticsPlanner
 
             // Anti-Drip Filter (Filtro Anti-Goteo):
             // Prohibir micro-convoyes por déficits insignificantes (< 5M MSE o < 30 mins producción local),
-            // a menos que sea Prioridad 1 (combustible militar de asalto para FOB) o una Luna (planet_type = 3).
-            if ((int)($demand['priority'] ?? 3) !== 1 && (string)($tData['planet_type'] ?? '1') !== '3') {
+            // a menos que sea Prioridad 1 (combustible militar), Luna (planet_type = 3) o Colonia en arranque inicial (minas < 10/8).
+            $isUnderdevelopedColony = ((string)($tData['planet_type'] ?? '1') === '1' && ((int)($tData['metal_mine'] ?? 0) < 10 || (int)($tData['crystal_mine'] ?? 0) < 8));
+            if ((int)($demand['priority'] ?? 3) !== 1 && (string)($tData['planet_type'] ?? '1') !== '3' && !$isUnderdevelopedColony) {
                 $deficitMSE = BotEconomyValuator::toMSE((float)$netDeficit['metal'], (float)$netDeficit['crystal'], (float)$netDeficit['deuterium']);
                 $halfHourProdMSE = 0.5 * BotEconomyValuator::toMSE(
                     (float)($tData['metal_perhour'] ?? 0.0),
@@ -402,6 +403,71 @@ class BotLogisticsPlanner
         if (!empty($constrainedDemands)) {
             foreach ($constrainedDemands as $cd) {
                 $demands[] = $cd;
+            }
+        }
+
+        // --- Priority 4: Surplus Balancing Demands (> 50M idle surplus) ---
+        $surplusDemands = $this->estimateSurplusBalancingDemands($empire);
+        if (!empty($surplusDemands)) {
+            foreach ($surplusDemands as $sd) {
+                $demands[] = $sd;
+            }
+        }
+
+        return $demands;
+    }
+
+    /**
+     * Priority 4: Surplus Balancing Demands
+     * Redistributes massive idle surplus (> 50M MSE) to colonies or FOBs with deficits
+     */
+    public function estimateSurplusBalancingDemands(BotEmpireState $empire)
+    {
+        $demands = array();
+        $planets = $empire->getPlanets();
+        if (count($planets) < 2) {
+            return $demands;
+        }
+
+        $hasMajorSurplus = false;
+        foreach ($planets as $p) {
+            $pData = $p['data'];
+            $stockMSE = BotEconomyValuator::toMSE(
+                (float)($pData['metal'] ?? 0),
+                (float)($pData['crystal'] ?? 0),
+                (float)($pData['deuterium'] ?? 0)
+            );
+            if ($stockMSE > 50000000.0) {
+                $hasMajorSurplus = true;
+                break;
+            }
+        }
+
+        if (!$hasMajorSurplus) {
+            return $demands;
+        }
+
+        foreach ($planets as $pId => $p) {
+            $pData = $p['data'];
+            $stockMSE = BotEconomyValuator::toMSE(
+                (float)($pData['metal'] ?? 0),
+                (float)($pData['crystal'] ?? 0),
+                (float)($pData['deuterium'] ?? 0)
+            );
+            if ($stockMSE < 15000000.0) {
+                $defM = max(0.0, 10000000.0 - (float)($pData['metal'] ?? 0));
+                $defC = max(0.0, 6000000.0 - (float)($pData['crystal'] ?? 0));
+                $defD = max(0.0, 2000000.0 - (float)($pData['deuterium'] ?? 0));
+                if (($defM + $defC + $defD) > 0) {
+                    $demands[] = array(
+                        'target_planet_id' => $pId,
+                        'type'             => 'surplus_balancing',
+                        'priority'         => 4,
+                        'urgency_score'    => 1000.0,
+                        'required'         => array('metal' => $defM, 'crystal' => $defC, 'deuterium' => $defD),
+                        'reason'           => "Rebalanceo de excedentes imperiales (>50M MSE) hacia colonia #{$pId}",
+                    );
+                }
             }
         }
 
@@ -646,11 +712,13 @@ class BotLogisticsPlanner
         global $resource;
 
         $planets = $empire->getPlanets();
-        $targetBuildings = array(15, 1, 2, 3, 14, 21, 31, 44);
+        $targetBuildings = array(15, 4, 1, 2, 3, 14, 21, 31, 44);
 
         foreach ($planets as $pId => $pEntry) {
             if (!empty($pEntry['building_queue']) && count($pEntry['building_queue']) >= 2) continue;
             $pData = $pEntry['data'];
+
+            $isYoungColony = ((int)($pData['metal_mine'] ?? 0) < 10 || (int)($pData['crystal_mine'] ?? 0) < 8);
 
             foreach ($targetBuildings as $bId) {
                 if (BuildFunctions::isTechnologieAccessible($this->ctx->user, $pData, $bId, array())) {
@@ -666,7 +734,7 @@ class BotLogisticsPlanner
                             'element_id'       => $bId,
                             'count'            => 1,
                             'priority'         => 3,
-                            'urgency_score'    => 1000.0,
+                            'urgency_score'    => $isYoungColony ? 3500.0 : 1000.0,
                             'required'         => array('metal' => $reqM, 'crystal' => $reqC, 'deuterium' => $reqD),
                             'reason'           => "Construcción de {$resource[$bId]} en planeta #{$pId}",
                         );
@@ -1085,7 +1153,8 @@ class BotLogisticsPlanner
             }
 
             // Tarea programada en uni1_bot_tasks (logistics_arrival_spend) para acreditar a la llegada y consumir
-            $arrival = ($startTime > 0) ? $startTime : (TIMESTAMP + 120);
+            $currentSimTime = class_exists('BotClock') ? BotClock::get() : TIMESTAMP;
+            $arrival = ($startTime > 0) ? $startTime : ($currentSimTime + 120);
             BotScheduler::scheduleTask(
                 $this->ctx->botId,
                 'logistics_arrival_spend',

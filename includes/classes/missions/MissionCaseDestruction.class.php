@@ -112,7 +112,7 @@ class MissionCaseDestruction extends MissionFunctions implements Mission
 		$targetFleetsResult = $db->select($sql, array(
 			':mission'		=> 5,
 			':fleetEndId'	=> $this->_fleet['fleet_end_id'],
-			':timeStamp'	=> TIMESTAMP
+			':timeStamp'	=> class_exists('BotClock') ? BotClock::now() : TIMESTAMP
 		));
 
 		foreach($targetFleetsResult as $fleetDetail)
@@ -432,7 +432,8 @@ class MissionCaseDestruction extends MissionFunctions implements Mission
 		require_once 'includes/classes/missions/functions/GenerateReport.php';
 		$reportData	= GenerateReport($combatResult, $reportInfo);
 
-		$reportID	= md5(uniqid('', true).TIMESTAMP);
+		$now = class_exists('BotClock') ? BotClock::now() : TIMESTAMP;
+		$reportID	= md5(uniqid('', true).$now);
 
 		$sql	= 'INSERT INTO %%RW%% SET
 		rid 		= :reportId,

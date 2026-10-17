@@ -424,7 +424,7 @@ class BotCivicStrategist
 
         // 2-hour strategic pacing cooldown between ideology purchases
         $recentUpgrade = $db->selectSingle("SELECT created_at FROM %%BOT_DECISIONS%% WHERE bot_id = :bid AND decision_type = 'ideology_upgrade' ORDER BY id DESC LIMIT 1;", array(':bid' => $botId));
-        if (!empty($recentUpgrade['created_at']) && (TIMESTAMP - (int)$recentUpgrade['created_at']) < 7200) {
+        if (!empty($recentUpgrade['created_at']) && ((class_exists('BotClock') ? BotClock::now() : TIMESTAMP) - (int)$recentUpgrade['created_at']) < 7200) {
             return 0;
         }
 

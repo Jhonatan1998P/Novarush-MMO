@@ -18,6 +18,7 @@ require_once 'includes/classes/bot/Military/StrikePlanner.class.php';
 require_once 'includes/classes/bot/Military/RecyclePlanner.class.php';
 require_once 'includes/classes/bot/Forces/BotAchievementManager.class.php';
 require_once 'includes/classes/bot/Forces/BotExpeditionPlanner.class.php';
+require_once 'includes/classes/bot/Forces/BotExpansionPlanner.class.php';
 require_once 'includes/classes/bot/Forces/BotPremiumStrategist.class.php';
 require_once 'includes/classes/bot/Forces/BotCivicStrategist.class.php';
 
@@ -126,6 +127,14 @@ class BotKernel
             $builtMines = $allocator->allocate($world->empire);
             $researched = $allocator->allocateResearch($world->empire);
 
+            // 7.5 Imperial Expansion & Lunar Operations (Phase 7.5: BotExpansionPlanner)
+            // Ejecutado prioritariamente ANTES de ForcePlanner para asegurar la reserva y reclutamiento de Colonizadores (#208)
+            $expansionStats = array();
+            if (!$isFleetBlocked) {
+                $expansionPlanner = new BotExpansionPlanner($ctx, $gateway);
+                $expansionStats = $expansionPlanner->planExpansion($world);
+            }
+
             // 8. Military Force Planning (Shipyard Queues)
             $forcePlanner = new BotForcePlanner($ctx, $gateway);
             $recruitedUnits = $forcePlanner->planForces($world->empire, false, $world);
@@ -189,11 +198,11 @@ class BotKernel
                         // Strikes & Multi-step Sieges
                         $strikePlanner = new BotStrikePlanner($ctx, $gateway);
                         $attacked = $strikePlanner->planStrikes($world, $baseForOps, $targets);
-
-                        // Debris Recycling
-                        $recyclePlanner = new BotRecyclePlanner($ctx, $gateway);
-                        $recycled = $recyclePlanner->harvestDebris($world, $baseForOps, $targets);
                     }
+
+                    // Debris Recycling (harvests both targets and local empire moonshot/battle debris)
+                    $recyclePlanner = new BotRecyclePlanner($ctx, $gateway);
+                    $recycled = $recyclePlanner->harvestDebris($world, $baseForOps, !empty($targets) ? $targets : array());
                 }
             } else {
                 $ctx->decisionLog->record('fleet_lock', 'Movimientos de flota bloqueados por orden administrativa.', array(), 'locked', 0.0);
@@ -258,6 +267,7 @@ class BotKernel
                 'attacked'    => $attacked,
                 'recycled'    => $recycled,
                 'expeditions' => $expeditions,
+                'expansion'   => $expansionStats,
                 'achievements_updated' => count($updatedAchievements),
                 'decisions'   => $ctx->decisionLog->getRecordedThisTurn(),
             );
@@ -271,7 +281,7 @@ class BotKernel
     private static function processScheduledTasks(BotContext $ctx)
     {
         $db = Database::get();
-        $now = TIMESTAMP;
+        $now = class_exists('BotClock') ? BotClock::now() : TIMESTAMP;
         $lookahead = $now + 32;
 
         // Query due tasks up to $now, plus precision sync tasks up to $lookahead
@@ -302,10 +312,10 @@ class BotKernel
             // Micro-wait for 1-2s synchronization precision on timed offensive tasks
             $syncTypes = array('staggered_mip_salvo', 'staggered_recycler_dispatch', 'staggered_defense_recycle', 'staggered_fleet_assault');
             if (in_array($taskType, $syncTypes)) {
-                $curTime = time();
+                $curTime = class_exists('BotClock') ? BotClock::now() : time();
                 if ($executeAt > $curTime) {
                     $waitSec = min(32, $executeAt - $curTime);
-                    if ($waitSec > 0) {
+                    if ($waitSec > 0 && !(defined('SIMULATION_MODE') && SIMULATION_MODE)) {
                         sleep($waitSec);
                     }
                 }
@@ -328,11 +338,11 @@ class BotKernel
                         ", array(
                             ':pId'    => $originId,
                             ':botId'  => $ctx->botId,
-                            ':tLimit' => TIMESTAMP + 180
+                            ':tLimit' => $now + 180
                         ));
                     }
 
-                    if (!empty($hostileThreat['next_impact']) && (int)$hostileThreat['next_impact'] > TIMESTAMP) {
+                    if (!empty($hostileThreat['next_impact']) && (int)$hostileThreat['next_impact'] > $now) {
                         $nextImpact = (int)$hostileThreat['next_impact'];
                         $rescheduleDelay = mt_rand(15, 40);
                         $newScheduledAt = $nextImpact + $rescheduleDelay;
@@ -342,7 +352,7 @@ class BotKernel
                         ));
                         $ctx->decisionLog->record(
                             'fleetsave_recall_postponed_aks_slow',
-                            "Retorno de fleetsave pospuesto: hostil en aproximación a colonia #{$originId} (impacto a las " . date('H:i:s', $nextImpact) . "). Reprogramando recall a T+" . ($newScheduledAt - TIMESTAMP) . "s para evitar emboscada AKS.",
+                            "Retorno de fleetsave pospuesto: hostil en aproximación a colonia #{$originId} (impacto a las " . date('H:i:s', $nextImpact) . "). Reprogramando recall a T+" . ($newScheduledAt - $now) . "s para evitar emboscada AKS.",
                             array('origin_id' => $originId, 'next_impact' => $nextImpact, 'delay' => $rescheduleDelay),
                             "recall_defer_{$originId}",
                             5000.0
@@ -379,7 +389,7 @@ class BotKernel
                     $curAttCount = !empty($curAttRow) ? (int)$curAttRow['cnt'] : 0;
                     if ($curAttCount >= $maxConcurrent) {
                         $db->update("UPDATE " . DB_PREFIX . "bot_tasks SET scheduled_at = :newTime WHERE task_id = :tId;", array(
-                            ':newTime' => TIMESTAMP + 30,
+                            ':newTime' => $now + 30,
                             ':tId'     => $task['task_id'],
                         ));
                         continue;
@@ -434,7 +444,7 @@ class BotKernel
                     $gateway = new BotActionGateway($ctx);
                     $fleetsaver = new BotFleetsaveCalculator($ctx, $gateway);
                     $empire = new BotEmpireState($ctx);
-                    $threatArrival = isset($payload['threat_arrival_time']) ? (int)$payload['threat_arrival_time'] : (TIMESTAMP + 120);
+                    $threatArrival = isset($payload['threat_arrival_time']) ? (int)$payload['threat_arrival_time'] : ($now + 120);
                     $customShips = isset($payload['custom_ships']) ? $payload['custom_ships'] : null;
                     $fleetsaver->executeFleetsave($empire, (int)$payload['endangered_planet_id'], $threatArrival, $customShips, true);
                 }

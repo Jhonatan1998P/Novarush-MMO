@@ -123,7 +123,7 @@ class MissionCaseAttack extends MissionFunctions implements Mission
 		$targetFleetsResult = $db->select($sql, array(
 			':mission'		=> 5,
 			':fleetEndId'	=> $this->_fleet['fleet_end_id'],
-			':timeStamp'	=> TIMESTAMP
+			':timeStamp'	=> class_exists('BotClock') ? BotClock::now() : TIMESTAMP
 		));
 
 		foreach($targetFleetsResult as $fleetDetail)
@@ -424,7 +424,8 @@ class MissionCaseAttack extends MissionFunctions implements Mission
 				break;
 		}
 		
-		$reportID	= md5(uniqid('', true).TIMESTAMP);
+		$now = class_exists('BotClock') ? BotClock::now() : TIMESTAMP;
+		$reportID	= md5(uniqid('', true).$now);
 		
 		$sql	= 'INSERT INTO %%RW%% SET
 		rid 		= :reportId,
@@ -684,7 +685,7 @@ class MissionCaseAttack extends MissionFunctions implements Mission
 									(int)$this->_fleet['fleet_end_galaxy'],
 									(int)$this->_fleet['fleet_end_system'],
 									(int)$this->_fleet['fleet_end_planet'],
-									TIMESTAMP
+									class_exists('BotClock') ? BotClock::now() : TIMESTAMP
 								);
 							}
 						}

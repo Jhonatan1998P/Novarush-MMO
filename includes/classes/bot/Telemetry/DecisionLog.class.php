@@ -9,10 +9,30 @@
  */
 class BotDecisionLog
 {
+    public static $disabled = false;
+    public static $memoryBuffer = array();
+    public static $countsByType = array();
+
     private $botId;
     private $dailySeed;
     private $pendingLogs = array();
     private $recordedThisTurn = array();
+
+    public static function getMemoryBuffer()
+    {
+        return self::$memoryBuffer;
+    }
+
+    public static function getCountsByType()
+    {
+        return self::$countsByType;
+    }
+
+    public static function resetMemoryBuffer()
+    {
+        self::$memoryBuffer = array();
+        self::$countsByType = array();
+    }
 
     public function __construct($botId, $dailySeed)
     {
@@ -39,9 +59,15 @@ class BotDecisionLog
             'chosen_action'   => (string)$chosenAction,
             'chosen_score'    => (float)$chosenScore,
             'seed_used'       => $this->dailySeed,
-            'created_at'      => TIMESTAMP,
+            'created_at'      => class_exists('BotClock') ? BotClock::get() : TIMESTAMP,
         );
-        $this->pendingLogs[] = $entry;
+
+        self::$countsByType[$decisionType] = (self::$countsByType[$decisionType] ?? 0) + 1;
+        self::$memoryBuffer[] = $entry;
+
+        if (!self::$disabled || $decisionType === 'quantum_jump_gate' || $decisionType === 'fleet_staging_jump_gate') {
+            $this->pendingLogs[] = $entry;
+        }
         $this->recordedThisTurn[] = $entry;
     }
 
@@ -55,6 +81,11 @@ class BotDecisionLog
      */
     public function flush()
     {
+        if (defined('SIMULATION_MODE') && SIMULATION_MODE) {
+            $this->pendingLogs = array();
+            return;
+        }
+
         if (empty($this->pendingLogs)) {
             return;
         }
