@@ -202,7 +202,7 @@ assert_test(
 echo "\n--- GRUPO 2: Candado de Ahorro Acotado por Categoría ---\n";
 
 // 2.1 Candado en 'mines' bloquea solo 'mines'
-$fakeCostMine = array(901 => 10000000.0, 902 => 5000000.0, 903 => 0.0);
+$fakeCostMine = array(901 => 1100000.0, 902 => 500000.0, 903 => 0.0);
 $fakePData = array(
     'metal' => 1000000.0,
     'crystal' => 500000.0,
@@ -266,7 +266,7 @@ assert_test(
 
 // 2.3 Candado en 'fleet' bloquea solo 'fleet' y respeta su déficit
 $budgetMgr->clearSavingsLock();
-$fakeCostFleet = array(901 => 2000000.0, 902 => 1000000.0, 903 => 500000.0);
+$fakeCostFleet = array(901 => 1100000.0, 902 => 500000.0, 903 => 200000.0);
 $budgetMgr->setSavingsLock($firstPlanetId, 'ship', 214, $fakeCostFleet, $fakePData, 'fleet');
 
 assert_test(

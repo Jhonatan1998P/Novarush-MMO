@@ -51,11 +51,17 @@ class BotEngine
     const MISSION_SPY          = 6;
     const MISSION_RECYCLE      = 8;
 
+    private static $tablesEnsured = false;
+
     /**
      * Asegura la existencia de las tablas de bots en la base de datos
      */
     public static function ensureTables()
     {
+        if (self::$tablesEnsured) {
+            return;
+        }
+
         $db = Database::get();
         $sql1 = "CREATE TABLE IF NOT EXISTS %%BOTS%% (
             bot_id int(11) unsigned NOT NULL,
@@ -209,6 +215,7 @@ class BotEngine
         } catch (Throwable $e) {
             // Tablas ya existen o error menor
         }
+        self::$tablesEnsured = true;
     }
 
     /**
@@ -546,12 +553,15 @@ class BotEngine
 
         foreach ($bots as $bot) {
             try {
-                $res = self::runSingleBot($bot['bot_id']);
+                $res = self::runSingleBot($bot);
                 $results[$bot['bot_id']] = $res;
             } catch (Exception $e) {
                 $results[$bot['bot_id']] = array('error' => $e->getMessage());
                 self::log($bot['bot_id'], 'error', "Fallo en ejecución: " . $e->getMessage());
             }
+
+            // Micro-Yield anti-monopoly (10ms) to allow MariaDB and webserver to service HTTP requests
+            usleep(10000);
         }
 
         return $results;
@@ -560,10 +570,15 @@ class BotEngine
     /**
      * Ciclo maestro de IA estratégica para un bot individual (v2)
      */
-    public static function runSingleBot($botId)
+    public static function runSingleBot($botOrId)
     {
-        $db = Database::get();
+        if (is_array($botOrId) && isset($botOrId['bot_id'])) {
+            return BotKernel::processTurn($botOrId);
+        }
+
         self::ensureTables();
+        $botId = (int)$botOrId;
+        $db = Database::get();
 
         $botData = $db->selectSingle("SELECT * FROM " . DB_PREFIX . "bots WHERE bot_id = :id AND is_active = 1;", array(':id' => $botId));
         if (empty($botData)) {

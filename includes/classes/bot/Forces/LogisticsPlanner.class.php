@@ -74,12 +74,26 @@ class BotLogisticsPlanner
     {
         $db = Database::get();
 
-        // 0. Active in-flight transports in %%FLEETS%% (Mission 3)
-        $activeTransRow = $db->selectSingle(
-            "SELECT COUNT(*) as cnt FROM %%FLEETS%% WHERE fleet_owner = :botId AND fleet_mission = 3;",
+        // 0. Active fleet movements in uni1_fleets (Missions 3 & 4) for slot & destination concurrency
+        $inFlightTransports = $db->select(
+            "SELECT fleet_id, fleet_start_id, fleet_end_id, fleet_mess, fleet_mission, fleet_resource_metal, fleet_resource_crystal, fleet_resource_deuterium 
+             FROM %%FLEETS%% 
+             WHERE fleet_owner = :botId AND fleet_mission IN (3, 4);",
             array(':botId' => $this->ctx->botId)
         );
-        $activeTransports = !empty($activeTransRow) ? (int)$activeTransRow['cnt'] : 0;
+
+        $activeTransports = 0;
+        $activeTargetDestinations = array();
+        if (!empty($inFlightTransports)) {
+            foreach ($inFlightTransports as $ift) {
+                if ((int)$ift['fleet_mission'] === 3) {
+                    $activeTransports++;
+                }
+                // If fleet is returning (fleet_mess == 1), cargo is heading to fleet_start_id; if outbound (0), to fleet_end_id
+                $pEnd = ((int)$ift['fleet_mess'] === 1) ? (int)$ift['fleet_start_id'] : (int)$ift['fleet_end_id'];
+                $activeTargetDestinations[$pEnd] = true;
+            }
+        }
 
         // Check slot availability early, strictly respecting shielded military slots
         // and reserving a dedicated margin (3 slots) for offensive / combat / recycler / spy operations
@@ -98,8 +112,6 @@ class BotLogisticsPlanner
         }
 
         // 1. Gather all active in-flight destination targets & categorised resources
-        $db = Database::get();
-
         // 1a. Pending logistics tasks in uni1_bot_tasks with category and resources tags
         $pendingLogisticsTasks = $db->select(
             "SELECT payload FROM %%BOT_TASKS%% 
@@ -108,7 +120,6 @@ class BotLogisticsPlanner
         );
 
         $inFlightByCategory = array();
-        $activeTargetDestinations = array();
 
         if (!empty($pendingLogisticsTasks)) {
             foreach ($pendingLogisticsTasks as $plt) {
@@ -128,22 +139,6 @@ class BotLogisticsPlanner
                     $inFlightByCategory[$destPId][$cat]['crystal']   += (float)($taskPayload['resources']['crystal'] ?? $taskPayload['resources'][902] ?? 0.0);
                     $inFlightByCategory[$destPId][$cat]['deuterium'] += (float)($taskPayload['resources']['deuterium'] ?? $taskPayload['resources'][903] ?? 0.0);
                 }
-            }
-        }
-
-        // 1b. Active fleet movements in uni1_fleets (Missions 3 & 4) for slot & destination concurrency
-        $inFlightTransports = $db->select(
-            "SELECT fleet_id, fleet_start_id, fleet_end_id, fleet_mess, fleet_mission, fleet_resource_metal, fleet_resource_crystal, fleet_resource_deuterium 
-             FROM %%FLEETS%% 
-             WHERE fleet_owner = :botId AND fleet_mission IN (3, 4);",
-            array(':botId' => $this->ctx->botId)
-        );
-
-        if (!empty($inFlightTransports)) {
-            foreach ($inFlightTransports as $ift) {
-                // If fleet is returning (fleet_mess == 1), cargo is heading to fleet_start_id; if outbound (0), to fleet_end_id
-                $pEnd = ((int)$ift['fleet_mess'] === 1) ? (int)$ift['fleet_start_id'] : (int)$ift['fleet_end_id'];
-                $activeTargetDestinations[$pEnd] = true;
             }
         }
 

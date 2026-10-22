@@ -50,10 +50,12 @@ class BotPublicDataReader
         $sql = "SELECT p.id, p.id_owner, p.galaxy, p.system, p.planet, p.planet_type,
                        p.der_metal, p.der_crystal, p.id_luna, p.last_update, p.last_fleet_out,
                        m.last_fleet_out as m_last_fleet_out,
-                       u.username, u.authlevel, u.ally_id, u.onlinetime, u.urlaubs_modus, u.banaday
+                       u.username, u.authlevel, u.ally_id, u.onlinetime, u.urlaubs_modus, u.banaday,
+                       COALESCE(stat.total_points, 0) as total_points
                 FROM %%PLANETS%% p
                 LEFT JOIN %%PLANETS%% m ON m.id = p.id_luna
                 LEFT JOIN %%USERS%% u ON u.id = p.id_owner
+                LEFT JOIN %%STATPOINTS%% stat ON stat.id_owner = p.id_owner AND stat.stat_type = 1
                 WHERE p.universe = :uni 
                   AND p.galaxy = :galaxy 
                   AND p.system = :system 
@@ -100,6 +102,7 @@ class BotPublicDataReader
                 'debris_crystal'   => (float)$row['der_crystal'],
                 'activity_marker'  => $activityMarker,
                 'activity_minutes' => $activityMinutes,
+                'total_points'     => (float)($row['total_points'] ?? 0),
                 'last_update'      => (int)($row['last_update'] ?? 0),
                 'onlinetime'       => (int)($row['onlinetime'] ?? 0),
                 'last_fleet_out'   => (int)($row['last_fleet_out'] ?? 0),
@@ -150,10 +153,12 @@ class BotPublicDataReader
         $sql = "SELECT p.id, p.id_owner, p.galaxy, p.system, p.planet, p.planet_type,
                        p.der_metal, p.der_crystal, p.id_luna, p.last_update, p.last_fleet_out,
                        m.last_fleet_out as m_last_fleet_out,
-                       u.username, u.authlevel, u.ally_id, u.onlinetime, u.urlaubs_modus, u.banaday
+                       u.username, u.authlevel, u.ally_id, u.onlinetime, u.urlaubs_modus, u.banaday,
+                       COALESCE(stat.total_points, 0) as total_points
                 FROM %%PLANETS%% p
                 LEFT JOIN %%PLANETS%% m ON m.id = p.id_luna
                 LEFT JOIN %%USERS%% u ON u.id = p.id_owner
+                LEFT JOIN %%STATPOINTS%% stat ON stat.id_owner = p.id_owner AND stat.stat_type = 1
                 WHERE p.universe = :uni 
                   AND p.planet_type IN (1, 3) 
                   AND p.destruyed = 0
@@ -194,6 +199,7 @@ class BotPublicDataReader
                 'debris_crystal'   => (float)$row['der_crystal'],
                 'activity_marker'  => $activityMarker,
                 'activity_minutes' => $activityMinutes,
+                'total_points'     => (float)($row['total_points'] ?? 0),
                 'last_update'      => (int)($row['last_update'] ?? 0),
                 'onlinetime'       => (int)($row['onlinetime'] ?? 0),
                 'last_fleet_out'   => (int)($row['last_fleet_out'] ?? 0),

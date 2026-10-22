@@ -30,6 +30,9 @@ class BotPremiumStrategist
     private $ctx;
     private $gateway;
 
+    // In-memory planet cache per turn to eliminate redundant DB queries
+    private static $planetCache = array();
+
     // Officer priority order by ROI
     const OFFICER_ORDER = array(601, 602, 603, 604);
 
@@ -39,6 +42,137 @@ class BotPremiumStrategist
         902 => array(901 => 0.5,  902 => 1.0, 903 => 2.0),
         903 => array(901 => 0.25, 902 => 0.5, 903 => 1.0),
     );
+
+    /**
+     * Seed planet cache from BotEmpireState at the beginning of turn
+     *
+     * @param BotEmpireState $empire
+     */
+    public static function seedPlanetCache(BotEmpireState $empire): void
+    {
+        self::$planetCache = array();
+        $planets = $empire->getPlanets();
+        foreach ($planets as $p) {
+            $pid = (int)($p['id'] ?? ($p['data']['id'] ?? 0));
+            if ($pid > 0) {
+                $pData = $p['data'] ?? $p;
+                self::$planetCache[$pid] = array(
+                    'metal'         => (float)($p['metal'] ?? ($pData['metal'] ?? 0.0)),
+                    'crystal'       => (float)($p['crystal'] ?? ($pData['crystal'] ?? 0.0)),
+                    'deuterium'     => (float)($p['deuterium'] ?? ($pData['deuterium'] ?? 0.0)),
+                    'metal_max'     => (float)($pData['metal_max'] ?? 10000.0),
+                    'crystal_max'   => (float)($pData['crystal_max'] ?? 10000.0),
+                    'deuterium_max' => (float)($pData['deuterium_max'] ?? 10000.0),
+                    'name'          => (string)($p['name'] ?? ($pData['name'] ?? '')),
+                    'galaxy'        => (int)($p['galaxy'] ?? ($pData['galaxy'] ?? 0)),
+                    'system'        => (int)($p['system'] ?? ($pData['system'] ?? 0)),
+                    'planet'        => (int)($p['planet'] ?? ($pData['planet'] ?? 0)),
+                );
+            }
+        }
+
+        if (method_exists($empire, 'getMoons')) {
+            $moons = $empire->getMoons();
+            foreach ($moons as $m) {
+                $mid = (int)($m['id'] ?? ($m['data']['id'] ?? 0));
+                if ($mid > 0) {
+                    $mData = $m['data'] ?? $m;
+                    self::$planetCache[$mid] = array(
+                        'metal'         => (float)($m['metal'] ?? ($mData['metal'] ?? 0.0)),
+                        'crystal'       => (float)($m['crystal'] ?? ($mData['crystal'] ?? 0.0)),
+                        'deuterium'     => (float)($m['deuterium'] ?? ($mData['deuterium'] ?? 0.0)),
+                        'metal_max'     => (float)($mData['metal_max'] ?? 10000.0),
+                        'crystal_max'   => (float)($mData['crystal_max'] ?? 10000.0),
+                        'deuterium_max' => (float)($mData['deuterium_max'] ?? 10000.0),
+                        'name'          => (string)($m['name'] ?? ($mData['name'] ?? '')),
+                        'galaxy'        => (int)($m['galaxy'] ?? ($mData['galaxy'] ?? 0)),
+                        'system'        => (int)($m['system'] ?? ($mData['system'] ?? 0)),
+                        'planet'        => (int)($m['planet'] ?? ($mData['planet'] ?? 0)),
+                    );
+                }
+            }
+        }
+    }
+
+    /**
+     * Retrieve cached planet row or fallback query to database
+     *
+     * @param int $planetId
+     * @return array|null
+     */
+    public static function getCachedPlanetRow($planetId): ?array
+    {
+        $pid = (int)$planetId;
+        if (isset(self::$planetCache[$pid])) {
+            return self::$planetCache[$pid];
+        }
+
+        try {
+            $db = Database::get();
+            $row = $db->selectSingle(
+                "SELECT metal, crystal, deuterium, metal_max, crystal_max, deuterium_max, name, galaxy, system, planet FROM %%PLANETS%% WHERE id = :pid LIMIT 1;",
+                array(':pid' => $pid)
+            );
+            if (!empty($row)) {
+                self::$planetCache[$pid] = array(
+                    'metal'         => (float)$row['metal'],
+                    'crystal'       => (float)$row['crystal'],
+                    'deuterium'     => (float)$row['deuterium'],
+                    'metal_max'     => (float)($row['metal_max'] ?? 10000.0),
+                    'crystal_max'   => (float)($row['crystal_max'] ?? 10000.0),
+                    'deuterium_max' => (float)($row['deuterium_max'] ?? 10000.0),
+                    'name'          => (string)($row['name'] ?? ''),
+                    'galaxy'        => (int)($row['galaxy'] ?? 0),
+                    'system'        => (int)($row['system'] ?? 0),
+                    'planet'        => (int)($row['planet'] ?? 0),
+                );
+                return self::$planetCache[$pid];
+            }
+        } catch (Throwable $e) {
+            // DB fallback failed
+        }
+
+        return null;
+    }
+
+    /**
+     * Update cached planet resources in RAM
+     *
+     * @param int $planetId
+     * @param float $metal
+     * @param float $crystal
+     * @param float $deuterium
+     */
+    public static function updateCachedPlanetResources($planetId, $metal, $crystal, $deuterium): void
+    {
+        $pid = (int)$planetId;
+        if (isset(self::$planetCache[$pid])) {
+            self::$planetCache[$pid]['metal']     = (float)$metal;
+            self::$planetCache[$pid]['crystal']   = (float)$crystal;
+            self::$planetCache[$pid]['deuterium'] = (float)$deuterium;
+        } else {
+            $row = self::getCachedPlanetRow($pid);
+            if ($row !== null) {
+                self::$planetCache[$pid]['metal']     = (float)$metal;
+                self::$planetCache[$pid]['crystal']   = (float)$crystal;
+                self::$planetCache[$pid]['deuterium'] = (float)$deuterium;
+            }
+        }
+    }
+
+    /**
+     * Invalidate planet cache (all or single planet)
+     *
+     * @param int|null $planetId
+     */
+    public static function invalidatePlanetCache($planetId = null): void
+    {
+        if ($planetId === null) {
+            self::$planetCache = array();
+        } else {
+            unset(self::$planetCache[(int)$planetId]);
+        }
+    }
 
     public function __construct(BotContext $ctx, BotActionGateway $gateway)
     {
@@ -148,6 +282,7 @@ class BotPremiumStrategist
                 ));
 
                 if ($db->rowCount() > 0) {
+                    self::invalidatePlanetCache($bestPlanetId);
                     // Credit 1.000 MO
                     PremiumEconomy::credit($this->ctx->user, 921, 1000, 'fair_res', $elId, "n={$n};amt=1");
 
@@ -235,11 +370,8 @@ class BotPremiumStrategist
             }
         }
 
-        // 2. Fetch planet physical state
-        $planetRow = $db->selectSingle(
-            "SELECT metal, crystal, deuterium, metal_max, crystal_max, deuterium_max FROM %%PLANETS%% WHERE id = :pid LIMIT 1;",
-            array(':pid' => $planetId)
-        );
+        // 2. Fetch planet physical state (from in-memory cache)
+        $planetRow = self::getCachedPlanetRow($planetId);
         if (empty($planetRow)) {
             return false;
         }
@@ -334,13 +466,14 @@ class BotPremiumStrategist
                 return false;
             }
 
-            // Update physical DB
+            // Update physical DB and in-memory cache
             $db->update("UPDATE %%PLANETS%% SET metal = :m, crystal = :c, deuterium = :d WHERE id = :pid;", array(
                 ':m'   => $newM,
                 ':c'   => $newC,
                 ':d'   => $newD,
                 ':pid' => $planetId,
             ));
+            self::updateCachedPlanetResources($planetId, $newM, $newC, $newD);
 
             if (isset($this->ctx->budgetManager)) {
                 $this->ctx->budgetManager->syncDemandTraderRebalance($planetId, 'mines', $newM, $newC, $newD, $exchanges, true, true);
@@ -379,7 +512,7 @@ class BotPremiumStrategist
             return false; // Total MSE physically insufficient
         }
 
-        $fuelReserve = (strpos($contextReason, 'fleet') !== false) ? 15000000.0 : 0.0;
+        $fuelReserve = ($contextReason === 'fleet' || strpos($contextReason, 'fleet') !== false) ? 15000000.0 : 25000.0;
         // Calculate surplus above target cost for each resource
         $surplusM = max(0.0, $curM - $costM);
         $surplusC = max(0.0, $curC - $costC);
@@ -423,7 +556,7 @@ class BotPremiumStrategist
             $exchanges[] = array('from_res' => $payResId, 'to_res' => 903, 'from_units' => $costInPay, 'to_units' => $defD);
         }
 
-        $availPay = ($payResId === 901 ? $curM : ($payResId === 902 ? $curC : max(0.0, $curD - $fuelReserve)));
+        $availPay = ($payResId === 901 ? $surplusM : ($payResId === 902 ? $surplusC : $surplusD));
         if ($availPay < $totalPayNeeded - 0.0001) {
             return false; // Insufficient surplus in selected currency
         }
@@ -468,6 +601,7 @@ class BotPremiumStrategist
             ':d'   => $newD,
             ':pid' => $planetId,
         ));
+        self::updateCachedPlanetResources($planetId, $newM, $newC, $newD);
 
         // Synchronize virtual budgets in budgetManager
         if (isset($this->ctx->budgetManager)) {
@@ -515,8 +649,7 @@ class BotPremiumStrategist
     public function rebalancePlanet50_35_15($planetId, $category, $isBatchMode = false)
     {
         $planetId = (int)$planetId;
-        $db = Database::get();
-        $pRow = $db->selectSingle("SELECT metal, crystal, deuterium FROM %%PLANETS%% WHERE id = :pid LIMIT 1;", array(':pid' => $planetId));
+        $pRow = self::getCachedPlanetRow($planetId);
         if (empty($pRow)) return false;
 
         $totMSE = (float)$pRow['metal'] + (2.0 * (float)$pRow['crystal']) + (4.0 * (float)$pRow['deuterium']);
@@ -553,6 +686,7 @@ class BotPremiumStrategist
      */
     public function executeEmergencyFleetsaveTrade($planetId, $amountNeededDeut, $allowAllCategories = true)
     {
+        $db = Database::get();
         $amountNeededDeut = (float)ceil($amountNeededDeut);
         if ($amountNeededDeut <= 0.0) {
             return 0.0;
@@ -570,8 +704,7 @@ class BotPremiumStrategist
             return 0.0;
         }
 
-        $db = Database::get();
-        $planetRow = $db->selectSingle("SELECT metal, crystal, deuterium FROM %%PLANETS%% WHERE id = :pid LIMIT 1;", array(':pid' => (int)$planetId));
+        $planetRow = self::getCachedPlanetRow((int)$planetId);
         if (empty($planetRow)) {
             return 0.0;
         }
@@ -666,6 +799,7 @@ class BotPremiumStrategist
             ':dGain' => $totalDeutGained,
             ':pid'   => (int)$planetId,
         ));
+        self::invalidatePlanetCache($planetId);
 
         // Synchronize virtual category budgets
         foreach ($categoryDebits as $cat => $deb) {
@@ -693,7 +827,7 @@ class BotPremiumStrategist
         );
 
         if (isset($this->ctx->telemetry)) {
-            $pInfo = $db->selectSingle("SELECT name, galaxy, system, planet FROM %%PLANETS%% WHERE id = :pid LIMIT 1;", array(':pid' => $planetId));
+            $pInfo = self::getCachedPlanetRow($planetId);
             $pName = $pInfo['name'] ?? "Planeta #{$planetId}";
             $coords = isset($pInfo['galaxy']) ? "[{$pInfo['galaxy']}:{$pInfo['system']}:{$pInfo['planet']}]" : '';
             $this->ctx->telemetry->writeLog(
@@ -752,8 +886,7 @@ class BotPremiumStrategist
             return false;
         }
 
-        $db = Database::get();
-        $planetRow = $db->selectSingle("SELECT metal, crystal, deuterium FROM %%PLANETS%% WHERE id = :pid LIMIT 1;", array(':pid' => (int)$planetId));
+        $planetRow = self::getCachedPlanetRow((int)$planetId);
         if (empty($planetRow)) {
             return false;
         }
@@ -791,8 +924,8 @@ class BotPremiumStrategist
         global $Charge;
         $chargeRates = !empty($Charge) ? $Charge : self::CHARGE_RATES;
 
-        // Surplus above cost (reserving 15M fuel if category is fleet)
-        $fuelReserve = ($category === 'fleet') ? 15000000.0 : 0.0;
+        // Surplus above cost (reserving 15M fuel if category is fleet, 25k baseline)
+        $fuelReserve = ($category === 'fleet') ? 15000000.0 : 25000.0;
         $surplusM = max(0.0, $curM - $costM);
         $surplusC = max(0.0, $curC - $costC);
         $surplusD = max(0.0, ($curD - $fuelReserve) - $costD);
@@ -819,7 +952,7 @@ class BotPremiumStrategist
         if ($payResId !== 902 && $defC > 0.0) $totalPayNeeded += $defC * $chargeRates[$payResId][902];
         if ($payResId !== 903 && $defD > 0.0) $totalPayNeeded += $defD * $chargeRates[$payResId][903];
 
-        $availPay = ($payResId === 901 ? $curM : ($payResId === 902 ? $curC : max(0.0, $curD - $fuelReserve)));
+        $availPay = ($payResId === 901 ? $surplusM : ($payResId === 902 ? $surplusC : $surplusD));
         if ($availPay >= $totalPayNeeded - 0.0001) {
             return array(
                 'exact_delta_trade'  => true,
@@ -974,7 +1107,7 @@ class BotPremiumStrategist
      * @param BotWorldModel $world
      * @return string|null
      */
-    public function detectPlanetTraderDemand(array $pData, BotWorldModel $world)
+        public function detectPlanetTraderDemand(array $pData, BotWorldModel $world)
     {
         $pId = (int)$pData['id'];
 
@@ -992,38 +1125,6 @@ class BotPremiumStrategist
                     return $lockCat;
                 }
             }
-        }
-
-        $totalMSE = (float)$pData['metal'] + (2.0 * (float)$pData['crystal']) + (4.0 * (float)$pData['deuterium']);
-        if ($totalMSE < 10000.0) {
-            return null; // Not enough resources to justify calling merchant
-        }
-
-        $pctM = (float)$pData['metal'] / $totalMSE;
-        $pctC = (2.0 * (float)$pData['crystal']) / $totalMSE;
-        $pctD = (4.0 * (float)$pData['deuterium']) / $totalMSE;
-
-        // Priority 1: Flota (fleet)
-        $shipyardLvl = (int)($pData['hangar'] ?? 0);
-        if ($shipyardLvl >= 1 && ($pctD < 0.10 && ($pctM > 0.55 || $pctC > 0.40))) {
-            return 'fleet';
-        }
-
-        // Priority 2: Defensa (defense)
-        $siloLvl = (int)($pData['silo'] ?? 0);
-        if ($siloLvl >= 1 && ($pctC < 0.20 && $pctM > 0.65)) {
-            return 'defense';
-        }
-
-        // Priority 3: Investigación (research)
-        $labLvl = (int)($pData['laboratory'] ?? 0);
-        if ($labLvl >= 1 && ($pctC < 0.20 || $pctD < 0.08) && $totalMSE >= 50000.0) {
-            return 'research';
-        }
-
-        // Priority 4: Construcción (mines)
-        if ($pctM < 0.35 || $pctM > 0.75 || $pctC < 0.20 || $pctD < 0.05) {
-            return 'mines';
         }
 
         return null;
@@ -1475,7 +1576,7 @@ class BotPremiumStrategist
         );
 
         if (isset($this->ctx->telemetry)) {
-            $tInfo = $db->selectSingle("SELECT name, galaxy, system, planet FROM %%PLANETS%% WHERE id = :pid LIMIT 1;", array(':pid' => $targetPlanetId));
+            $tInfo = self::getCachedPlanetRow($targetPlanetId);
             $tName = $tInfo['name'] ?? "Planeta #{$targetPlanetId}";
             $coords = isset($tInfo['galaxy']) ? "[{$tInfo['galaxy']}:{$tInfo['system']}:{$tInfo['planet']}]" : '';
             $reason = $hasCriticalDeficit ? "Déficit en macro-proyecto (inyección de recursos)" : ($hasExcessContainers ? "Liquidación de inventario alto de contenedores" : "Madurez industrial alcanzada");

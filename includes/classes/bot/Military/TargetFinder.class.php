@@ -28,11 +28,77 @@ class BotTargetFinder
 {
     public static $phalanxScansCount = 0;
     private static $scannedFleetCache = array();
+
+    // Global queries cache across bots within the turn/tick
+    private static $cachedBotIds = null;
+    private static $cachedBotIdsTime = 0;
+    private static $cachedSieges = null;
+    private static $cachedSiegesTime = 0;
+    private static $cachedInFlight = null;
+    private static $cachedInFlightTime = 0;
+
     private $ctx;
 
     public function __construct(BotContext $ctx)
     {
         $this->ctx = $ctx;
+    }
+
+    public static function getAllBotIdsMap(): array
+    {
+        $now = class_exists('BotClock') ? BotClock::now() : time();
+        if (self::$cachedBotIds === null || ($now - self::$cachedBotIdsTime) > 30) {
+            $db = Database::get();
+            $botRows = $db->select("SELECT bot_id FROM " . DB_PREFIX . "bots;");
+            $map = array();
+            if (is_array($botRows)) {
+                foreach ($botRows as $bRow) {
+                    $map[(int)$bRow['bot_id']] = true;
+                }
+            }
+            self::$cachedBotIds = $map;
+            self::$cachedBotIdsTime = $now;
+        }
+        return self::$cachedBotIds;
+    }
+
+    public static function getActiveSiegesList($now): array
+    {
+        if (self::$cachedSieges === null || ($now - self::$cachedSiegesTime) > 15) {
+            $db = Database::get();
+            $lockExpire = $now - 21600;
+            $rows = $db->select("SELECT bot_id, target_galaxy, target_system, target_planet, target_type, target_lock_time 
+                FROM " . DB_PREFIX . "bots 
+                WHERE is_active = 1 
+                  AND target_type = 'siege' 
+                  AND target_lock_time > :lockExpire;", array(
+                ':lockExpire' => $lockExpire
+            ));
+            self::$cachedSieges = is_array($rows) ? $rows : array();
+            self::$cachedSiegesTime = $now;
+        }
+        return self::$cachedSieges;
+    }
+
+    public static function getInFlightAttacksMap($now): array
+    {
+        if (self::$cachedInFlight === null || ($now - self::$cachedInFlightTime) > 15) {
+            $db = Database::get();
+            $rows = $db->select("SELECT fleet_end_galaxy, fleet_end_system, fleet_end_planet, fleet_end_type, COUNT(*) as cnt 
+                FROM %%FLEETS%% 
+                WHERE fleet_mission = 1 AND fleet_mess = 0 
+                GROUP BY fleet_end_galaxy, fleet_end_system, fleet_end_planet, fleet_end_type;");
+            $map = array();
+            if (is_array($rows)) {
+                foreach ($rows as $ifr) {
+                    $key = (int)$ifr['fleet_end_galaxy'] . ':' . (int)$ifr['fleet_end_system'] . ':' . (int)$ifr['fleet_end_planet'] . ':' . (int)$ifr['fleet_end_type'];
+                    $map[$key] = (int)$ifr['cnt'];
+                }
+            }
+            self::$cachedInFlight = $map;
+            self::$cachedInFlightTime = $now;
+        }
+        return self::$cachedInFlight;
     }
 
     /**
@@ -45,6 +111,7 @@ class BotTargetFinder
      */
     public function findTargets($empireOrBase, $maxTargets = 16, $world = null)
     {
+        $db = Database::get();
         global $resource, $reslist, $pricelist, $CombatCaps;
 
         // Total bot empire hourly production in MSE for relative calculations
@@ -137,48 +204,26 @@ class BotTargetFinder
 
         $gameSpeed = FleetFunctions::GetGameSpeedFactor();
 
-        $db = Database::get();
-        $botRows = $db->select("SELECT bot_id FROM " . DB_PREFIX . "bots;");
-        $allBotIds = array();
-        if (is_array($botRows)) {
-            foreach ($botRows as $bRow) {
-                $allBotIds[(int)$bRow['bot_id']] = true;
-            }
-        }
+        $now = class_exists('BotClock') ? BotClock::now() : TIMESTAMP;
+        $allBotIds = self::getAllBotIdsMap();
 
         // Deconflicción: Excluye objetivos con target_type = 'siege' bloqueados por otro bot activo en las últimas 6 horas
-        $otherBotSieges = $db->select("SELECT target_galaxy, target_system, target_planet, target_type, target_lock_time 
-            FROM " . DB_PREFIX . "bots 
-            WHERE bot_id != :selfBotId 
-              AND is_active = 1 
-              AND target_type = 'siege' 
-              AND target_lock_time > :lockExpire;", array(
-            ':selfBotId'  => $this->ctx->botId,
-            ':lockExpire' => (class_exists('BotClock') ? BotClock::now() : TIMESTAMP) - 21600
-        ));
+        $allActiveSieges = self::getActiveSiegesList($now);
         $siegeLockedMap = array();
-        if (is_array($otherBotSieges)) {
-            foreach ($otherBotSieges as $obs) {
+        foreach ($allActiveSieges as $obs) {
+            if ((int)$obs['bot_id'] !== (int)$this->ctx->botId) {
                 $siegeLockedMap[(int)$obs['target_galaxy'] . ':' . (int)$obs['target_system'] . ':' . (int)$obs['target_planet']] = true;
             }
         }
 
         // Monitoreo de flotas atacantes en vuelo (para descuento de botín pow(0.5, inFlightAttacks))
-        $inFlightRows = $db->select("SELECT fleet_end_galaxy, fleet_end_system, fleet_end_planet, fleet_end_type, COUNT(*) as cnt 
-            FROM %%FLEETS%% 
-            WHERE fleet_mission = 1 AND fleet_mess = 0 
-            GROUP BY fleet_end_galaxy, fleet_end_system, fleet_end_planet, fleet_end_type;");
-        $inFlightMap = array();
-        if (is_array($inFlightRows)) {
-            foreach ($inFlightRows as $ifr) {
-                $inFlightMap[(int)$ifr['fleet_end_galaxy'] . ':' . (int)$ifr['fleet_end_system'] . ':' . (int)$ifr['fleet_end_planet'] . ':' . (int)$ifr['fleet_end_type']] = (int)$ifr['cnt'];
-            }
-        }
+        $inFlightMap = self::getInFlightAttacksMap($now);
 
         // Uso Ofensivo de Sensor Phalanx (ID 42)
         $phalanxPriorityTargets = array();
         if (method_exists($this->ctx->difficulty, 'canUseOffensivePhalanx') && $this->ctx->difficulty->canUseOffensivePhalanx()) {
             if ($world !== null && isset($world->empire)) {
+                $db = Database::get();
                 foreach ($world->empire->getAllBodies() as $body) {
                     $bData = isset($body['data']) ? $body['data'] : $body;
                     $bType = (int)($bData['planet_type'] ?? 1);
@@ -301,6 +346,24 @@ class BotTargetFinder
 
             // Skip vacation mode
             if (!empty($p['is_vacation'])) {
+                continue;
+            }
+
+            // Protección de Principiantes (10K puntos) y Regla de Rango Relativo x5
+            $targetOwnerPoints = (float)($p['total_points'] ?? 0);
+            $botPoints = (float)($this->ctx->user['total_points'] ?? 0);
+            $targetUserData = array(
+                'id_owner'     => (int)$p['owner_id'],
+                'total_points' => $targetOwnerPoints,
+                'onlinetime'   => (int)($p['onlinetime'] ?? 0),
+                'banaday'      => 0,
+            );
+            $botUserData = array(
+                'id_owner'     => $this->ctx->botId,
+                'total_points' => $botPoints,
+            );
+            $noobStatus = CheckNoobProtec($botUserData, $targetUserData, $targetUserData);
+            if ($noobStatus['NoobPlayer'] || $noobStatus['StrongPlayer']) {
                 continue;
             }
 

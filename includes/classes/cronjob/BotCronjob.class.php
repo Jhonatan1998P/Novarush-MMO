@@ -12,6 +12,7 @@ class BotCronjob implements CronjobTask
 {
     function run()
     {
-        BotEngine::runAllBots();
+        // Execution delegated exclusively to CLI daemon (bot_daemon.php) to avoid Apache thread blocking
+        return true;
     }
 }

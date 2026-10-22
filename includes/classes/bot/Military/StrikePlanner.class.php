@@ -68,6 +68,10 @@ class BotStrikePlanner
      */
     public function planStrikes(BotWorldModel $world, array $basePlanet, array $targetCandidates)
     {
+        if (defined('BOT_ATTACKS_DISABLED') && BOT_ATTACKS_DISABLED) {
+            return 0;
+        }
+
         global $resource, $reslist, $pricelist, $CombatCaps;
 
         $db = Database::get();
@@ -157,6 +161,21 @@ class BotStrikePlanner
             } elseif (BotTargetBlacklist::isPlayerBlacklisted($this->ctx->botId, (int)$pRow['id_owner'])) {
                 $this->releaseLock("Objetivo en lista negra de 24 horas tras alcanzar límite de victorias por jugador (Anti-Bashing)", "{$lockedGalaxy}:{$lockedSystem}:{$lockedPlanet}");
             } else {
+                // Validación estricta de Protección de Principiantes (10K pts) y Regla de Rango Relativo x5
+                $targetPointsRow = $db->selectSingle("SELECT total_points FROM %%STATPOINTS%% WHERE id_owner = :uid AND stat_type = 1;", array(':uid' => (int)$pRow['id_owner']));
+                $targetPoints = !empty($targetPointsRow) ? (float)$targetPointsRow['total_points'] : 0.0;
+                $botPoints = (float)($this->ctx->user['total_points'] ?? 0);
+                $targetUserData = array('id_owner' => (int)$pRow['id_owner'], 'total_points' => $targetPoints);
+                $botUserData = array('id_owner' => $this->ctx->botId, 'total_points' => $botPoints);
+                $noobCheck = CheckNoobProtec($botUserData, $targetUserData, $targetUserData);
+                if ($noobCheck['NoobPlayer']) {
+                    $this->releaseLock("Objetivo protegido por protección de principiantes o rango x5 (NoobPlayer)", "{$lockedGalaxy}:{$lockedSystem}:{$lockedPlanet}");
+                    return 0;
+                } elseif ($noobCheck['StrongPlayer']) {
+                    $this->releaseLock("Objetivo excede el rango x5 de puntos del bot (StrongPlayer)", "{$lockedGalaxy}:{$lockedSystem}:{$lockedPlanet}");
+                    return 0;
+                }
+
                 // Fetch latest intel synced to difficulty half-life (16.0h on Nightmare)
                 $intelHalfLife = isset($this->ctx->difficulty->intelMaxAgeHours) ? (float)$this->ctx->difficulty->intelMaxAgeHours : 16.0;
                 $intel = $world->intel->getIntel($lockedGalaxy, $lockedSystem, $lockedPlanet, 1, $intelHalfLife);

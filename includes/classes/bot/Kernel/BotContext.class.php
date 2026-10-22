@@ -47,6 +47,10 @@ class BotContext
 
         // Ensure user factor array is loaded
         if (!isset($this->user['factor'])) {
+            global $PLANET;
+            if (!is_array($PLANET)) {
+                $PLANET = array();
+            }
             $this->user['factor'] = getFactors($this->user, 'basic', class_exists('BotClock') ? BotClock::get() : TIMESTAMP);
         }
     }

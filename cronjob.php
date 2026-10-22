@@ -23,6 +23,10 @@ require 'includes/common.php';
 
 $session	= Session::load();
 
+if (session_id() !== '') {
+    @session_write_close();
+}
+
 // Output transparent gif
 HTTP::sendHeader('Cache-Control', 'no-cache');
 HTTP::sendHeader('Content-Type', 'image/gif');

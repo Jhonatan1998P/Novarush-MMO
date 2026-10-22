@@ -95,6 +95,11 @@ class BotKernel
                 $ctx->user = $world->empire->getUser();
             }
 
+            // Seed in-memory planet cache for BotPremiumStrategist
+            if (class_exists('BotPremiumStrategist') && isset($world->empire)) {
+                BotPremiumStrategist::seedPlanetCache($world->empire);
+            }
+
             // 4.1 Incrementally accumulate credits (Phase 1)
             $budgetManager->updateCredits($world->empire);
 
@@ -187,17 +192,27 @@ class BotKernel
                 $baseForOps = !empty($hubBody) ? $hubBody : (!empty($empirePlanets) ? reset($empirePlanets) : null);
 
                 if (!empty($baseForOps)) {
-                    $targetFinder = new BotTargetFinder($ctx);
-                    $targets = $targetFinder->findTargets($world->empire, 16, $world);
+                    $isAttacksDisabled = (defined('BOT_ATTACKS_DISABLED') && BOT_ATTACKS_DISABLED);
 
-                    if (!empty($targets)) {
-                        // Reconnaissance
-                        $intelPolicy = new BotIntelPolicy($ctx, $gateway);
-                        $spied = $intelPolicy->scoutTargets($world, $baseForOps, $targets, 4);
+                    if (!$isAttacksDisabled) {
+                        $targetFinder = new BotTargetFinder($ctx);
+                        $targets = $targetFinder->findTargets($world->empire, 16, $world);
 
-                        // Strikes & Multi-step Sieges
-                        $strikePlanner = new BotStrikePlanner($ctx, $gateway);
-                        $attacked = $strikePlanner->planStrikes($world, $baseForOps, $targets);
+                        if (!empty($targets)) {
+                            // Reconnaissance
+                            $intelPolicy = new BotIntelPolicy($ctx, $gateway);
+                            $spied = $intelPolicy->scoutTargets($world, $baseForOps, $targets, 4);
+
+                            // Strikes & Multi-step Sieges
+                            $strikePlanner = new BotStrikePlanner($ctx, $gateway);
+                            $attacked = $strikePlanner->planStrikes($world, $baseForOps, $targets);
+                        } else {
+                            $attacked = 0;
+                        }
+                    } else {
+                        $targets = array();
+                        $spied = 0;
+                        $attacked = 0;
                     }
 
                     // Debris Recycling (harvests both targets and local empire moonshot/battle debris)
@@ -275,6 +290,10 @@ class BotKernel
         } catch (Exception $e) {
             BotLockManager::releaseBotLock($botId);
             return array('error' => $e->getMessage() . " at " . $e->getFile() . ":" . $e->getLine());
+        } finally {
+            if (class_exists('BotPremiumStrategist')) {
+                BotPremiumStrategist::invalidatePlanetCache();
+            }
         }
     }
 

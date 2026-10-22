@@ -136,6 +136,30 @@ class BotProductionAllocator
             406, 407, 408, 410, 412, 418
         );
 
+        // Huella Militar Única v4.0: Integrar las 9 unidades exclusivas de por vida del bot
+        require_once 'includes/classes/bot/Forces/ForcePlanner.class.php';
+        $fp = new BotForcePlanner($this->ctx, $this->gateway);
+        $fleetDoctrine = $fp->getOrAssignFleetDoctrine();
+        $defDoctrine   = $fp->getOrAssignDefenseDoctrine();
+
+        $botUniqueUnits = array_values(array_filter(array_unique(array(
+            (int)($this->ctx->botRow['doctrine_fodder'] ?? $fleetDoctrine['fodder']),
+            (int)($this->ctx->botRow['doctrine_light'] ?? $fleetDoctrine['light']),
+            (int)($this->ctx->botRow['doctrine_medium'] ?? $fleetDoctrine['medium']),
+            (int)($this->ctx->botRow['doctrine_heavy'] ?? $fleetDoctrine['heavy']),
+            (int)($this->ctx->botRow['doctrine_special'] ?? $fleetDoctrine['special']),
+            (int)($this->ctx->botRow['def_slot1'] ?? $defDoctrine['def_slot1']),
+            (int)($this->ctx->botRow['def_slot2'] ?? $defDoctrine['def_slot2']),
+            (int)($this->ctx->botRow['def_slot3'] ?? $defDoctrine['def_slot3']),
+            (int)($this->ctx->botRow['def_slot4'] ?? $defDoctrine['def_slot4']),
+        ))));
+
+        foreach ($botUniqueUnits as $uId) {
+            if ($uId > 0 && !in_array($uId, $strategicTargets)) {
+                $strategicTargets[] = $uId;
+            }
+        }
+
         $user = $this->ctx->user;
         $planets = $empire->getPlanets();
         $moons = $empire->getMoons();
@@ -209,9 +233,20 @@ class BotProductionAllocator
             }
         };
 
+        $hourlyEmpireMSE = max(1000.0, $empire->getHourlyProductionMSE());
+
         foreach ($strategicTargets as $targetId) {
+            if (($targetId >= 200 && $targetId != 208) || in_array($targetId, array(6, 43, 82, 83, 84), true)) {
+                $unitMSE = BotEconomyValuator::getElementPriceMSE($targetId);
+                if ($unitMSE > ($hourlyEmpireMSE * 4.0)) {
+                    continue;
+                }
+            }
+
             $importance = 1.0;
-            if ($targetId == 208) {
+            if (in_array($targetId, $botUniqueUnits)) {
+                $importance = 1.60;
+            } elseif ($targetId == 208) {
                 $maxPlanets = class_exists('PlayerUtil') ? (int)PlayerUtil::maxPlanetCount($this->ctx->user) : 9;
                 $curPlanets = count($empire->getPlanets());
                 $importance = ($curPlanets < min(9, $maxPlanets)) ? 2.5 : 0.8;
@@ -232,6 +267,165 @@ class BotProductionAllocator
      * @param BotEmpireState $empire
      * @return int Number of building constructions queued
      */
+    /**
+     * Determina si un planeta tiene pendiente algún edificio obligatorio de su Escalón de Infraestructura
+     * según el nivel actual de su Mina de Metal ($lM), incluyendo las Válvulas Anti-Bloqueo:
+     * - Válvula 1 (Requisito tecnológico): Solo evalúa edificios ya accesibles tecnológicamente.
+     * - Válvula 2 (Capacidad de almacén): Si el edificio obligatorio cuesta > 90% del almacén actual, devuelve el Almacén (#22, #23 o #24) primero.
+     * - Válvula 3 (Esfuerzo económico): Si el edificio obligatorio cuesta > 2.5 HP del imperio (y las minas están por debajo de 24), permite subir la mina del recurso deficitario.
+     *
+     * Desde la Etapa 5 (LM >= 20, cuando Gravitón 1 desbloquea #81), exige 1 nivel de Módulo de Recursos (#81)
+     * por cada nivel de Mina de Metal a partir del 16 ($targetMod81 = $lM - 15).
+     */
+    public function getMandatoryMilestoneBuilding(array $pData, $isTopLabPlanet, $isBestLab, $hourlyEmpireMSE)
+    {
+        global $resource;
+
+        $lM = (int)($pData[$resource[1]] ?? 0);
+        $lC = (int)($pData[$resource[2]] ?? 0);
+        $lD = (int)($pData[$resource[3]] ?? 0);
+
+        // Permitir arranque básico minero 4 / 2 / 1 antes de la 1ª parada
+        if ($lM < 4 || $lC < 2 || $lD < 1) {
+            return 0;
+        }
+
+        $curRobots = (int)($pData[$resource[14]] ?? 0);
+        $curNano   = (int)($pData[$resource[15]] ?? 0);
+        $curHangar = (int)($pData[$resource[21]] ?? 0);
+        $curLab    = (int)($pData[$resource[31]] ?? 0);
+        $curMod81  = (int)($pData[$resource[81]] ?? 0);
+        $curSilo   = (int)($pData[$resource[44]] ?? 0);
+        $curStoreM = (int)($pData[$resource[22]] ?? 0);
+        $curStoreC = (int)($pData[$resource[23]] ?? 0);
+        $curStoreD = (int)($pData[$resource[24]] ?? 0);
+
+        $stages = array(
+            // Etapa 1 (LM >= 4): Robots 2, Hangar 1, Lab 1
+            array('min_m' => 4,  'robots' => 2,  'nano' => 0, 'hangar' => 1,  'lab' => ($isTopLabPlanet ? 1 : 0),  'mod81' => 0, 'stores' => 0, 'silo' => 0),
+            // Etapa 2 (LM >= 8): Robots 4, Hangar 4, Lab 4, Almacenes 2
+            array('min_m' => 8,  'robots' => 4,  'nano' => 0, 'hangar' => 4,  'lab' => ($isTopLabPlanet ? 4 : 0),  'mod81' => 0, 'stores' => 2, 'silo' => 0),
+            // Etapa 3 (LM >= 12): Robots 6, Hangar 6, Lab 6, Almacenes 4
+            array('min_m' => 12, 'robots' => 6,  'nano' => 0, 'hangar' => 6,  'lab' => ($isTopLabPlanet ? 6 : 0),  'mod81' => 0, 'stores' => 4, 'silo' => 0),
+            // Etapa 4 (LM >= 16): Robots 10, Hangar 8, Lab 8, Almacenes 6
+            array('min_m' => 16, 'robots' => 10, 'nano' => 0, 'hangar' => 8,  'lab' => ($isTopLabPlanet ? 8 : 0),  'mod81' => 0, 'stores' => 6, 'silo' => 0),
+            // Etapa 5 (LM >= 20): Robots 10, Nano 1, Hangar 10, Lab 10 (12 en BestLab), Módulo Recursos (#81 = LM - 15), Almacenes 7, Silo 2
+            array('min_m' => 20, 'robots' => 10, 'nano' => 1, 'hangar' => 10, 'lab' => ($isBestLab ? 12 : ($isTopLabPlanet ? 10 : 0)), 'mod81' => max(1, $lM - 15), 'stores' => 7, 'silo' => 2),
+            // Etapa 6 (LM >= 24): Robots 10, Nano 2, Hangar 12, Lab 12, Módulo Recursos (#81 = LM - 15), Almacenes 8, Silo 4
+            array('min_m' => 24, 'robots' => 10, 'nano' => 2, 'hangar' => 12, 'lab' => ($isTopLabPlanet ? 12 : 0), 'mod81' => max(1, $lM - 15), 'stores' => 8, 'silo' => 4),
+            // Etapa 7 (LM >= 28): Robots 10, Nano 3, Hangar 14, Lab 14, Módulo Recursos (#81 = LM - 15), Almacenes 9, Silo 4
+            array('min_m' => 28, 'robots' => 10, 'nano' => 3, 'hangar' => 14, 'lab' => ($isTopLabPlanet ? 14 : 0), 'mod81' => max(1, $lM - 15), 'stores' => 9, 'silo' => 4),
+            // Etapa 8 (LM >= 32): Robots 10, Nano 4, Hangar 16, Lab 16, Módulo Recursos (#81 = LM - 15), Almacenes 10, Silo 6
+            array('min_m' => 32, 'robots' => 10, 'nano' => 4, 'hangar' => 16, 'lab' => ($isTopLabPlanet ? 16 : 0), 'mod81' => max(1, $lM - 15), 'stores' => 10, 'silo' => 6),
+        );
+
+        $chosenId = 0;
+
+        foreach ($stages as $st) {
+            if ($lM < $st['min_m']) {
+                break;
+            }
+
+            // 1º Fábrica de Robots (#14)
+            if ($curRobots < $st['robots'] && BuildFunctions::isTechnologieAccessible($this->ctx->user, $pData, 14, array())) {
+                $chosenId = 14;
+                break;
+            }
+            // 2º Fábrica de Nanobots (#15)
+            if ($st['nano'] > 0 && $curNano < $st['nano'] && BuildFunctions::isTechnologieAccessible($this->ctx->user, $pData, 15, array())) {
+                $chosenId = 15;
+                break;
+            }
+            // 3º Astillero / Hangar (#21)
+            if ($curHangar < $st['hangar'] && BuildFunctions::isTechnologieAccessible($this->ctx->user, $pData, 21, array())) {
+                $chosenId = 21;
+                break;
+            }
+            // 4º Laboratorio de Investigación (#31)
+            if ($st['lab'] > 0 && $curLab < $st['lab'] && BuildFunctions::isTechnologieAccessible($this->ctx->user, $pData, 31, array())) {
+                $chosenId = 31;
+                break;
+            }
+            // 5º Módulo de Recursos (#81): desde Etapa 5, 1 nivel por cada nivel de Mina de Metal desde 16 ($lM - 15)
+            if ($st['mod81'] > 0 && $curMod81 < $st['mod81'] && BuildFunctions::isTechnologieAccessible($this->ctx->user, $pData, 81, array())) {
+                $chosenId = 81;
+                break;
+            }
+            // 6º Almacenes (#22, #23, #24)
+            if ($st['stores'] > 0) {
+                if ($curStoreM < $st['stores'] && BuildFunctions::isTechnologieAccessible($this->ctx->user, $pData, 22, array())) {
+                    $chosenId = 22;
+                    break;
+                }
+                if ($curStoreC < $st['stores'] && BuildFunctions::isTechnologieAccessible($this->ctx->user, $pData, 23, array())) {
+                    $chosenId = 23;
+                    break;
+                }
+                if ($curStoreD < $st['stores'] && BuildFunctions::isTechnologieAccessible($this->ctx->user, $pData, 24, array())) {
+                    $chosenId = 24;
+                    break;
+                }
+            }
+            // 7º Silo de Misiles (#44)
+            if ($st['silo'] > 0 && $curSilo < $st['silo'] && BuildFunctions::isTechnologieAccessible($this->ctx->user, $pData, 44, array())) {
+                $chosenId = 44;
+                break;
+            }
+        }
+
+        if ($chosenId <= 0) {
+            return 0;
+        }
+
+        // Válvula Anti-Bloqueo A (Capacidad de Almacenes):
+        // Si el edificio obligatorio cuesta > 90% de la capacidad actual de algún almacén, ampliar primero ese almacén
+        $cost = BuildFunctions::getElementPrice($this->ctx->user, $pData, $chosenId, false);
+        $costM = (float)($cost[901] ?? $cost['metal'] ?? 0.0);
+        $costC = (float)($cost[902] ?? $cost['crystal'] ?? 0.0);
+        $costD = (float)($cost[903] ?? $cost['deuterium'] ?? 0.0);
+
+        $maxM = max(10000.0, (float)($pData['metal_max'] ?? 10000.0));
+        $maxC = max(10000.0, (float)($pData['crystal_max'] ?? 10000.0));
+        $maxD = max(10000.0, (float)($pData['deuterium_max'] ?? 10000.0));
+
+        if ($costM > 0.90 * $maxM && BuildFunctions::isTechnologieAccessible($this->ctx->user, $pData, 22, array())) {
+            return 22;
+        }
+        if ($costC > 0.90 * $maxC && BuildFunctions::isTechnologieAccessible($this->ctx->user, $pData, 23, array())) {
+            return 23;
+        }
+        if ($costD > 0.90 * $maxD && BuildFunctions::isTechnologieAccessible($this->ctx->user, $pData, 24, array())) {
+            return 24;
+        }
+
+        // Válvula Anti-Bloqueo B (Esfuerzo Económico > 2.5 horas):
+        // Si el edificio obligatorio aún no puede pagarse y su coste total supera 2.5 horas de producción del imperio,
+        // permitir subir 1 nivel de la mina del recurso que más falta para acelerar la economía y no congelar el planeta.
+        $availM = (float)($pData['metal'] ?? 0.0);
+        $availC = (float)($pData['crystal'] ?? 0.0);
+        $availD = max(0.0, (float)($pData['deuterium'] ?? 0.0) - 25000.0);
+
+        $canAffordNow = ($availM >= $costM && $availC >= $costC && $availD >= $costD);
+        if (!$canAffordNow) {
+            $costMSE = BotEconomyValuator::arrayToMSE($cost);
+            $costHP  = BotEconomyValuator::toHP($costMSE, max(1000.0, $hourlyEmpireMSE));
+            if ($costHP > 2.5) {
+                $defM_MSE = max(0.0, $costM - $availM) * 1.0;
+                $defC_MSE = max(0.0, $costC - $availC) * 2.0;
+                $defD_MSE = max(0.0, $costD - $availD) * 4.0;
+                if ($defC_MSE >= $defM_MSE && $defC_MSE >= $defD_MSE) {
+                    return 2; // Subir Mina de Cristal para cubrir déficit
+                } elseif ($defD_MSE >= $defM_MSE && $defD_MSE >= $defC_MSE) {
+                    return 3; // Subir Sintetizador de Deuterio para cubrir déficit
+                } else {
+                    return 1; // Subir Mina de Metal para cubrir déficit
+                }
+            }
+        }
+
+        return $chosenId;
+    }
+
     public function allocate(BotEmpireState $empire)
     {
         global $resource, $pricelist;
@@ -272,6 +466,8 @@ class BotProductionAllocator
         if (!is_array($planets) || empty($planets)) {
             return 0;
         }
+
+
 
         $hourlyEmpireMSE = $empire->getHourlyProductionMSE();
         $persMults = $this->getPersonalityMultipliers();
@@ -357,12 +553,14 @@ class BotProductionAllocator
                 if (file_exists('includes/classes/bot/BotNameHelper.class.php')) {
                     require_once 'includes/classes/bot/BotNameHelper.class.php';
                     $newPlanetName = BotNameHelper::getRandomPlanetName();
-                    Database::get()->update("UPDATE %%PLANETS%% SET name = :name WHERE id = :id;", array(
-                        ':name' => $newPlanetName,
-                        ':id'   => $pId,
-                    ));
-                    $planetEntry['data']['name'] = $newPlanetName;
-                    $pData['name'] = $newPlanetName;
+                    if ($pData['name'] !== $newPlanetName) {
+                        Database::get()->update("UPDATE %%PLANETS%% SET name = :name WHERE id = :id;", array(
+                            ':name' => $newPlanetName,
+                            ':id'   => $pId,
+                        ));
+                        $planetEntry['data']['name'] = $newPlanetName;
+                        $pData['name'] = $newPlanetName;
+                    }
                 }
             }
 
@@ -434,11 +632,11 @@ class BotProductionAllocator
                         if ($pId === $gravitonHubPlanetId) {
                             $neededSatCost = array(901 => 0.0, 902 => (float)($satsToQueue * 2000), 903 => (float)($satsToQueue * 500));
                             if (isset($this->ctx->budgetManager)) {
-                                $this->ctx->budgetManager->tryInternalBucketSwap($pId, 'fleet', $neededSatCost);
+                                $this->ctx->budgetManager->tryInternalBucketSwap($pId, 'mines', $neededSatCost);
                             }
                             if (file_exists('includes/classes/bot/Forces/BotPremiumStrategist.class.php')) {
                                 require_once 'includes/classes/bot/Forces/BotPremiumStrategist.class.php';
-                                BotPremiumStrategist::tryTraderForCategory($this->ctx, $pId, 'fleet', $neededSatCost);
+                                BotPremiumStrategist::tryTraderForCategory($this->ctx, $pId, 'mines', $neededSatCost);
                             }
                             $freshRow = Database::get()->selectSingle("SELECT * FROM %%PLANETS%% WHERE id = :pid;", array(':pid' => $pId));
                             if (!empty($freshRow)) {
@@ -482,8 +680,36 @@ class BotProductionAllocator
             $curMilMod = (int)($pData[$resource[83]] ?? 0);
 
             // --- 2. Resolution of 0-Field Circular Deadlocks & Military Infrastructure Guard ---
-            if ($freeFields <= 2 && ($curHangar < 8 || $curRobots < 8)) {
-                // Liberar campos desmantelando almacén o planta solar (si tiene fusión) para forzar hangar y robots
+            if ($freeFields <= 0) {
+                if ($terraStorageConstrained) {
+                    $buildIds = array(33, 23, 24);
+                } else {
+                    $buildIds = array(33);
+                }
+
+                $isAccessible = BuildFunctions::isTechnologieAccessible($this->ctx->user, $pData, 33, array());
+                $canHoldCost = ($maxC >= $costC && $maxD >= $costD);
+
+                if (!$isAccessible || !$canHoldCost) {
+                    $solarLvl = (int)($pData[$resource[4]] ?? 0);
+                    if ($solarLvl > 0 && ($energy > 500000.0 || ($energy - $energyUsed) > 500000.0)) {
+                        $dismantled = $this->gateway->dismantleBuilding($pId, 4, 'Resolución de bloqueo circular: liberar 1 campo para almacenes/terraformer');
+                        if ($dismantled) {
+                            $this->ctx->decisionLog->record(
+                                'mine_dismantle',
+                                "Dismantled 1 level of Solar Plant #4 on planet #{$pId} to break 0-field deadlock",
+                                array('planet_id' => $pId, 'energy' => $energy),
+                                "dismantle_4_planet_{$pId}",
+                                25000.0
+                            );
+                            $freeFields = 1;
+                        }
+                    }
+                    if ($freeFields <= 0 && !$terraStorageConstrained) {
+                        continue;
+                    }
+                }
+            } elseif ($freeFields <= 2 && ($curHangar < 8 || $curRobots < 8)) {
                 $dismantleTarget = 0;
                 if ((int)($pData[$resource[22]] ?? 0) > 1) {
                     $dismantleTarget = 22;
@@ -508,41 +734,26 @@ class BotProductionAllocator
                         $freeFields++;
                     }
                 }
-                $buildIds = array(21, 33, 14);
-            } elseif ($freeFields <= 0) {
-                if ($terraStorageConstrained) {
-                    $buildIds = array(33, 23, 24);
-                } else {
-                    $buildIds = array(33);
-                }
-
-                $isAccessible = BuildFunctions::isTechnologieAccessible($this->ctx->user, $pData, 33, array());
-                $canHoldCost = ($maxC >= $costC && $maxD >= $costD);
-
-                if (!$isAccessible || !$canHoldCost) {
-                    // Deadlock: Terraformer blocked by tech or storage, but fields = 0.
-                    // If colony has massive energy surplus, dismantle 1 level of Solar Plant (#4) to free 1 field!
-                    $solarLvl = (int)($pData[$resource[4]] ?? 0);
-                    if ($solarLvl > 0 && ($energy > 500000.0 || ($energy - $energyUsed) > 500000.0)) {
-                        $dismantled = $this->gateway->dismantleBuilding($pId, 4, 'Resolución de bloqueo circular: liberar 1 campo para almacenes/terraformer');
-                        if ($dismantled) {
-                            $this->ctx->decisionLog->record(
-                                'mine_dismantle',
-                                "Dismantled 1 level of Solar Plant #4 on planet #{$pId} to break 0-field deadlock",
-                                array('planet_id' => $pId, 'energy' => $energy),
-                                "dismantle_4_planet_{$pId}",
-                                25000.0
-                            );
-                            $freeFields = 1;
-                        }
-                    }
-                    if ($freeFields <= 0 && !$terraStorageConstrained) {
-                        continue;
-                    }
-                }
+                $buildIds = array(21, 33, 14, 23, 24);
             } elseif ($freeFields <= 18 && ((string)($pData['planet_type'] ?? '1') === '1')) {
-                // Whitelist estricta: solo #81 y el 2º módulo de la personalidad (para aggressive: #83)
-                $buildIds = array(33, 14, 15, 21, 22, 23, 24, 31, 81, $m2);
+                // Whitelist en últimos 18 campos: mantiene Minas (1, 2, 3), Energía (4, 12), infraestructura esencial y solo #81 + 2º módulo ($m2)
+                $buildIds = array(1, 2, 3, 4, 12, 33, 14, 15, 21, 22, 23, 24, 31, 81, $m2);
+            }
+
+            $lvlMetalMine = (int)($pData[$resource[1]] ?? 0);
+            $lvlCryMine   = (int)($pData[$resource[2]] ?? 0);
+            $lvlDeutMine  = (int)($pData[$resource[3]] ?? 0);
+            $metalMineNextCost = BuildFunctions::getElementPrice($this->ctx->user, $pData, 1, false);
+            $metalMineNextCostMSE = max(100.0, BotEconomyValuator::arrayToMSE($metalMineNextCost));
+            $fobPlanetId = isset($this->ctx->botRow['fob_planet_id']) ? (int)$this->ctx->botRow['fob_planet_id'] : (int)($this->ctx->botRow['home_planet_id'] ?? 0);
+            $isPrimaryMilitaryPlanet = ($pId === $fobPlanetId || $pId === (int)($this->ctx->botRow['home_planet_id'] ?? 0));
+
+            $mandatoryBuildingId = 0;
+            if ($energyNet >= 0.0 && $freeFields > 2) {
+                $mandatoryBuildingId = $this->getMandatoryMilestoneBuilding($pData, $isTopLabPlanet, $isBestLab, $hourlyEmpireMSE);
+                if ($mandatoryBuildingId > 0) {
+                    $buildIds = array($mandatoryBuildingId);
+                }
             }
 
             foreach ($buildIds as $mId) {
@@ -633,11 +844,7 @@ class BotProductionAllocator
                 // Liquidity reconciliation via internal bucket swap
                 if ($canAffordPhysical && !$canAffordBudget && isset($this->ctx->budgetManager)) {
                     $canAffordBudget = $this->ctx->budgetManager->tryInternalBucketSwap($pId, 'mines', $cost);
-                    // Pro-Player Liquidity Guarantee: If physical stock is present on planet surface,
-                    // do not choke high-priority mine/module expansion due to bucket delay:
-                    if (!$canAffordBudget && $canAffordPhysical) {
-                        $canAffordBudget = true;
-                    }
+
                 }
 
                 $canAfford = $canAffordPhysical && $canAffordBudget;
@@ -743,7 +950,25 @@ class BotProductionAllocator
                     $deltaMSE = BotEconomyValuator::toMSE($deltaM, $deltaC, $deltaD);
                     $buildTimeSec = BuildFunctions::getBuildingTime($this->ctx->user, $pData, $mId, $cost);
                     $timeFactor = 1.0 / (1.0 + log10(max(1.0, $buildTimeSec / 60.0)));
-                    $paybackScore = ($deltaMSE / max(1.0, $costMSE)) * 15000.0 * $timeFactor;
+                    $normDeltaMSE = $deltaMSE / max(1.0, $resMult);
+                    $paybackScore = ($normDeltaMSE / max(1.0, $costMSE)) * 120000.0 * $timeFactor;
+
+                    if ($mId == 2) {
+                        $idealCry = max(1, $lvlMetalMine - 2);
+                        if ($curLevel < $idealCry) {
+                            $paybackScore *= (1.0 + min(1.5, ($idealCry - $curLevel) * 0.35));
+                        }
+                    } elseif ($mId == 3) {
+                        $deutOffset = (strpos($personality, 'aggress') !== false || strpos($personality, 'raid') !== false) ? 2 : 4;
+                        $idealDeut = max(1, $lvlMetalMine - $deutOffset);
+                        if ($curLevel < $idealDeut) {
+                            $paybackScore *= (1.0 + min(1.5, ($idealDeut - $curLevel) * 0.35));
+                        }
+                    } elseif ($mId == 1) {
+                        if ($curLevel > ($lvlCryMine + 4) || $curLevel > ($lvlDeutMine + 6)) {
+                            $paybackScore *= 0.50;
+                        }
+                    }
 
                     // Inter-Colony Catch-Up Multiplier (1.5x to 2.5x)
                     if (isset($mineAverages[$mId]) && $curLevel <= ($mineAverages[$mId] - 3)) {
@@ -759,124 +984,174 @@ class BotProductionAllocator
                     }
                 }
 
-                // --- D. Special Modules (82, 83) & Shipyard (21) proportional to hangar load & mines ---
-                if ($mId == 21 || $mId == 82 || $mId == 83) {
-                    $hangarCount = !empty($planetEntry['hangar_queue']) ? count($planetEntry['hangar_queue']) : 0;
-                    $mineSum = (int)($pData[$resource[1]] ?? 0) + (int)($pData[$resource[2]] ?? 0) + (int)($pData[$resource[3]] ?? 0);
-                    $baseScore += min(4500.0, ($hangarCount * 500.0) + ($mineSum * 15.0));
-
-                    // Direct boost to ensure early Hangar across all colonies
-                    if ($mId == 21) {
-                        if ((int)($pData[$resource[1]] ?? 0) >= 18 && $curLevel < 8) {
-                            $baseScore += 45000.0;
-                        } elseif ((int)($pData[$resource[1]] ?? 0) >= 28 && $curLevel < 12) {
-                            $baseScore += 8000.0;
-                        }
-                    }
-
-                    if ($mId == 82) {
-                        $baseScore += 800.0 * ($macro['defense'] / 0.15);
-                    } elseif ($mId == 83) {
-                        $baseScore += 900.0 * ($macro['fleet'] / 0.30);
-                    }
-                }
-
-                // --- E. Missile Silo (44) ---
-                if ($mId == 44) {
-                    if ($curLevel < 4) {
-                        $baseScore += 1500.0;
+                                // --- D. Astillero (21) y Módulos Especiales (82, 83) con Techo Relativo a Minas ---
+                if ($mId == 21) {
+                    if ($lvlMetalMine < 10) {
+                        $hangarCap = $isPrimaryMilitaryPlanet ? 4 : 2;
+                    } elseif ($lvlMetalMine < 16) {
+                        $hangarCap = 6;
+                    } elseif ($lvlMetalMine < 20) {
+                        $hangarCap = 8;
+                    } elseif ($lvlMetalMine < 26) {
+                        $hangarCap = 10;
                     } else {
-                        $baseScore += 350.0;
+                        $hangarCap = min(18, 12 + (int)floor(($lvlMetalMine - 26) / 3));
+                    }
+                    if ($mId !== $mandatoryBuildingId) {
+                        if ($curLevel >= $hangarCap) {
+                            continue;
+                        }
+                        if ($curLevel >= 8 && $costMSE > ($metalMineNextCostMSE * 1.50)) {
+                            continue;
+                        }
+                    }
+                    if ($lvlMetalMine >= 18 && $curLevel < 8) {
+                        $baseScore += 18000.0;
+                    } elseif ($lvlMetalMine >= 26 && $curLevel < 12 && $costHP <= 1.5) {
+                        $baseScore += 6000.0;
+                    } else {
+                        $baseScore += 1200.0 / max(0.2, $costHP);
                     }
                 }
 
-                // --- F. Accelerators without rigid ceilings (14, 15, 31, 6, 84) ---
-                // Nanite (15) and Robotics (14)
-                if ($mId == 14 || $mId == 15) {
-                    $mineSum = (int)($pData[$resource[1]] ?? 0) + (int)($pData[$resource[2]] ?? 0) + (int)($pData[$resource[3]] ?? 0);
-                    if ($mId == 14) {
-                        if ($curLevel < 10) {
-                            // Impulsar Fábrica de Robots hasta Nivel 10 para desbloquear Nanobots
-                            if ((int)($pData[$resource[1]] ?? 0) >= 18) {
-                                $baseScore += 35000.0;
-                            } elseif ($curLevel < 5 || $mineSum >= 15 || $costHP <= 3.0) {
-                                $baseScore += 9000.0;
-                            } else {
-                                $baseScore += 5000.0;
+                if ($mId == 82 || $mId == 83) {
+                    if ($mId !== $mandatoryBuildingId) {
+                        if ($lvlMetalMine < 20 || $costMSE > ($metalMineNextCostMSE * 1.0) || $costHP > 1.5) {
+                            continue;
+                        }
+                    }
+                    if ($mId == 82) {
+                        $baseScore += 900.0 * ($macro['defense'] / 0.15) / max(0.2, $costHP);
+                    } else {
+                        $baseScore += 1000.0 * ($macro['fleet'] / 0.30) / max(0.2, $costHP);
+                    }
+                }
+
+                // --- E. Silo de Misiles (44) con Tope Estricto ---
+                if ($mId == 44) {
+                    if ($mId !== $mandatoryBuildingId) {
+                        if ($lvlMetalMine < 20) {
+                            continue;
+                        }
+                        $siloCap = (strpos($personality, 'eco') !== false || strpos($personality, 'min') !== false)
+                            ? 4
+                            : min(10, max(2, (int)floor(($lvlMetalMine - 16) / 3)));
+                        if ($curLevel >= $siloCap || $costMSE > ($metalMineNextCostMSE * 0.60)) {
+                            continue;
+                        }
+                    }
+                    $baseScore += ($curLevel < 4) ? 1200.0 : 400.0;
+                }
+
+                // --- F. Aceleradores (14, 15, 31, 6, 84) Gobernados por Nivel de Minas y Coste ---
+                if ($mId == 14) {
+                    $robotsCap = min(10, (int)floor($lvlMetalMine / 2) + 2);
+                    $curNano = (int)($pData[$resource[15]] ?? 0);
+                    if ($mId !== $mandatoryBuildingId) {
+                        if ($curLevel >= 10) {
+                            if ($lvlMetalMine < 32 || $curNano < 4 || $costMSE > ($metalMineNextCostMSE * 0.50)) {
+                                continue;
                             }
-                        } else {
-                            $baseScore += 1500.0;
+                        } elseif ($curLevel >= $robotsCap && $costMSE > ($metalMineNextCostMSE * 0.80)) {
+                            continue;
                         }
-                    } elseif ($mId == 15) {
-                        // Nanobots (#15) - Reducción radical del 50% por nivel en tiempos de obra y astillero
-                        if ((int)($pData[$resource[1]] ?? 0) >= 18 && $curLevel < 2) {
-                            $baseScore += 40000.0;
-                        } elseif ((int)($pData[$resource[1]] ?? 0) >= 28 && $curLevel < 5) {
-                            $baseScore += 12000.0;
-                        } elseif ($curLevel < 1) {
-                            $baseScore += 35000.0; // Prioridad suprema: Nanobots Nivel 1
-                        } elseif ($curLevel < 2) {
-                            $baseScore += 22000.0; // Nanobots Nivel 2
-                        } elseif ($curLevel < 4 && $costHP <= 6.0) {
-                            $baseScore += 12000.0;
-                        } else {
-                            $baseScore += 5000.0;
+                    }
+                    if ($curLevel < 10 && $lvlMetalMine >= 18) {
+                        $baseScore += 20000.0;
+                    } elseif ($curLevel < $robotsCap) {
+                        $baseScore += 4500.0 / max(0.2, $costHP);
+                    }
+                } elseif ($mId == 15) {
+                    $nanoCap = max(1, (int)floor(($lvlMetalMine - 16) / 4));
+                    if ($mId !== $mandatoryBuildingId) {
+                        if ($lvlMetalMine < 18) {
+                            continue;
                         }
+                        if ($curLevel >= $nanoCap && $costMSE > ($metalMineNextCostMSE * 1.25)) {
+                            continue;
+                        }
+                        if ($curLevel >= 1 && $costHP > 2.5) {
+                            continue;
+                        }
+                    }
+                    if ($curLevel < 1) {
+                        $baseScore += 28000.0;
+                    } elseif ($curLevel < $nanoCap && $costMSE <= ($metalMineNextCostMSE * 1.50)) {
+                        $baseScore += 14000.0 / max(0.3, $costHP);
+                    } else {
+                        $baseScore += 2000.0 / max(0.5, $costHP);
                     }
                 }
 
-                // Lab (31), Research Module (84), and University (6) on top lab planets (IRN connected)
+                // Laboratorio (31), Universidad (6) y Módulo Investigación (84)
                 if ($mId == 31 || $mId == 6 || $mId == 84) {
-                    if ($isTopLabPlanet && $costHP <= 8.0) {
-                        if ($mId == 6) {
-                            $baseScore += 8500.0; // University gives -8% research time, +50 TechSpeed!
-                        } elseif ($mId == 84) {
-                            $baseScore += 4500.0;
-                        } else {
-                            $baseScore += 3500.0;
+                    if ($mId !== $mandatoryBuildingId && !$isTopLabPlanet) {
+                        continue; // Prohibido malgastar campos y recursos en laboratorios fuera de la red IRN
+                    }
+                    if ($mId == 31) {
+                        $labCap = $isBestLab ? ($lvlMetalMine + 1) : ((int)floor($lvlMetalMine * 0.70) + 2);
+                        if ($mId !== $mandatoryBuildingId && ($curLevel >= $labCap || $costHP > 2.0)) {
+                            continue;
                         }
+                        if ($costMSE <= ($metalMineNextCostMSE * 1.25)) {
+                            $baseScore += 3500.0 / max(0.2, $costHP);
+                        } else {
+                            $baseScore += 1200.0 / max(0.5, $costHP);
+                        }
+                    } elseif ($mId == 6 || $mId == 84) {
+                        if ($mId !== $mandatoryBuildingId && ($lvlMetalMine < 24 || $costMSE > ($metalMineNextCostMSE * 1.20) || $costHP > 1.5)) {
+                            continue;
+                        }
+                        $baseScore += ($mId == 6 ? 4000.0 : 2500.0) / max(0.3, $costHP);
                     }
                 }
 
-                // --- G. Storage Capacity Check (22, 23, 24) ---
-                if ($pId === $bestLabPlanetId && in_array($mId, array(22, 23, 24))) {
-                    $activeLock = (isset($this->ctx->budgetManager)) ? $this->ctx->budgetManager->getSavingsLock() : null;
+                // --- G. Almacenes (22, 23, 24): Solo por Necesidad Real (>=90% Lleno o Bloqueo de Coste) ---
+                if (in_array($mId, array(22, 23, 24))) {
+                    $maxM = max(1.0, (float)($pData['metal_max'] ?? 10000.0));
+                    $maxC = max(1.0, (float)($pData['crystal_max'] ?? 10000.0));
+                    $maxD = max(1.0, (float)($pData['deuterium_max'] ?? 10000.0));
+
+                    $cryMineNextCost  = BuildFunctions::getElementPrice($this->ctx->user, $pData, 2, false);
+                    $deutMineNextCost = BuildFunctions::getElementPrice($this->ctx->user, $pData, 3, false);
+                    $mod81NextCost    = BuildFunctions::getElementPrice($this->ctx->user, $pData, 81, false);
+
+                    $reqCapM = max((float)($metalMineNextCost[901] ?? 0.0), (float)($cryMineNextCost[901] ?? 0.0), (float)($deutMineNextCost[901] ?? 0.0), (float)($mod81NextCost[901] ?? 0.0));
+                    $reqCapC = max((float)($metalMineNextCost[902] ?? 0.0), (float)($cryMineNextCost[902] ?? 0.0), (float)($deutMineNextCost[902] ?? 0.0), (float)($mod81NextCost[902] ?? 0.0));
+                    $reqCapD = max((float)($deutMineNextCost[903] ?? 0.0), (float)($mod81NextCost[903] ?? 0.0));
+
                     $labStorageConstrained = false;
-                    if (!empty($activeLock) && ($activeLock['category'] ?? '') === 'research') {
-                        $lockCost = $activeLock['cost'] ?? array();
-                        $lockM = (float)($lockCost[901] ?? $lockCost['metal'] ?? 0);
-                        $lockC = (float)($lockCost[902] ?? $lockCost['crystal'] ?? 0);
-                        $lockD = (float)($lockCost[903] ?? $lockCost['deuterium'] ?? 0);
-                        $maxM = (float)($pData['metal_max'] ?? 0);
-                        $maxC = (float)($pData['crystal_max'] ?? 0);
-                        $maxD = (float)($pData['deuterium_max'] ?? 0);
-                        if (($mId == 22 && $lockM > 0.8 * $maxM) ||
-                            ($mId == 23 && $lockC > 0.8 * $maxC) ||
-                            ($mId == 24 && $lockD > 0.8 * $maxD)) {
-                            $labStorageConstrained = true;
+                    if ($pId === $bestLabPlanetId) {
+                        $activeLock = (isset($this->ctx->budgetManager)) ? $this->ctx->budgetManager->getSavingsLock() : null;
+                        if (!empty($activeLock) && ($activeLock['category'] ?? '') === 'research') {
+                            $lockCost = $activeLock['cost'] ?? array();
+                            if (($mId == 22 && (float)($lockCost[901] ?? 0) > 0.85 * $maxM) ||
+                                ($mId == 23 && (float)($lockCost[902] ?? 0) > 0.85 * $maxC) ||
+                                ($mId == 24 && (float)($lockCost[903] ?? 0) > 0.85 * $maxD)) {
+                                $labStorageConstrained = true;
+                            }
                         }
                     }
+
                     if ($labStorageConstrained) {
                         $baseScore += 65000.0;
-                    }
-                }
-
-                if ($freeFields <= 6 && $terraStorageConstrained && ($mId == 23 || $mId == 24)) {
-                    // Prioridad crítica (32000.0) a #23 y #24 antes de agotar campos en Terraformer
-                    if ($mId == 23 && ($costC > 0.85 * $maxC || $costC2 > 0.85 * $maxC)) {
-                        $baseScore = 32000.0;
-                    } elseif ($mId == 24 && ($costD > 0.85 * $maxD || $costD2 > 0.85 * $maxD)) {
+                    } elseif ($freeFields <= 6 && $terraStorageConstrained && ($mId == 23 || $mId == 24)) {
                         $baseScore = 32000.0;
                     } else {
-                        $baseScore = 28000.0;
-                    }
-                } elseif ($freeFields > 1) {
-                    if ($mId == 22 && isset($pData['metal_max']) && $pData['metal'] > (0.75 * $pData['metal_max'])) {
-                        $baseScore += 2500.0;
-                    } elseif ($mId == 23 && isset($pData['crystal_max']) && $pData['crystal'] > (0.75 * $pData['crystal_max'])) {
-                        $baseScore += 2500.0;
-                    } elseif ($mId == 24 && isset($pData['deuterium_max']) && $pData['deuterium'] > (0.75 * $pData['deuterium_max'])) {
-                        $baseScore += 2500.0;
+                        $needsStore = false;
+                        if ($mId == 22 && ((float)$pData['metal'] >= 0.90 * $maxM || $reqCapM >= 0.90 * $maxM)) {
+                            $needsStore = true;
+                        } elseif ($mId == 23 && ((float)$pData['crystal'] >= 0.90 * $maxC || $reqCapC >= 0.90 * $maxC)) {
+                            $needsStore = true;
+                        } elseif ($mId == 24 && ((float)$pData['deuterium'] >= 0.90 * $maxD || $reqCapD >= 0.90 * $maxD)) {
+                            $needsStore = true;
+                        }
+                        if ($mId !== $mandatoryBuildingId) {
+                            if (!$needsStore || $freeFields <= 1) {
+                                continue;
+                            }
+                        }
+                        $baseScore += 9500.0;
                     }
                 }
 
@@ -901,8 +1176,9 @@ class BotProductionAllocator
                         $metLvl = (int)($pData[$resource[1]] ?? 0);
                         $cryLvl = (int)($pData[$resource[2]] ?? 0);
                         $deuLvl = (int)($pData[$resource[3]] ?? 0);
-                        // Piso mínimo sostenible de minas (M>=10, C>=8, D>=6)
-                        if ($metLvl >= 10 && $cryLvl >= 8 && $deuLvl >= 6) {
+                        // Piso mínimo sostenible de minas (M>=10, C>=8, D>=6) o recursos físicos abundantes
+                        $hasAmpleResources = ($availPhysM >= 20000.0 && $availPhysC >= 10000.0);
+                        if (($metLvl >= 10 && $cryLvl >= 8 && $deuLvl >= 6) || $hasAmpleResources) {
                             $curRobots = (int)($pData[$resource[14]] ?? 0);
                             $curHangar = (int)($pData[$resource[21]] ?? 0);
                             $curLab    = (int)($pData[$resource[31]] ?? 0);
@@ -920,8 +1196,18 @@ class BotProductionAllocator
                 }
 
                 // Apply Backward-Chaining Prerequisite Unlock Boost
-                if (isset($unlockBoosts[$mId])) {
-                    $baseScore += $unlockBoosts[$mId];
+                if (isset($unlockBoosts[$mId]) && $costHP <= 3.0) {
+                    if (in_array($mId, array(31, 6, 84))) {
+                        if ($isBestLab) {
+                            $baseScore += $unlockBoosts[$mId];
+                        }
+                    } elseif (in_array($mId, array(21, 44, 82, 83))) {
+                        if ($isPrimaryMilitaryPlanet) {
+                            $baseScore += $unlockBoosts[$mId];
+                        }
+                    } else {
+                        $baseScore += $unlockBoosts[$mId];
+                    }
                 }
 
                 // Multiplicadores de Jerarquía de Módulos por Personalidad
@@ -957,6 +1243,10 @@ class BotProductionAllocator
                             $baseScore *= 1.30;
                         }
                     }
+                }
+
+                if ($mandatoryBuildingId > 0 && $mId === $mandatoryBuildingId) {
+                    $baseScore = max($baseScore, 95000.0);
                 }
 
                 // Apply Personality Multiplier
@@ -1133,12 +1423,14 @@ class BotProductionAllocator
                 if (file_exists('includes/classes/bot/BotNameHelper.class.php')) {
                     require_once 'includes/classes/bot/BotNameHelper.class.php';
                     $newMoonName = BotNameHelper::getRandomMoonName();
-                    Database::get()->update("UPDATE %%PLANETS%% SET name = :name WHERE id = :id;", array(
-                        ':name' => $newMoonName,
-                        ':id'   => $mId,
-                    ));
-                    $moonEntry['data']['name'] = $newMoonName;
-                    $mData['name'] = $newMoonName;
+                    if ($mData['name'] !== $newMoonName) {
+                        Database::get()->update("UPDATE %%PLANETS%% SET name = :name WHERE id = :id;", array(
+                            ':name' => $newMoonName,
+                            ':id'   => $mId,
+                        ));
+                        $moonEntry['data']['name'] = $newMoonName;
+                        $mData['name'] = $newMoonName;
+                    }
                 }
             }
 
@@ -1415,6 +1707,8 @@ class BotProductionAllocator
             return 0;
         }
 
+
+
         $minFreeFieldsEmpire = 999;
         $hasFusion = false;
         $advancedLabs = 0;
@@ -1623,48 +1917,58 @@ class BotProductionAllocator
             $gravitonHubPlanetId = (int)$firstLab['planet_id'];
         }
 
-        // Rebalanceo Simétrico Anti-Estancamiento de 3 Recursos en colonias (excedente >= 100M MSE representando >65% stock local)
-        foreach ($planets as $colId => $colEntry) {
-            $colData = $colEntry['data'];
-            $colM = (float)($colData['metal'] ?? 0.0);
-            $colC = (float)($colData['crystal'] ?? 0.0);
-            $colD = max(0.0, (float)($colData['deuterium'] ?? 0.0) - 15000000.0); // Reserva de 15M fuel
-            $colTotMSE = $colM + (2.0 * $colC) + (4.0 * $colD);
+        
 
-            if ($colTotMSE >= 100000000.0 && file_exists('includes/classes/bot/Forces/BotPremiumStrategist.class.php')) {
-                require_once 'includes/classes/bot/Forces/BotPremiumStrategist.class.php';
-                $domKey = null;
-                if (($colM / $colTotMSE) > 0.65 && $colM >= 100000000.0) $domKey = 'metal';
-                elseif (((2.0 * $colC) / $colTotMSE) > 0.65 && (2.0 * $colC) >= 100000000.0) $domKey = 'crystal';
-                elseif (((4.0 * $colD) / $colTotMSE) > 0.65 && (4.0 * $colD) >= 100000000.0) $domKey = 'deuterium';
-
-                if ($domKey !== null) {
-                    $colCost = array();
-                    if ($domKey === 'metal') {
-                        $colCost = array(
-                            901 => $colM * 0.40,
-                            902 => ($colM * 0.30) / 2.0,
-                            903 => ($colM * 0.30) / 4.0,
-                        );
-                    } elseif ($domKey === 'crystal') {
-                        $colCost = array(
-                            901 => ($colC * 0.30) * 2.0,
-                            902 => $colC * 0.40,
-                            903 => ($colC * 0.30) / 2.0,
-                        );
-                    } elseif ($domKey === 'deuterium') {
-                        $colCost = array(
-                            901 => ($colD * 0.30) * 4.0,
-                            902 => ($colD * 0.30) * 2.0,
-                            903 => $colD * 0.40,
-                        );
-                    }
-                    BotPremiumStrategist::tryTraderForCategory($this->ctx, (int)$colId, 'mines', $colCost);
-                }
-            }
+        $mineAverages = array(1 => 0.0);
+        foreach ($planets as $pE) {
+            $mineAverages[1] += (float)($pE['data'][$resource[1]] ?? 0);
         }
+        $mineAverages[1] /= max(1, count($planets));
 
         $maxGravitonLvl = 7;
+
+        $techMilestones = array(
+            // Hito 1: Energía e Informática básicas (desbloquean Almacenes #22, #23, #24 y motores iniciales)
+            array('tech' => 113, 'lvl' => 2),
+            array('tech' => 108, 'lvl' => 3),
+            array('tech' => 113, 'lvl' => 3),
+            array('tech' => 115, 'lvl' => 2),
+            // Hito 2: Espionaje, Impulso y Astrofísica (1ª Colonia y Expediciones)
+            array('tech' => 106, 'lvl' => 4),
+            array('tech' => 117, 'lvl' => 4),
+            array('tech' => 124, 'lvl' => 2),
+            // Hito 3: Colonizador (#208) y Reciclador (#209)
+            array('tech' => 111, 'lvl' => 4),
+            array('tech' => 109, 'lvl' => 2),
+            array('tech' => 110, 'lvl' => 4),
+            array('tech' => 108, 'lvl' => 6),
+            array('tech' => 124, 'lvl' => 4),
+            // Hito 4: Informática 10 (DESBLOQUEA NANOBOTS #15) y Procesamiento (#131-#133)
+            array('tech' => 108, 'lvl' => 10),
+            array('tech' => 113, 'lvl' => 8),
+            array('tech' => 131, 'lvl' => 4),
+            array('tech' => 132, 'lvl' => 4),
+            array('tech' => 133, 'lvl' => 4),
+            array('tech' => 124, 'lvl' => 6),
+            // Hito 5: Flota Pesada, Energía 12 (Terraformer #33), Hiperespacio 8 e IRN (#123)
+            array('tech' => 110, 'lvl' => 5),
+            array('tech' => 114, 'lvl' => 3),
+            array('tech' => 118, 'lvl' => 4),
+            array('tech' => 113, 'lvl' => 12),
+            array('tech' => 114, 'lvl' => 8),
+            array('tech' => 123, 'lvl' => 2),
+        );
+
+        $mandatoryTechId = 0;
+        foreach ($techMilestones as $tm) {
+            $tId = (int)$tm['tech'];
+            $reqL = (int)$tm['lvl'];
+            $curL = (int)($this->ctx->user[$resource[$tId]] ?? 0);
+            if ($curL < $reqL && BuildFunctions::isTechnologieAccessible($this->ctx->user, $bestLabPlanet['data'], $tId, array())) {
+                $mandatoryTechId = $tId;
+                break;
+            }
+        }
 
         // Score all technologies
         foreach ($techWeights as $techId => $baseWeight) {
@@ -1684,8 +1988,37 @@ class BotProductionAllocator
             $costMSE = BotEconomyValuator::arrayToMSE($cost);
             $costHP  = BotEconomyValuator::toHP($costMSE, $empireHourlyMSE);
 
+            $curTechLvl = (int)($this->ctx->user[$resource[$techId]] ?? 0);
+
+            // 1. Poda de ramas de armamento / soporte que ya cumplieron su llave tecnológica
+            if ($techId == 120 && $curTechLvl >= 12 && $mineAverages[1] < 30 && !isset($unlockBoosts[120])) {
+                continue; // Láser 12 ya desbloquea Plasma y Acorazado
+            }
+            if ($techId == 121 && $curTechLvl >= 5 && $mineAverages[1] < 30 && !isset($unlockBoosts[121])) {
+                continue; // Iones 5 ya desbloquea Plasma
+            }
+            if ($techId == 114 && $curTechLvl >= 8 && !isset($unlockBoosts[114])) {
+                $baseWeight *= 0.35; // Hiperespacio 8 ya desbloquea Salto Cuántico e IRN
+            }
+
+            // 2. Techo de esfuerzo económico en Horas de Producción del Imperio (costHP)
+            $maxAllowedCostHP = in_array($techId, array(123, 124, 199), true) ? 6.0 : 3.5;
+            if ($curTechLvl === 0 && $costMSE <= 50000.0) {
+                $maxAllowedCostHP = 6.0;
+            }
+            if ($mandatoryTechId > 0 && $techId === $mandatoryTechId) {
+                $maxAllowedCostHP = 12.0;
+            }
+            if ($costHP > $maxAllowedCostHP) {
+                continue; // Investigación demasiado cara para la producción actual del imperio
+            }
+
             $diffTechFactor = ($macroTech / 0.20);
             $score = ($baseWeight * $diffTechFactor * 20.0) / max(0.1, $costHP);
+
+            if ($mandatoryTechId > 0 && $techId === $mandatoryTechId) {
+                $score += 120000.0;
+            }
 
             // Graviton (199) - Staged priority boost by imperial economic maturity up to Level 7
             if ($techId == 199) {

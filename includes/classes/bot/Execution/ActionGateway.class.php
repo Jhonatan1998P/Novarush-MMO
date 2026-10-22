@@ -19,7 +19,7 @@ class BotActionGateway
     public static $jumpGateShipsTransferred = 0;
     public static $jumpGateLog = array();
 
-    private $ctx;
+    protected $ctx;
 
     public function __construct(BotContext $ctx)
     {
@@ -158,7 +158,7 @@ class BotActionGateway
     /**
      * Enqueue ships or defense on a planet through the real engine with Phase 2 atomic transaction
      */
-    public function constructUnits($planetId, $elementId, $count, $reason = '')
+    public function constructUnits($planetId, $elementId, $count, $reason = '', $categoryOverride = null)
     {
         $db = Database::get();
         $isOuterTx = $db->inTransaction();
@@ -203,7 +203,7 @@ class BotActionGateway
             $this->ctx->user = $u;
 
             if (isset($this->ctx->budgetManager)) {
-                $cat = ($elementId >= 400) ? 'defense' : 'fleet';
+                $cat = $categoryOverride ?? (($elementId >= 400) ? 'defense' : ($elementId == 212 ? 'mines' : 'fleet'));
                 $this->ctx->budgetManager->deductFromBudget($planetId, $cat, $costResources);
             }
 
@@ -514,6 +514,30 @@ class BotActionGateway
             }
         }
 
+        // Enforce CheckNoobProtec for offensive combat missions (1 = Attack, 2 = AKS Attack, 9 = Destroy)
+        if (in_array((int)$mission, array(1, 2, 9)) && $targetOwnerId > 0 && $targetOwnerId != $this->ctx->botId) {
+            $db = Database::get();
+            $targetUserPoints = $db->selectSingle("SELECT s.total_points, u.onlinetime, u.banaday FROM %%STATPOINTS%% s JOIN %%USERS%% u ON u.id = s.id_owner WHERE s.id_owner = :uid AND s.stat_type = 1;", array(
+                ':uid' => (int)$targetOwnerId
+            ));
+            if (!empty($targetUserPoints)) {
+                $targetUserData = array(
+                    'id_owner'     => (int)$targetOwnerId,
+                    'total_points' => (float)$targetUserPoints['total_points'],
+                    'onlinetime'   => (int)$targetUserPoints['onlinetime'],
+                    'banaday'      => (int)$targetUserPoints['banaday'],
+                );
+                $botUserData = array(
+                    'id_owner'     => $this->ctx->botId,
+                    'total_points' => (float)($this->ctx->user['total_points'] ?? 0),
+                );
+                $prot = CheckNoobProtec($botUserData, $targetUserData, $targetUserData);
+                if ($prot['NoobPlayer'] || $prot['StrongPlayer']) {
+                    return false;
+                }
+            }
+        }
+
         $startPlanet = BotLockManager::lockPlanetRow($startPlanetId);
         if (empty($startPlanet) || $startPlanet['id_owner'] != $this->ctx->botId) {
             return false;
@@ -704,6 +728,30 @@ class BotActionGateway
         $availMIP = isset($startPlanet[$resource[503]]) ? (int)$startPlanet[$resource[503]] : 0;
         $count = min($count, $availMIP);
         if ($count <= 0) return false;
+
+        // Enforce CheckNoobProtec for interplanetary missile attacks
+        if ($targetOwnerId > 0 && $targetOwnerId != $this->ctx->botId) {
+            $db = Database::get();
+            $targetUserPoints = $db->selectSingle("SELECT s.total_points, u.onlinetime, u.banaday FROM %%STATPOINTS%% s JOIN %%USERS%% u ON u.id = s.id_owner WHERE s.id_owner = :uid AND s.stat_type = 1;", array(
+                ':uid' => (int)$targetOwnerId
+            ));
+            if (!empty($targetUserPoints)) {
+                $targetUserData = array(
+                    'id_owner'     => (int)$targetOwnerId,
+                    'total_points' => (float)$targetUserPoints['total_points'],
+                    'onlinetime'   => (int)$targetUserPoints['onlinetime'],
+                    'banaday'      => (int)$targetUserPoints['banaday'],
+                );
+                $botUserData = array(
+                    'id_owner'     => $this->ctx->botId,
+                    'total_points' => (float)($this->ctx->user['total_points'] ?? 0),
+                );
+                $prot = CheckNoobProtec($botUserData, $targetUserData, $targetUserData);
+                if ($prot['NoobPlayer'] || $prot['StrongPlayer']) {
+                    return false;
+                }
+            }
+        }
 
         return BotGameServices::dispatchMissiles(
             $count,

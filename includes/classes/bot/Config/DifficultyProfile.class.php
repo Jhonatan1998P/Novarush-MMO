@@ -34,6 +34,8 @@ class BotDifficultyProfile
     public $maxHangarQueueDuration; // Max allowed duration for shipyard hangar queue (seconds)
     public $batchTimeTarget;        // Max target duration for single batch sizing (seconds)
     public $maxRegularSlots;        // Max allowed concurrent shipyard slots
+    public $fleetEnqueueSeconds;   // Enqueue duration target for fleet recruitment (seconds)
+    public $defenseEnqueueSeconds; // Enqueue duration target for defense recruitment (seconds)
     public $recyclerStrikeOffset;   // Seconds after strike impact to harvest debris (offensive)
     public $minRoiRequired;                 // Minimum required net ROI for launching attacks
     public $maxOwnFleetLossRatioAllowed;   // Max acceptable fleet attrition ratio (0.10 for Easy, 1.0 for Nightmare)
@@ -66,7 +68,9 @@ class BotDifficultyProfile
                 $this->defenseCycleInterval          = 3600;
                 $this->maxHangarQueueDuration        = 86400; // 24 horas
                 $this->batchTimeTarget               = 3600;  // 1 hora
-                $this->maxRegularSlots               = 6;
+                $this->maxRegularSlots               = 14;
+                $this->fleetEnqueueSeconds           = 180;   // 3 min
+                $this->defenseEnqueueSeconds         = 300;   // 5 min
                 $this->recyclerStrikeOffset          = mt_rand(1, 15);
                 $this->minRoiRequired                = 0.40;  // Conservador: exige 40% ROI
                 $this->maxOwnFleetLossRatioAllowed  = 0.10;  // Miedo a perder más del 10% de flota
@@ -87,11 +91,13 @@ class BotDifficultyProfile
                 $this->stagingEnabled                = true;
                 $this->targetScanRadius              = 80;
                 $this->intergalacticScan             = true;
-                $this->militaryCycleInterval         = 480;
-                $this->defenseCycleInterval          = 900;
+                $this->militaryCycleInterval         = 360;   // 6 min
+                $this->defenseCycleInterval          = 720;   // 12 min
                 $this->maxHangarQueueDuration        = 86400; // 24 horas
                 $this->batchTimeTarget               = 3600;  // 1 hora
-                $this->maxRegularSlots               = 6;
+                $this->maxRegularSlots               = 14;
+                $this->fleetEnqueueSeconds           = 420;   // 7 min
+                $this->defenseEnqueueSeconds         = 780;   // 13 min
                 $this->recyclerStrikeOffset          = mt_rand(2, 4);
                 $this->minRoiRequired                = 0.30;  // Exige 30% ROI mínimo
                 $this->maxOwnFleetLossRatioAllowed  = 0.75;  // Acepta desgaste fuerte si es rentable
@@ -113,11 +119,13 @@ class BotDifficultyProfile
                 $this->stagingEnabled                = true;
                 $this->targetScanRadius              = 150;
                 $this->intergalacticScan             = true;
-                $this->militaryCycleInterval         = 180;
-                $this->defenseCycleInterval          = 360;
+                $this->militaryCycleInterval         = 180;   // 3 min
+                $this->defenseCycleInterval          = 360;   // 6 min
                 $this->maxHangarQueueDuration        = 86400; // 24 horas
                 $this->batchTimeTarget               = 3600;  // 1 hora
-                $this->maxRegularSlots               = 6;
+                $this->maxRegularSlots               = 14;
+                $this->fleetEnqueueSeconds           = 240;   // 4 min
+                $this->defenseEnqueueSeconds         = 420;   // 7 min
                 $this->recyclerStrikeOffset          = mt_rand(1, 2);
                 $this->minRoiRequired                = 0.30;  // Exige 30% ROI mínimo en gran escala
                 $this->maxOwnFleetLossRatioAllowed  = 1.00;  // Sacrificio mutuo 100% si ganancia neta es positiva
@@ -144,7 +152,9 @@ class BotDifficultyProfile
                 $this->defenseCycleInterval          = 1800;
                 $this->maxHangarQueueDuration        = 86400; // 24 horas
                 $this->batchTimeTarget               = 3600;  // 1 hora
-                $this->maxRegularSlots               = 6;
+                $this->maxRegularSlots               = 14;
+                $this->fleetEnqueueSeconds           = 240;   // 4 min
+                $this->defenseEnqueueSeconds         = 360;   // 6 min
                 $this->recyclerStrikeOffset          = mt_rand(6, 15);
                 $this->minRoiRequired                = 0.30;  // Exige 30% ROI mínimo
                 $this->maxOwnFleetLossRatioAllowed  = 0.40;  // Tolera hasta 40% de bajas

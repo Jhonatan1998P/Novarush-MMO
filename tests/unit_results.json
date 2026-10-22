@@ -25,7 +25,7 @@
         {
             "name": "1.5 C\u00e1lculo exacto de disparos por elementStructurePoints en motor 2Moons (13 MIPs vs 10 Plasmas, 35 totales)",
             "status": "PASS",
-            "details": "Shots 406: 13, Total MIPs: 35"
+            "details": "Shots 406: 13, Total MIPs: 33"
         },
         {
             "name": "2.1 F\u00f3rmula matem\u00e1tica EV Neto por hora (Principio Rector)",
@@ -45,7 +45,7 @@
         {
             "name": "3.2 Fleet Crash incluye pantalla de absorci\u00f3n (Fodder Cazas Ligeros 204)",
             "status": "PASS",
-            "details": "Fodder cazas ligeros asignados: 1000"
+            "details": "Fodder cazas ligeros asignados: 263"
         },
         {
             "name": "4.1 Fleetsave evac\u00faa 100% de metal, cristal y remanente de deuterio neto de combustible",

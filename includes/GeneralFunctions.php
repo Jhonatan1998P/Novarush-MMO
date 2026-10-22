@@ -442,38 +442,75 @@ function makebr($text)
     return (version_compare(PHP_VERSION, "5.3.0", ">=")) ? nl2br($text, false) : strtr($text, array("\r\n" => $BR, "\r" => $BR, "\n" => $BR)); 
 }
 
-function CheckNoobProtec($OwnerPlayer, $TargetPlayer, $Player)
+function CheckNoobProtec($OwnerPlayer, $TargetPlayer, $Player = array())
 {
 	$config	= Config::get();
+	$limitPoints = (float)$config->noobprotectiontime;  // 10000 pts
+	$multi        = (float)$config->noobprotectionmulti; // 5
+	
 	if(
 		$config->noobprotection == 0 
-		|| $config->noobprotectiontime == 0 
-		|| $config->noobprotectionmulti == 0 
-		|| $Player['banaday'] > TIMESTAMP
-		|| $Player['onlinetime'] < TIMESTAMP - INACTIVE
+		|| $limitPoints <= 0 
+		|| $multi <= 0
 	) {
 		return array('NoobPlayer' => false, 'StrongPlayer' => false);
 	}
-	
+
+	$targetPoints = 0.0;
+	if (isset($TargetPlayer['total_points'])) {
+		$targetPoints = (float)$TargetPlayer['total_points'];
+	} elseif (isset($Player['total_points'])) {
+		$targetPoints = (float)$Player['total_points'];
+	}
+
+	$ownerPoints = 0.0;
+	if (isset($OwnerPlayer['total_points'])) {
+		$ownerPoints = (float)$OwnerPlayer['total_points'];
+	}
+
+	// 1. Protección de principiantes: jugadores o bots menores o iguales a 10K puntos no podrán ser atacados
+	if ($targetPoints <= $limitPoints) {
+		return array('NoobPlayer' => true, 'StrongPlayer' => false);
+	}
+
+	// 2. Jugadores inactivos humanos (> 7 días) que superan los 10K puntos pierden la protección x5 (granjas legítimas).
+	// Los bots de NovaRush nunca son considerados inactivos.
+	$isBot = false;
+	$targetId = (int)($TargetPlayer['id_owner'] ?? ($TargetPlayer['id'] ?? ($Player['id'] ?? ($TargetPlayer['userid'] ?? ($Player['userid'] ?? 0)))));
+	if ($targetId > 0) {
+		static $botIdCache = null;
+		if ($botIdCache === null) {
+			$db = Database::get();
+			$botRows = $db->select("SELECT bot_id FROM %%BOTS%%;");
+			$botIdCache = array();
+			if (is_array($botRows)) {
+				foreach ($botRows as $br) {
+					$botIdCache[(int)$br['bot_id']] = true;
+				}
+			}
+		}
+		$isBot = isset($botIdCache[$targetId]);
+	}
+
+	if (!empty($Player['banaday']) && $Player['banaday'] > TIMESTAMP) {
+		return array('NoobPlayer' => false, 'StrongPlayer' => false);
+	}
+
+	$isInactive = (!empty($Player['onlinetime']) && $Player['onlinetime'] < (TIMESTAMP - INACTIVE) && !$isBot);
+	if ($isInactive) {
+		return array('NoobPlayer' => false, 'StrongPlayer' => false);
+	}
+
+	// 3. Regla de rango x5:
+	// Un jugador o bot solo podrá atacar o recibir ataques de jugadores que como máximo tengan x5 los puntos del objetivo:
+	// - NoobPlayer (Defensor protegido): El atacante tiene más de x5 los puntos del objetivo ($ownerPoints > $targetPoints * 5).
+	// - StrongPlayer (Objetivo demasiado fuerte): El objetivo tiene más de x5 los puntos del atacante ($targetPoints > $ownerPoints * 5).
+	$isNoob   = ($ownerPoints > ($targetPoints * $multi));
+	$isStrong = ($targetPoints > ($ownerPoints * $multi));
+
 	return array(
-		'NoobPlayer' => (
-			/* WAHR: 
-				Wenn Spieler mehr als 25000 Punkte hat UND
-				Wenn ZielSpieler weniger als 80% der Punkte des Spieler hat.
-				ODER weniger als 5.000 hat.
-			*/
-			// Addional Comment: Letzteres ist eigentlich sinnfrei, bitte testen.a
-			($TargetPlayer['total_points'] <= $config->noobprotectiontime) && // Default: 25.000
-			($OwnerPlayer['total_points'] > $TargetPlayer['total_points'] * $config->noobprotectionmulti)
-		), 
-		'StrongPlayer' => (
-			/* WAHR: 
-				Wenn Spieler weniger als 5000 Punkte hat UND
-				Mehr als das funfache der eigende Punkte hat
-			*/
-			($OwnerPlayer['total_points'] < $config->noobprotectiontime) && // Default: 5.000
-			($OwnerPlayer['total_points'] * $config->noobprotectionmulti < $TargetPlayer['total_points'])
-		),
+		'NoobPlayer'   => $isNoob, 
+		'StrongPlayer' => $isStrong,
 	);
 }
 

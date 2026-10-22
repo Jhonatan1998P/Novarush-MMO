@@ -90,25 +90,62 @@ class BotDecisionLog
             return;
         }
 
+        // Whitelist check: only authorized Nightmare bots persist decisions to database
+        if (!class_exists('BotTelemetryLogger') || !BotTelemetryLogger::isTelemetryAllowed($this->botId)) {
+            $this->pendingLogs = array();
+            return;
+        }
+
         $db = Database::get();
-        foreach ($this->pendingLogs as $log) {
+
+        // Batch insert for performance
+        $chunks = array_chunk($this->pendingLogs, 50);
+        foreach ($chunks as $chunk) {
+            $valuePlaceholders = array();
+            $params = array();
+            foreach ($chunk as $i => $log) {
+                $p_bot       = ":bot_{$i}";
+                $p_type      = ":type_{$i}";
+                $p_summary   = ":sum_{$i}";
+                $p_cand      = ":cand_{$i}";
+                $p_action    = ":act_{$i}";
+                $p_score     = ":score_{$i}";
+                $p_seed      = ":seed_{$i}";
+                $p_created   = ":created_{$i}";
+
+                $valuePlaceholders[] = "({$p_bot}, {$p_type}, {$p_summary}, {$p_cand}, {$p_action}, {$p_score}, {$p_seed}, {$p_created})";
+
+                $params[$p_bot]     = $log['bot_id'];
+                $params[$p_type]    = $log['decision_type'];
+                $params[$p_summary] = $log['context_summary'];
+                $params[$p_cand]    = $log['candidates_json'];
+                $params[$p_action]  = $log['chosen_action'];
+                $params[$p_score]   = $log['chosen_score'];
+                $params[$p_seed]    = $log['seed_used'];
+                $params[$p_created] = $log['created_at'];
+            }
+
             $sql = "INSERT INTO " . DB_PREFIX . "bot_decisions 
                     (bot_id, decision_type, context_summary, candidates_json, chosen_action, chosen_score, seed_used, created_at)
-                    VALUES (:bot_id, :decision_type, :context_summary, :candidates_json, :chosen_action, :chosen_score, :seed_used, :created_at);";
-            
-            $db->insert($sql, array(
-                ':bot_id'          => $log['bot_id'],
-                ':decision_type'   => $log['decision_type'],
-                ':context_summary' => $log['context_summary'],
-                ':candidates_json' => $log['candidates_json'],
-                ':chosen_action'   => $log['chosen_action'],
-                ':chosen_score'    => $log['chosen_score'],
-                ':seed_used'       => $log['seed_used'],
-                ':created_at'      => $log['created_at'],
-            ));
+                    VALUES " . implode(', ', $valuePlaceholders) . ";";
+
+            $db->insert($sql, $params);
         }
 
         $this->pendingLogs = array();
+
+        // Probabilistic pruning (2% chance) to clean up decisions older than 7 days
+        if (mt_rand(1, 50) === 1) {
+            $cutoff = (class_exists('BotClock') ? BotClock::get() : time()) - (7 * 86400);
+            try {
+                $db->delete("DELETE FROM " . DB_PREFIX . "bot_decisions WHERE bot_id = :bid AND created_at < :cutoff;", array(
+                    ':bid'    => $this->botId,
+                    ':cutoff' => $cutoff
+                ));
+            } catch (Throwable $e) {
+                // Non-blocking pruning failure
+            }
+        }
     }
 
     public function getPending()

@@ -21,6 +21,11 @@ class BotTelemetryLogger
     public static $disabled = false;
     private static $instances = array();
     private static $botIdToUsername = null;
+    private static $allowedBotIds = array(
+        88991 => true, // FalconEye (Nightmare)
+        88996 => true, // Warlock (Nightmare)
+        88998 => true, // Disruptor (Nightmare)
+    );
 
     private $botName;
     private $botId;
@@ -29,10 +34,31 @@ class BotTelemetryLogger
 
     const MAX_LOG_SIZE = 10485760; // 10 MB auto-rotation limit
 
+    /**
+     * Check if a bot ID is whitelisted for file and DB telemetry
+     *
+     * @param int|string $botId
+     * @return bool
+     */
+    public static function isTelemetryAllowed($botId): bool
+    {
+        return isset(self::$allowedBotIds[(int)$botId]);
+    }
+
     public function __construct($botName, $botId = 0)
     {
         $this->botName = (string)$botName;
         $this->botId   = (int)$botId;
+
+        if ($this->botId === 0) {
+            $map = self::getBotIdMap();
+            foreach ($map as $id => $uname) {
+                if (strcasecmp($uname, $this->botName) === 0) {
+                    $this->botId = (int)$id;
+                    break;
+                }
+            }
+        }
 
         $cleanName = strtolower(preg_replace('/[^a-zA-Z0-9_-]/', '', $this->botName));
         $root = defined('ROOT_PATH') ? ROOT_PATH : (dirname(__DIR__, 4) . DIRECTORY_SEPARATOR);
@@ -135,6 +161,9 @@ class BotTelemetryLogger
     public function writeLog($tag, $location, $action, $detail = '', $costOrGain = '', $reason = '')
     {
         if (self::$disabled) {
+            return;
+        }
+        if (!self::isTelemetryAllowed($this->botId)) {
             return;
         }
         $now = date('Y-m-d H:i:s');

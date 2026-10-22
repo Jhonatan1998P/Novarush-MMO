@@ -360,6 +360,10 @@ class BotGameServices
         $planet['b_building_id'] = serialize($currentQueue);
         $planet['b_building']    = $currentQueue[0][3];
 
+        if (class_exists('BotPremiumStrategist')) {
+            BotPremiumStrategist::updateCachedPlanetResources($planet['id'], $planet['metal'], $planet['crystal'], $planet['deuterium']);
+        }
+
         return true;
     }
 
@@ -415,7 +419,7 @@ class BotGameServices
         if (!is_array($buildArray)) {
             $buildArray = array();
         }
-        if (count($buildArray) >= 8) {
+        if (count($buildArray) >= 14) {
             return false;
         }
 
@@ -452,6 +456,10 @@ class BotGameServices
         }
 
         $planet['b_hangar_id'] = serialize($buildArray);
+
+        if (class_exists('BotPremiumStrategist')) {
+            BotPremiumStrategist::updateCachedPlanetResources($planet['id'], $planet['metal'], $planet['crystal'], $planet['deuterium']);
+        }
 
         return true;
     }
@@ -530,6 +538,10 @@ class BotGameServices
         $user['b_tech_planet'] = $planet['id'];
         $user['b_tech_id']     = $elementId;
         $user['b_tech']        = $buildEndTime;
+
+        if (class_exists('BotPremiumStrategist')) {
+            BotPremiumStrategist::updateCachedPlanetResources($planet['id'], $planet['metal'], $planet['crystal'], $planet['deuterium']);
+        }
 
         return true;
     }

@@ -41,13 +41,31 @@ class BotEmpireState
         $totalD = 0.0;
         $totalHourlyMSE = 0.0;
 
+        $planetRess = new ResourceUpdate();
+        $now = class_exists('BotClock') ? BotClock::get() : TIMESTAMP;
+
         foreach ($rows as $planet) {
+            $pType = (int)$planet['planet_type'];
+
+            // Lunar optimization: Moons have 0 production. If no queues and recently updated (<300s), do not SAVE to DB.
+            $saveToDb = true;
+            if ($pType === 3) {
+                $hasBuildingQueue = !empty($planet['b_building_id']) && !empty(@unserialize($planet['b_building_id']));
+                $hasHangarQueue   = !empty($planet['b_hangar_id']) && !empty(@unserialize($planet['b_hangar_id']));
+                $lastUpdate       = (int)($planet['last_update'] ?? 0);
+                $prodM = (float)($planet['metal_perhour'] ?? 0.0);
+                $prodC = (float)($planet['crystal_perhour'] ?? 0.0);
+                $prodD = (float)($planet['deuterium_perhour'] ?? 0.0);
+
+                if (!$hasBuildingQueue && !$hasHangarQueue && $prodM <= 0.0 && $prodC <= 0.0 && $prodD <= 0.0 && ($now - $lastUpdate) < 300) {
+                    $saveToDb = false;
+                }
+            }
+
             // Update resource accumulation to current timestamp
-            $planetRess = new ResourceUpdate();
-            list($this->user, $planetUpdated) = $planetRess->CalcResource($this->user, $planet, true, BotClock::get());
+            list($this->user, $planetUpdated) = $planetRess->CalcResource($this->user, $planet, $saveToDb, $now);
 
             $pId = (int)$planetUpdated['id'];
-            $pType = (int)$planetUpdated['planet_type'];
 
             // Calculate hourly production in MSE for this celestial body
             $prodM = isset($planetUpdated['metal_perhour']) ? (float)$planetUpdated['metal_perhour'] : 0.0;
