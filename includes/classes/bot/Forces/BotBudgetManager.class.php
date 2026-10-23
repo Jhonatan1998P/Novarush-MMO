@@ -111,11 +111,17 @@ class BotBudgetManager
             }
         }
 
-        // 2. Savings lock JSON
+        // 2. Savings lock JSON and Multi-Category Initialization
+        $this->credits['savings_locks_by_cat'] = isset($this->credits['savings_locks_by_cat']) && is_array($this->credits['savings_locks_by_cat']) ? $this->credits['savings_locks_by_cat'] : array();
+
         if (!empty($botRow['savings_lock'])) {
             $parsedLock = @json_decode($botRow['savings_lock'], true);
             if (is_array($parsedLock) && !empty($parsedLock['element_id'])) {
                 $this->savingsLock = $parsedLock;
+                $cat = $parsedLock['category'] ?? 'mines';
+                if (!isset($this->credits['savings_locks_by_cat'][$cat])) {
+                    $this->credits['savings_locks_by_cat'][$cat] = $parsedLock;
+                }
             }
         }
 
@@ -191,9 +197,46 @@ class BotBudgetManager
         $totalEmpireWindfallC = 0.0;
         $totalEmpireWindfallD = 0.0;
 
+        $empireUser = method_exists($empire, 'getUser') ? $empire->getUser() : $this->ctx->user;
+        if (!empty($empireUser['_auto_paid_research']) && is_array($empireUser['_auto_paid_research'])) {
+            foreach ($empireUser['_auto_paid_research'] as $paidTech) {
+                $paidLabId = (int)($paidTech['planet_id'] ?? 0);
+                $pCost = $paidTech['cost'] ?? array();
+                $pM = (float)($pCost[901] ?? 0.0);
+                $pC = (float)($pCost[902] ?? 0.0);
+                $pD = (float)($pCost[903] ?? 0.0);
+                if (isset($this->credits['research'])) {
+                    $this->credits['research']['metal']     = round(max(0.0, (float)($this->credits['research']['metal'] ?? 0.0) - $pM), 2);
+                    $this->credits['research']['crystal']   = round(max(0.0, (float)($this->credits['research']['crystal'] ?? 0.0) - $pC), 2);
+                    $this->credits['research']['deuterium'] = round(max(0.0, (float)($this->credits['research']['deuterium'] ?? 0.0) - $pD), 2);
+                }
+                if ($paidLabId > 0 && isset($this->credits['last_physical'][$paidLabId])) {
+                    $this->credits['last_physical'][$paidLabId]['metal']     = max(0.0, (float)$this->credits['last_physical'][$paidLabId]['metal'] - $pM);
+                    $this->credits['last_physical'][$paidLabId]['crystal']   = max(0.0, (float)$this->credits['last_physical'][$paidLabId]['crystal'] - $pC);
+                    $this->credits['last_physical'][$paidLabId]['deuterium'] = max(0.0, (float)$this->credits['last_physical'][$paidLabId]['deuterium'] - $pD);
+                }
+            }
+        }
+
         foreach ($planets as $pId => $pEntry) {
             $pData = $pEntry['data'];
             $pId = (int)$pId;
+
+            if (!empty($pData['_auto_paid_mines']) && is_array($pData['_auto_paid_mines'])) {
+                $paidM = (float)($pData['_auto_paid_mines'][901] ?? 0.0);
+                $paidC = (float)($pData['_auto_paid_mines'][902] ?? 0.0);
+                $paidD = (float)($pData['_auto_paid_mines'][903] ?? 0.0);
+                if (isset($this->credits['planets'][$pId]['mines'])) {
+                    $this->credits['planets'][$pId]['mines']['metal']     = round(max(0.0, (float)($this->credits['planets'][$pId]['mines']['metal'] ?? 0.0) - $paidM), 2);
+                    $this->credits['planets'][$pId]['mines']['crystal']   = round(max(0.0, (float)($this->credits['planets'][$pId]['mines']['crystal'] ?? 0.0) - $paidC), 2);
+                    $this->credits['planets'][$pId]['mines']['deuterium'] = round(max(0.0, (float)($this->credits['planets'][$pId]['mines']['deuterium'] ?? 0.0) - $paidD), 2);
+                }
+                if (isset($this->credits['last_physical'][$pId])) {
+                    $this->credits['last_physical'][$pId]['metal']     = max(0.0, (float)$this->credits['last_physical'][$pId]['metal'] - $paidM);
+                    $this->credits['last_physical'][$pId]['crystal']   = max(0.0, (float)$this->credits['last_physical'][$pId]['crystal'] - $paidC);
+                    $this->credits['last_physical'][$pId]['deuterium'] = max(0.0, (float)$this->credits['last_physical'][$pId]['deuterium'] - $paidD);
+                }
+            }
 
             $curStockM = (float)($pData['metal'] ?? 0.0);
             $curStockC = (float)($pData['crystal'] ?? 0.0);
@@ -887,6 +930,70 @@ class BotBudgetManager
     }
 
     /**
+     * Calcula los recursos físicos comprometidos para pagar el próximo elemento en espera (Slot 1)
+     * de construcción (building_queue[1]) o investigación (b_tech_queue[1]) en este planeta.
+     *
+     * @param int $planetId
+     * @return array ['metal' => float, 'crystal' => float, 'deuterium' => float, 'has_building' => bool, 'has_research' => bool]
+     */
+    public function getNextQueuedSlotCost($planetId)
+    {
+        $planetId = (int)$planetId;
+        $reserved = array(
+            'metal'        => 0.0,
+            'crystal'      => 0.0,
+            'deuterium'    => 0.0,
+            'has_building' => false,
+            'has_research' => false,
+        );
+
+        if (!isset($this->ctx->empire) || !method_exists($this->ctx->empire, 'getPlanet')) {
+            return $reserved;
+        }
+
+        $pEntry = $this->ctx->empire->getPlanet($planetId);
+        if (empty($pEntry) || empty($pEntry['data'])) {
+            return $reserved;
+        }
+        $pData = $pEntry['data'];
+
+        // 1. Verificar Slot 1 de construcción en espera (building_queue[1])
+        if (!empty($pEntry['building_queue']) && isset($pEntry['building_queue'][1]) && is_array($pEntry['building_queue'][1])) {
+            $nextElemId = (int)($pEntry['building_queue'][1][0] ?? 0);
+            $nextLvl    = (int)($pEntry['building_queue'][1][1] ?? 1);
+            $mode       = $pEntry['building_queue'][1][4] ?? 'build';
+            $forDestroy = ($mode === 'destroy');
+            if ($nextElemId > 0) {
+                $cost = BuildFunctions::getElementPrice($this->ctx->user, $pData, $nextElemId, $forDestroy, $forDestroy ? $nextLvl : ($nextLvl - 1));
+                $reserved['metal']        += (float)($cost[901] ?? $cost['metal'] ?? 0.0);
+                $reserved['crystal']      += (float)($cost[902] ?? $cost['crystal'] ?? 0.0);
+                $reserved['deuterium']    += (float)($cost[903] ?? $cost['deuterium'] ?? 0.0);
+                $reserved['has_building']  = true;
+            }
+        }
+
+        // 2. Verificar Slot 1 de investigación en espera (b_tech_queue[1]) si este planeta es el laboratorio asignado
+        $rawTechQueue = $this->ctx->user['b_tech_queue'] ?? '';
+        $techQueue = is_array($rawTechQueue) ? $rawTechQueue : (!empty($rawTechQueue) ? @unserialize($rawTechQueue) : array());
+        if (is_array($techQueue) && isset($techQueue[1]) && is_array($techQueue[1])) {
+            $targetLabId = (int)($techQueue[1][4] ?? $this->ctx->homePlanetId);
+            if ($targetLabId === $planetId) {
+                $nextTechId  = (int)($techQueue[1][0] ?? 0);
+                $nextTechLvl = (int)($techQueue[1][1] ?? 1);
+                if ($nextTechId > 0) {
+                    $tCost = BuildFunctions::getElementPrice($this->ctx->user, $pData, $nextTechId, false, $nextTechLvl - 1);
+                    $reserved['metal']        += (float)($tCost[901] ?? $tCost['metal'] ?? 0.0);
+                    $reserved['crystal']      += (float)($tCost[902] ?? $tCost['crystal'] ?? 0.0);
+                    $reserved['deuterium']    += (float)($tCost[903] ?? $tCost['deuterium'] ?? 0.0);
+                    $reserved['has_research']  = true;
+                }
+            }
+        }
+
+        return $reserved;
+    }
+
+    /**
      * Try an internal virtual bucket swap (4:2:1 MSE Neutral) on a planet
      *
      * Invariants & Rules:
@@ -970,6 +1077,13 @@ class BotBudgetManager
             }
         }
 
+        $slot1Reserve = $this->getNextQueuedSlotCost($planetId);
+        if ($targetCategory !== 'mines' && $targetCategory !== 'research') {
+            $physM = max(0.0, $physM - (float)$slot1Reserve['metal']);
+            $physC = max(0.0, $physC - (float)$slot1Reserve['crystal']);
+            $physD = max(0.0, $physD - (float)$slot1Reserve['deuterium']);
+        }
+
         if ($physM < $needM || $physC < $needC || $physD < $needD) {
             return false;
         }
@@ -980,6 +1094,9 @@ class BotBudgetManager
         $validDonors = array();
         foreach ($possibleDonors as $cat) {
             if ($cat === $targetCategory) {
+                continue;
+            }
+            if ($cat === 'mines' && !empty($slot1Reserve['has_building'])) {
                 continue;
             }
             if ($this->isCategoryLocked($planetId, $cat)) {
@@ -1448,13 +1565,15 @@ class BotBudgetManager
             );
         }
 
+        $slot1Reserve = $this->getNextQueuedSlotCost($planetId);
+
         // Planetas con hangar == 0 exponen todo el cristal y deuterio estancado
         $curHangar = (int)($planetData[$resource[21]] ?? 0);
         if ($curHangar === 0) {
             return array(
-                'metal'     => round(max(0.0, (float)($planetData['metal'] ?? 0.0) - 50000.0), 2),
-                'crystal'   => round(max(0.0, (float)($planetData['crystal'] ?? 0.0) - 30000.0), 2),
-                'deuterium' => round(max(0.0, (float)($planetData['deuterium'] ?? 0.0) - 20000.0), 2),
+                'metal'     => round(max(0.0, (float)($planetData['metal'] ?? 0.0) - 50000.0 - (float)$slot1Reserve['metal']), 2),
+                'crystal'   => round(max(0.0, (float)($planetData['crystal'] ?? 0.0) - 30000.0 - (float)$slot1Reserve['crystal']), 2),
+                'deuterium' => round(max(0.0, (float)($planetData['deuterium'] ?? 0.0) - 20000.0 - (float)$slot1Reserve['deuterium']), 2),
             );
         }
 
@@ -1463,9 +1582,9 @@ class BotBudgetManager
         $prodD = max(0.0, (float)($planetData['deuterium_perhour'] ?? 0.0));
 
         // Safety reserve: minimum 2 hours of local production (or baseline floor)
-        $reserveM = max(50000.0, 2.0 * $prodM);
-        $reserveC = max(30000.0, 2.0 * $prodC);
-        $reserveD = max(20000.0, 2.0 * $prodD);
+        $reserveM = max(50000.0, 2.0 * $prodM) + (float)$slot1Reserve['metal'];
+        $reserveC = max(30000.0, 2.0 * $prodC) + (float)$slot1Reserve['crystal'];
+        $reserveD = max(20000.0, 2.0 * $prodD) + (float)$slot1Reserve['deuterium'];
 
         $physSurplusM = max(0.0, (float)($planetData['metal'] ?? 0.0) - $reserveM);
         $physSurplusC = max(0.0, (float)($planetData['crystal'] ?? 0.0) - $reserveC);
@@ -1843,7 +1962,7 @@ class BotBudgetManager
             }
         }
 
-        $this->savingsLock = array(
+        $lockData = array(
             'planet_id'        => (int)$planetId,
             'target_type'      => $targetType,
             'category'         => $category,
@@ -1856,6 +1975,12 @@ class BotBudgetManager
             'eta_seconds'      => $eta,
         );
 
+        if (!isset($this->credits['savings_locks_by_cat']) || !is_array($this->credits['savings_locks_by_cat'])) {
+            $this->credits['savings_locks_by_cat'] = array();
+        }
+        $this->credits['savings_locks_by_cat'][$category] = $lockData;
+        $this->savingsLock = $lockData;
+
         $this->saveState();
         return true;
     }
@@ -1865,26 +1990,29 @@ class BotBudgetManager
      */
     public function isCategoryLocked($planetId, $category)
     {
-        if (empty($this->savingsLock)) {
+        $lock = $this->credits['savings_locks_by_cat'][$category] ?? null;
+        if (empty($lock) && !empty($this->savingsLock) && ($this->savingsLock['category'] ?? 'mines') === $category) {
+            $lock = $this->savingsLock;
+        }
+
+        if (empty($lock)) {
             return false;
         }
 
         // Auto-expire lock if it exceeds maximum savings horizon
-        $eta = (float)($this->savingsLock['eta_seconds'] ?? 0.0);
-        $maxLockEta = $this->getMaxSavingsLockEta($this->savingsLock);
+        $eta = (float)($lock['eta_seconds'] ?? 0.0);
+        $maxLockEta = $this->getMaxSavingsLockEta($lock);
         if ($eta > $maxLockEta) {
-            $this->clearSavingsLock();
+            $this->clearSavingsLock($category);
             return false;
         }
 
-        $lockPlanet = (int)($this->savingsLock['planet_id'] ?? 0);
-        $lockCat    = $this->savingsLock['category'] ?? 'mines';
-
         if ($category === 'research') {
-            return ($lockCat === 'research');
+            return !empty($lock);
         }
 
-        return ($lockPlanet === (int)$planetId && $lockCat === $category);
+        $lockPlanet = (int)($lock['planet_id'] ?? 0);
+        return ($lockPlanet === (int)$planetId);
     }
 
     /**
@@ -1893,14 +2021,28 @@ class BotBudgetManager
     public function getSavingsLockForCategory($planetId, $category)
     {
         if ($this->isCategoryLocked($planetId, $category)) {
-            return $this->savingsLock;
+            $lock = $this->credits['savings_locks_by_cat'][$category] ?? null;
+            if (empty($lock) && !empty($this->savingsLock) && ($this->savingsLock['category'] ?? 'mines') === $category) {
+                $lock = $this->savingsLock;
+            }
+            return $lock;
         }
         return null;
     }
 
-    public function clearSavingsLock()
+    public function clearSavingsLock($category = null)
     {
-        $this->savingsLock = null;
+        if ($category !== null) {
+            unset($this->credits['savings_locks_by_cat'][$category]);
+            if (!empty($this->savingsLock) && ($this->savingsLock['category'] ?? '') === $category) {
+                $this->savingsLock = !empty($this->credits['savings_locks_by_cat'])
+                    ? reset($this->credits['savings_locks_by_cat'])
+                    : null;
+            }
+        } else {
+            $this->credits['savings_locks_by_cat'] = array();
+            $this->savingsLock = null;
+        }
         $this->saveState();
     }
 
@@ -1944,167 +2086,188 @@ class BotBudgetManager
      */
     public function processSavingsLock(BotEmpireState $empire, BotActionGateway $gateway)
     {
-        if (empty($this->savingsLock)) {
+        $locksToProcess = array();
+        if (!empty($this->credits['savings_locks_by_cat']) && is_array($this->credits['savings_locks_by_cat'])) {
+            $locksToProcess = $this->credits['savings_locks_by_cat'];
+        } elseif (!empty($this->savingsLock)) {
+            $cat = $this->savingsLock['category'] ?? 'mines';
+            $locksToProcess[$cat] = $this->savingsLock;
+        }
+
+        if (empty($locksToProcess)) {
             return array('status' => 'idle');
         }
 
-        $pId = (int)$this->savingsLock['planet_id'];
-        $planetEntry = $empire->getPlanet($pId);
-        if (empty($planetEntry)) {
-            $this->clearSavingsLock();
-            return array('status' => 'invalid_planet');
-        }
+        $lastResult = array('status' => 'idle');
 
-        // Auto-expire savings lock exceeding MAX_SAVINGS_LOCK_ETA (14400s / 4h or 28800s for 123/124)
-        $currentEta = (float)($this->savingsLock['eta_seconds'] ?? 0.0);
-        $maxLockEta = $this->getMaxSavingsLockEta($this->savingsLock);
-        if ($currentEta > $maxLockEta) {
-            $this->ctx->decisionLog->record(
-                'savings_lock_aborted_eta',
-                "Savings lock aborted: ETA ({$currentEta}s) exceeds MAX_SAVINGS_LOCK_ETA ({$maxLockEta}s). Unlocking empire.",
-                $this->savingsLock,
-                'abort_savings_eta',
-                12000.0
-            );
-            $this->clearSavingsLock();
-            return array('status' => 'aborted_eta_exceeded');
-        }
+        foreach ($locksToProcess as $lockCat => $lock) {
+            if (empty($lock) || !is_array($lock)) {
+                continue;
+            }
 
-        $pData = $planetEntry['data'];
-        $cost  = $this->savingsLock['cost'];
+            $pId = (int)($lock['planet_id'] ?? 0);
+            $planetEntry = $empire->getPlanet($pId);
+            if (empty($planetEntry)) {
+                $this->clearSavingsLock($lockCat);
+                $lastResult = array('status' => 'invalid_planet');
+                continue;
+            }
 
-        $defRes = (int)($this->savingsLock['deficit_resource'] ?? 901);
-        $colKey = ($defRes === 901) ? 'metal' : (($defRes === 902) ? 'crystal' : 'deuterium');
-        $costDef = (float)($cost[$defRes] ?? $cost[$colKey] ?? 0.0);
-        $maxStockCap = (float)($pData[$colKey . '_max'] ?? 0.0);
-        $currentStock = (float)($pData[$colKey] ?? 0.0);
-        $lastStock    = (float)($this->savingsLock['last_stock'] ?? $currentStock);
+            // Auto-expire savings lock exceeding MAX_SAVINGS_LOCK_ETA
+            $currentEta = (float)($lock['eta_seconds'] ?? 0.0);
+            $maxLockEta = $this->getMaxSavingsLockEta($lock);
+            if ($currentEta > $maxLockEta) {
+                $this->ctx->decisionLog->record(
+                    'savings_lock_aborted_eta',
+                    "Savings lock [{$lockCat}] aborted: ETA ({$currentEta}s) exceeds MAX_SAVINGS_LOCK_ETA ({$maxLockEta}s). Unlocking empire.",
+                    $lock,
+                    'abort_savings_eta',
+                    12000.0
+                );
+                $this->clearSavingsLock($lockCat);
+                $lastResult = array('status' => 'aborted_eta_exceeded');
+                continue;
+            }
 
-        $freeFields = CalculateMaxPlanetFields($pData) - ((int)$pData['field_current'] + count($planetEntry['building_queue']));
+            $pData = $planetEntry['data'];
+            $cost  = $lock['cost'];
 
-        // Warehouse corresponding to the current deficit resource
-        $storeIdForDeficit = ($defRes === 901) ? 22 : (($defRes === 902) ? 23 : 24);
+            $defRes = (int)($lock['deficit_resource'] ?? 901);
+            $colKey = ($defRes === 901) ? 'metal' : (($defRes === 902) ? 'crystal' : 'deuterium');
+            $costDef = (float)($cost[$defRes] ?? $cost[$colKey] ?? 0.0);
+            $maxStockCap = (float)($pData[$colKey . '_max'] ?? 0.0);
+            $currentStock = (float)($pData[$colKey] ?? 0.0);
+            $lastStock    = (float)($lock['last_stock'] ?? $currentStock);
 
-        $isWarehouseBuilding = false;
-        if (!empty($planetEntry['building_queue'])) {
-            foreach ($planetEntry['building_queue'] as $bItem) {
-                if ((int)$bItem[0] === $storeIdForDeficit) {
-                    $isWarehouseBuilding = true;
-                    break;
+            $freeFields = CalculateMaxPlanetFields($pData) - ((int)$pData['field_current'] + count($planetEntry['building_queue']));
+
+            // Warehouse corresponding to the current deficit resource
+            $storeIdForDeficit = ($defRes === 901) ? 22 : (($defRes === 902) ? 23 : 24);
+
+            $isWarehouseBuilding = false;
+            if (!empty($planetEntry['building_queue'])) {
+                foreach ($planetEntry['building_queue'] as $bItem) {
+                    if ((int)$bItem[0] === $storeIdForDeficit) {
+                        $isWarehouseBuilding = true;
+                        break;
+                    }
                 }
             }
-        }
 
-        // --- 1. Dynamic Storage Cap Guard ---
-        // If cost of deficit resource exceeds 95% of storage capacity, the planet can never save enough!
-        $storeNeeded = 0;
-        if ($maxStockCap > 0 && $costDef > ($maxStockCap * 0.95)) {
-            $storeNeeded = $storeIdForDeficit;
-        }
+            // --- 1. Dynamic Storage Cap Guard ---
+            $storeNeeded = 0;
+            if ($maxStockCap > 0 && $costDef > ($maxStockCap * 0.95)) {
+                $storeNeeded = $storeIdForDeficit;
+            }
 
-        // If warehouse is needed but planet has <= 0 free fields, it cannot be built! Deadlock resolution:
-        if ($storeNeeded > 0 && $freeFields <= 0) {
-            $this->ctx->decisionLog->record(
-                'savings_storage_deadlock_aborted',
-                "Savings lock aborted on planet #{$pId}: target requires warehouse #{$storeNeeded} but colony has 0 free fields.",
-                $this->savingsLock,
-                'abort_storage_deadlock',
-                15000.0
-            );
-            $this->clearSavingsLock();
-            return array('status' => 'aborted_storage_deadlock');
-        }
-
-        if ($storeNeeded > 0 && !$isWarehouseBuilding) {
-            $ok = $gateway->constructBuilding($pId, $storeNeeded);
-            if ($ok) {
+            if ($storeNeeded > 0 && $freeFields <= 0) {
                 $this->ctx->decisionLog->record(
-                    'savings_storage_unlock',
-                    "Forced warehouse unlock (#{$storeNeeded}) on planet #{$pId} due to savings target exceeding 95% storage capacity",
-                    array('store' => $storeNeeded, 'target' => $this->savingsLock['element_id']),
-                    "unlock_store_{$storeNeeded}",
+                    'savings_storage_deadlock_aborted',
+                    "Savings lock [{$lockCat}] aborted on planet #{$pId}: target requires warehouse #{$storeNeeded} but colony has 0 free fields.",
+                    $lock,
+                    'abort_storage_deadlock',
                     15000.0
                 );
-                return array('status' => 'unlocked_storage', 'store' => $storeNeeded);
+                $this->clearSavingsLock($lockCat);
+                $lastResult = array('status' => 'aborted_storage_deadlock');
+                continue;
             }
-        }
 
-        // --- 2. Anti-Farm Watchdog ---
-        // If for 3 consecutive cycles (135s) Delta_stock[deficit] <= 0:
-        // Planet is being raided/farmed. Abort savings, release reserve, build defenses and light fighters!
+            if ($storeNeeded > 0 && !$isWarehouseBuilding) {
+                $ok = $gateway->constructBuilding($pId, $storeNeeded);
+                if ($ok) {
+                    $this->ctx->decisionLog->record(
+                        'savings_storage_unlock',
+                        "Forced warehouse unlock (#{$storeNeeded}) on planet #{$pId} due to savings target exceeding 95% storage capacity",
+                        array('store' => $storeNeeded, 'target' => $lock['element_id']),
+                        "unlock_store_{$storeNeeded}",
+                        15000.0
+                    );
+                    $lastResult = array('status' => 'unlocked_storage', 'store' => $storeNeeded);
+                    continue;
+                }
+            }
 
-        // Check if warehouse is currently being upgraded or if storage is saturated (>95%)
-        $isStorageSaturated = ($maxStockCap > 0 && $currentStock >= ($maxStockCap * 0.95));
+            // --- 2. Anti-Farm Watchdog ---
+            $isStorageSaturated = ($maxStockCap > 0 && $currentStock >= ($maxStockCap * 0.95));
+            $deltaStock = $currentStock - $lastStock;
+            if ($deltaStock <= 0.0 && !$isWarehouseBuilding && !$isStorageSaturated) {
+                $lock['stagnant_cycles'] = (int)($lock['stagnant_cycles'] ?? 0) + 1;
+            } elseif ($deltaStock > 0.0) {
+                $lock['stagnant_cycles'] = 0;
+            }
+            $lock['last_stock'] = $currentStock;
 
-        $deltaStock = $currentStock - $lastStock;
-        if ($deltaStock <= 0.0 && !$isWarehouseBuilding && !$isStorageSaturated) {
-            $this->savingsLock['stagnant_cycles'] = (int)$this->savingsLock['stagnant_cycles'] + 1;
-        } elseif ($deltaStock > 0.0) {
-            $this->savingsLock['stagnant_cycles'] = 0;
-        }
-        $this->savingsLock['last_stock'] = $currentStock;
+            if ($lock['stagnant_cycles'] >= 3) {
+                $this->ctx->decisionLog->record(
+                    'savings_antifarm_abort',
+                    "Watchdog Anti-Farm triggered on planet #{$pId} [{$lockCat}]: 3 consecutive cycles (135s) with non-growing stock. Aborting savings to recruit defenses and fighters.",
+                    array('stagnant_cycles' => $lock['stagnant_cycles'], 'deficit_res' => $defRes),
+                    'abort_savings_defend',
+                    20000.0
+                );
 
-        if ($this->savingsLock['stagnant_cycles'] >= 3) {
-            $this->ctx->decisionLog->record(
-                'savings_antifarm_abort',
-                "Watchdog Anti-Farm triggered on planet #{$pId}: 3 consecutive cycles (135s) with non-growing stock. Aborting savings to recruit defenses and fighters.",
-                array('stagnant_cycles' => $this->savingsLock['stagnant_cycles'], 'deficit_res' => $defRes),
-                'abort_savings_defend',
-                20000.0
+                $this->clearSavingsLock($lockCat);
+
+                $gateway->constructUnits($pId, 401, 100);
+                $gateway->constructUnits($pId, 402, 50);
+                $gateway->constructUnits($pId, 407, 1);
+                $gateway->constructUnits($pId, 204, 50);
+                $gateway->constructUnits($pId, 206, 20);
+
+                $lastResult = array('status' => 'aborted_antifarm');
+                continue;
+            }
+
+            // Recalculate protected ETA
+            $stockMap = array(
+                901 => (float)($pData['metal'] ?? 0.0),
+                902 => (float)($pData['crystal'] ?? 0.0),
+                903 => (float)($pData['deuterium'] ?? 0.0)
             );
-
-            $this->clearSavingsLock();
-
-            // Emergency military intervention: Recruit immediate defense turrets & Light Hunters (204)
-            $gateway->constructUnits($pId, 401, 100); // Lanzamisiles
-            $gateway->constructUnits($pId, 402, 50);  // Láser pequeño
-            $gateway->constructUnits($pId, 407, 1);   // Cúpula pequeña
-            $gateway->constructUnits($pId, 204, 50);  // Caza ligero (204 en 2Moons)
-            $gateway->constructUnits($pId, 206, 20);  // Crucero (206)
-
-            return array('status' => 'aborted_antifarm');
-        }
-
-        // Recalculate protected ETA
-        $stockMap = array(
-            901 => (float)($pData['metal'] ?? 0.0),
-            902 => (float)($pData['crystal'] ?? 0.0),
-            903 => (float)($pData['deuterium'] ?? 0.0)
-        );
-        $prodMap  = array(
-            901 => (float)($pData['metal_perhour'] ?? 0.0),
-            902 => (float)($pData['crystal_perhour'] ?? 0.0),
-            903 => (float)($pData['deuterium_perhour'] ?? 0.0)
-        );
-        $this->savingsLock['eta_seconds'] = $this->calculateSafeEta($cost, $stockMap, $prodMap);
-
-        // Check if savings target can now be purchased!
-        $targetType = $this->savingsLock['target_type'];
-        $elementId  = $this->savingsLock['element_id'];
-
-        $bought = false;
-        if ($targetType === 'building') {
-            $bought = $gateway->constructBuilding($pId, $elementId);
-        } elseif ($targetType === 'research') {
-            $bought = $gateway->researchTech($pId, $elementId);
-        } elseif ($targetType === 'shipyard') {
-            $bought = $gateway->constructUnits($pId, $elementId, 1);
-        }
-
-        if ($bought) {
-            $this->ctx->decisionLog->record(
-                'savings_target_achieved',
-                "Savings Lock fulfilled! Purchased {$targetType} #{$elementId} on planet #{$pId}",
-                is_array($this->savingsLock) ? $this->savingsLock : array(),
-                "achieved_{$elementId}",
-                10000.0
+            $prodMap  = array(
+                901 => (float)($pData['metal_perhour'] ?? 0.0),
+                902 => (float)($pData['crystal_perhour'] ?? 0.0),
+                903 => (float)($pData['deuterium_perhour'] ?? 0.0)
             );
-            $this->clearSavingsLock();
-            return array('status' => 'completed', 'element' => $elementId);
+            $lock['eta_seconds'] = $this->calculateSafeEta($cost, $stockMap, $prodMap);
+
+            $this->credits['savings_locks_by_cat'][$lockCat] = $lock;
+            if (!empty($this->savingsLock) && ($this->savingsLock['category'] ?? '') === $lockCat) {
+                $this->savingsLock = $lock;
+            }
+
+            // Check if savings target can now be purchased!
+            $targetType = $lock['target_type'];
+            $elementId  = $lock['element_id'];
+
+            $bought = false;
+            if ($targetType === 'building') {
+                $bought = $gateway->constructBuilding($pId, $elementId);
+            } elseif ($targetType === 'research') {
+                $bought = $gateway->researchTech($pId, $elementId);
+            } elseif ($targetType === 'shipyard') {
+                $bought = $gateway->constructUnits($pId, $elementId, 1);
+            }
+
+            if ($bought) {
+                $this->ctx->decisionLog->record(
+                    'savings_target_achieved',
+                    "Savings Lock fulfilled! Purchased {$targetType} #{$elementId} on planet #{$pId}",
+                    $lock,
+                    "achieved_{$elementId}",
+                    10000.0
+                );
+                $this->clearSavingsLock($lockCat);
+                $lastResult = array('status' => 'completed', 'element' => $elementId);
+                continue;
+            }
+
+            $lastResult = array('status' => 'accumulating', 'eta' => $lock['eta_seconds']);
         }
 
         $this->saveState();
-        return array('status' => 'accumulating', 'eta' => $this->savingsLock['eta_seconds']);
+        return $lastResult;
     }
 
     /**

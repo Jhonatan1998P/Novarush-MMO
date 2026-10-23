@@ -559,12 +559,12 @@ class ResourceUpdate
 		{
 			$ListIDArray		= $CurrentQueue[0];
 			$Element			= $ListIDArray[0];
-			$Level				= $ListIDArray[1];
 			$BuildMode			= $ListIDArray[4];
 			$ForDestroy			= ($BuildMode == 'destroy') ? true : false;
-			$costResources		= BuildFunctions::getElementPrice($this->USER, $this->PLANET, $Element, $ForDestroy);
-			$BuildTime			= BuildFunctions::getBuildingTime($this->USER, $this->PLANET, $Element, $costResources);
-			$HaveResources		= BuildFunctions::isElementBuyable($this->USER, $this->PLANET, $Element, $costResources);
+			$Level				= $ForDestroy ? max(0, (int)($this->PLANET[$resource[$Element]] ?? 0) - 1) : ((int)($this->PLANET[$resource[$Element]] ?? 0) + 1);
+			$costResources		= BuildFunctions::getElementPrice($this->USER, $this->PLANET, $Element, $ForDestroy, $ForDestroy ? $Level : ($Level - 1));
+			$BuildTime			= BuildFunctions::getBuildingTime($this->USER, $this->PLANET, $Element, $costResources, $ForDestroy, $ForDestroy ? $Level : ($Level - 1));
+			$HaveResources		= BuildFunctions::isElementBuyable($this->USER, $this->PLANET, $Element, $costResources, $ForDestroy, $ForDestroy ? $Level : ($Level - 1));
 			$BuildEndTime		= $this->PLANET['b_building'] + $BuildTime;
 			$CurrentQueue[0]	= array($Element, $Level, $BuildTime, $BuildEndTime, $BuildMode);
 			$HaveNoMoreLevel	= false;
@@ -572,6 +572,10 @@ class ResourceUpdate
 			if($ForDestroy && $this->PLANET[$resource[$Element]] == 0) {
 				$HaveResources  = false;
 				$HaveNoMoreLevel = true;
+			}
+
+			if(!$ForDestroy && !BuildFunctions::isTechnologieAccessible($this->USER, $this->PLANET, $Element, array())) {
+				$HaveResources = false;
 			}
 
 			if($HaveResources === true) {
@@ -584,6 +588,13 @@ class ResourceUpdate
                 //$new_code
                 include('includes/subclasses/subclass.ResThis.php');
                 //$new_code
+				if (!isset($this->PLANET['_auto_paid_mines'])) {
+					$this->PLANET['_auto_paid_mines'] = array(901 => 0.0, 902 => 0.0, 903 => 0.0);
+				}
+				$this->PLANET['_auto_paid_mines'][901] += (float)($costResources[901] ?? 0.0);
+				$this->PLANET['_auto_paid_mines'][902] += (float)($costResources[902] ?? 0.0);
+				$this->PLANET['_auto_paid_mines'][903] += (float)($costResources[903] ?? 0.0);
+
 				$NewQueue               	= serialize($CurrentQueue);
 				$Loop                  		= false;
 			} else {
@@ -606,24 +617,10 @@ class ResourceUpdate
 					}
 				}
 
-				array_shift($CurrentQueue);
-					
-				if (count($CurrentQueue) == 0) {
-					$BuildEndTime  = 0;
-					$NewQueue      = '';
-					$Loop          = false;
-				} else {
-					$BaseTime			= $BuildEndTime - $BuildTime;
-					$NewQueue			= array();
-					foreach($CurrentQueue as $ListIDArray)
-					{
-						$ListIDArray[2]		= BuildFunctions::getBuildingTime($this->USER, $this->PLANET, $ListIDArray[0], NULL, $ListIDArray[4] == 'destroy');
-						$BaseTime			+= $ListIDArray[2];
-						$ListIDArray[3]		= $BaseTime;
-						$NewQueue[]			= $ListIDArray;
-					}
-					$CurrentQueue	= $NewQueue;
-				}
+				$CurrentQueue  = array();
+				$BuildEndTime  = 0;
+				$NewQueue      = '';
+				$Loop          = false;
 			}
 		}
 			
@@ -711,10 +708,13 @@ class ResourceUpdate
             //}
 			//$new_code
 			$Element            = $ListIDArray[0];
-			$Level              = $ListIDArray[1];
-			$costResources		= BuildFunctions::getElementPrice($this->USER, $PLANET, $Element);
-			$BuildTime			= BuildFunctions::getBuildingTime($this->USER, $PLANET, $Element, $costResources);
-			$HaveResources		= BuildFunctions::isElementBuyable($this->USER, $PLANET, $Element, $costResources);
+			$Level              = (int)($this->USER[$resource[$Element]] ?? 0) + 1;
+			$costResources		= BuildFunctions::getElementPrice($this->USER, $PLANET, $Element, false, $Level - 1);
+			$BuildTime			= BuildFunctions::getBuildingTime($this->USER, $PLANET, $Element, $costResources, false, $Level - 1);
+			$HaveResources		= BuildFunctions::isElementBuyable($this->USER, $PLANET, $Element, $costResources, false, $Level - 1);
+			if(!BuildFunctions::isTechnologieAccessible($this->USER, $PLANET, $Element, array())) {
+				$HaveResources = false;
+			}
 			$BuildEndTime       = $this->USER['b_tech'] + $BuildTime;
 			$CurrentQueue[0]	= array($Element, $Level, $BuildTime, $BuildEndTime, $PLANET['id']);
 			
@@ -728,6 +728,17 @@ class ResourceUpdate
                 //$new_code
                 include('includes/subclasses/subclass.ResPlanetThisUser.php');
                 //$new_code
+				if (!isset($this->USER['_auto_paid_research'])) {
+					$this->USER['_auto_paid_research'] = array();
+				}
+				$this->USER['_auto_paid_research'][] = array(
+					'planet_id' => (int)$PLANET['id'],
+					'cost'      => array(
+						901 => (float)($costResources[901] ?? 0.0),
+						902 => (float)($costResources[902] ?? 0.0),
+						903 => (float)($costResources[903] ?? 0.0),
+					),
+				);
                
 				$this->USER['b_tech_id']		= $Element;
 				$this->USER['b_tech']      		= $BuildEndTime;
@@ -746,27 +757,12 @@ class ResourceUpdate
 					PlayerUtil::sendMessage($this->USER['id'], 0, $LNG['sys_techlist'], 99, $LNG['sys_buildlist_fail'], $Message, $this->TIME);
 				}
 
-				array_shift($CurrentQueue);
-					
-				if (count($CurrentQueue) == 0) {
-					$this->USER['b_tech'] 			= 0;
-					$this->USER['b_tech_id']		= 0;
-					$this->USER['b_tech_planet']	= 0;
-					$this->USER['b_tech_queue']		= '';
-					
-					$Loop                  			= false;
-				} else {
-					$BaseTime						= $BuildEndTime - $BuildTime;
-					$NewQueue						= array();
-					foreach($CurrentQueue as $ListIDArray)
-					{
-						$ListIDArray[2]				= BuildFunctions::getBuildingTime($this->USER, $PLANET, $ListIDArray[0]);
-						$BaseTime					+= $ListIDArray[2];
-						$ListIDArray[3]				= $BaseTime;
-						$NewQueue[]					= $ListIDArray;
-					}
-					$CurrentQueue					= $NewQueue;
-				}
+				$CurrentQueue                   = array();
+				$this->USER['b_tech']           = 0;
+				$this->USER['b_tech_id']        = 0;
+				$this->USER['b_tech_planet']    = 0;
+				$this->USER['b_tech_queue']     = '';
+				$Loop                           = false;
 			}
 				
 			if($isAnotherPlanet)

@@ -893,28 +893,81 @@ class BotLogisticsPlanner
         $targetBuildings = array(15, 4, 1, 2, 3, 14, 21, 31, 44);
 
         foreach ($planets as $pId => $pEntry) {
-            if (!empty($pEntry['building_queue']) && count($pEntry['building_queue']) >= 2) continue;
             $pData = $pEntry['data'];
+
+            // Abastecimiento proactivo para orden en espera en building_queue[1]
+            if (!empty($pEntry['building_queue']) && isset($pEntry['building_queue'][1])) {
+                $nextBldId  = (int)$pEntry['building_queue'][1][0];
+                $nextBldLvl = (int)$pEntry['building_queue'][1][1];
+                $cost = BuildFunctions::getElementPrice($this->ctx->user, $pData, $nextBldId, false, $nextBldLvl - 1);
+                $reqM = isset($cost[901]) ? (float)$cost[901] : (float)($cost['metal'] ?? 0.0);
+                $reqC = isset($cost[902]) ? (float)$cost[902] : (float)($cost['crystal'] ?? 0.0);
+                $reqD = isset($cost[903]) ? (float)$cost[903] : (float)($cost['deuterium'] ?? 0.0);
+
+                if ($pData['metal'] < $reqM || $pData['crystal'] < $reqC || $pData['deuterium'] < $reqD) {
+                    $demands[] = array(
+                        'target_planet_id' => $pId,
+                        'type'             => 'building',
+                        'element_id'       => $nextBldId,
+                        'count'            => 1,
+                        'priority'         => 3,
+                        'urgency_score'    => 2800.0,
+                        'required'         => array('metal' => $reqM, 'crystal' => $reqC, 'deuterium' => $reqD),
+                        'reason'           => "Abastecimiento logístico proactivo para orden en espera " . ($resource[$nextBldId] ?? "edificio #{$nextBldId}") . " niv {$nextBldLvl} en planeta #{$pId}",
+                    );
+                    continue;
+                }
+            }
+
+            if (!empty($pEntry['building_queue']) && count($pEntry['building_queue']) >= 2) continue;
 
             $isYoungColony = ((int)($pData['metal_mine'] ?? 0) < 10 || (int)($pData['crystal_mine'] ?? 0) < 8);
 
-            foreach ($targetBuildings as $bId) {
+            // Check if this planet has an active savings lock for category 'mines'
+            $minesLock = null;
+            if (isset($this->ctx->budgetManager)) {
+                $minesLock = $this->ctx->budgetManager->getSavingsLockForCategory($pId, 'mines');
+                if (empty($minesLock)) {
+                    $genLock = $this->ctx->budgetManager->getSavingsLock();
+                    if (!empty($genLock) && (int)($genLock['planet_id'] ?? 0) === (int)$pId && ($genLock['category'] ?? '') === 'mines') {
+                        $minesLock = $genLock;
+                    }
+                }
+            }
+
+            $buildingsToEvaluate = $targetBuildings;
+            if (!empty($minesLock) && !empty($minesLock['element_id']) && !in_array((int)$minesLock['element_id'], $buildingsToEvaluate, true)) {
+                array_unshift($buildingsToEvaluate, (int)$minesLock['element_id']);
+            } elseif (empty($minesLock)) {
+                if (class_exists('BotProductionAllocator')) {
+                    $allocator = new BotProductionAllocator($this->ctx, $this->gateway);
+                    $freeFields = CalculateMaxPlanetFields($pData) - ((int)$pData['field_current'] + count($pEntry['building_queue'] ?? array()));
+                    $targetBld = $allocator->getMandatoryMilestoneBuilding($pData, true, true, $empire->getHourlyProductionMSE(), false, (float)($pEntry['hourly_mse'] ?? 0.0), $freeFields);
+                    if ($targetBld > 0) {
+                        $buildingsToEvaluate = array_values(array_unique(array_merge(array((int)$targetBld), $buildingsToEvaluate)));
+                    }
+                }
+            }
+
+            foreach ($buildingsToEvaluate as $bId) {
                 if (BuildFunctions::isTechnologieAccessible($this->ctx->user, $pData, $bId, array())) {
-                    $cost = BuildFunctions::getElementPrice($this->ctx->user, $pData, $bId);
-                    $reqM = isset($cost[901]) ? (float)$cost[901] : 0.0;
-                    $reqC = isset($cost[902]) ? (float)$cost[902] : 0.0;
-                    $reqD = isset($cost[903]) ? (float)$cost[903] : 0.0;
+                    $isLockedGoal = (!empty($minesLock) && (int)$minesLock['element_id'] === (int)$bId);
+                    $cost = (!empty($isLockedGoal) && !empty($minesLock['cost'])) ? $minesLock['cost'] : BuildFunctions::getElementPrice($this->ctx->user, $pData, $bId);
+                    $reqM = isset($cost[901]) ? (float)$cost[901] : (float)($cost['metal'] ?? 0.0);
+                    $reqC = isset($cost[902]) ? (float)$cost[902] : (float)($cost['crystal'] ?? 0.0);
+                    $reqD = isset($cost[903]) ? (float)$cost[903] : (float)($cost['deuterium'] ?? 0.0);
 
                     if ($pData['metal'] < $reqM || $pData['crystal'] < $reqC || $pData['deuterium'] < $reqD) {
+                        $score = $isLockedGoal ? 2600.0 : ($isYoungColony ? 3500.0 : 1000.0);
                         $demands[] = array(
                             'target_planet_id' => $pId,
                             'type'             => 'building',
                             'element_id'       => $bId,
                             'count'            => 1,
                             'priority'         => 3,
-                            'urgency_score'    => $isYoungColony ? 3500.0 : 1000.0,
+                            'urgency_score'    => $score,
                             'required'         => array('metal' => $reqM, 'crystal' => $reqC, 'deuterium' => $reqD),
-                            'reason'           => "Construcción de {$resource[$bId]} en planeta #{$pId}",
+                            'reason'           => $isLockedGoal ? "Ahorro estratégico prioritario de {$resource[$bId]} en planeta #{$pId}" : "Construcción de {$resource[$bId]} en planeta #{$pId}",
                         );
                         break;
                     }
@@ -922,32 +975,110 @@ class BotLogisticsPlanner
             }
         }
 
+        // Abastecimiento proactivo para investigación en espera en b_tech_queue[1]
+        $techQueue = !empty($this->ctx->user['b_tech_queue']) ? @unserialize($this->ctx->user['b_tech_queue']) : array();
+        if (is_array($techQueue) && isset($techQueue[1])) {
+            $nextTechId  = (int)$techQueue[1][0];
+            $targetLabId = (int)($techQueue[1][4] ?? $this->ctx->homePlanetId);
+            $labBody = $empire->getPlanet($targetLabId);
+            if (!empty($labBody)) {
+                $labData = $labBody['data'];
+                $nextTechLvl = (int)($techQueue[1][1] ?? 1);
+                $cost = BuildFunctions::getElementPrice($this->ctx->user, $labData, $nextTechId, false, $nextTechLvl - 1);
+                $reqM = isset($cost[901]) ? (float)$cost[901] : (float)($cost['metal'] ?? 0.0);
+                $reqC = isset($cost[902]) ? (float)$cost[902] : (float)($cost['crystal'] ?? 0.0);
+                $reqD = isset($cost[903]) ? (float)$cost[903] : (float)($cost['deuterium'] ?? 0.0);
+
+                if ($labData['metal'] < $reqM || $labData['crystal'] < $reqC || $labData['deuterium'] < $reqD) {
+                    $demands[] = array(
+                        'target_planet_id' => $targetLabId,
+                        'type'             => 'research',
+                        'element_id'       => $nextTechId,
+                        'count'            => 1,
+                        'priority'         => 3,
+                        'urgency_score'    => 2900.0,
+                        'required'         => array('metal' => $reqM, 'crystal' => $reqC, 'deuterium' => $reqD),
+                        'reason'           => "Abastecimiento proactivo para investigación en espera #{$nextTechId} en planeta laboratorio #{$targetLabId}",
+                    );
+                }
+            }
+        }
+
         // Research demand for idle lab
         if (empty($this->ctx->user['b_tech_planet']) && empty($this->ctx->user['b_tech'])) {
-            $labId = $this->ctx->homePlanetId > 0 ? $this->ctx->homePlanetId : 0;
-            if ($labId > 0) {
-                $labBody = $empire->getPlanet($labId);
+            $resLock = isset($this->ctx->budgetManager) ? $this->ctx->budgetManager->getSavingsLockForCategory(0, 'research') : null;
+            if (!empty($resLock) && !empty($resLock['planet_id']) && !empty($resLock['element_id'])) {
+                $targetLabId = (int)$resLock['planet_id'];
+                $labBody = $empire->getPlanet($targetLabId);
                 if (!empty($labBody)) {
                     $labData = $labBody['data'];
-                    $techs = array(115, 117, 118, 108, 109, 110, 111, 120, 121, 122);
-                    foreach ($techs as $tId) {
-                        if (BuildFunctions::isTechnologieAccessible($this->ctx->user, $labData, $tId, array())) {
-                            $cost = BuildFunctions::getElementPrice($this->ctx->user, $labData, $tId);
-                            $reqM = isset($cost[901]) ? (float)$cost[901] : 0.0;
-                            $reqC = isset($cost[902]) ? (float)$cost[902] : 0.0;
-                            $reqD = isset($cost[903]) ? (float)$cost[903] : 0.0;
-                            if ($labData['metal'] < $reqM || $labData['crystal'] < $reqC || $labData['deuterium'] < $reqD) {
-                                $demands[] = array(
-                                    'target_planet_id' => $labId,
-                                    'type'             => 'research',
-                                    'element_id'       => $tId,
-                                    'count'            => 1,
-                                    'priority'         => 3,
-                                    'urgency_score'    => 800.0,
-                                    'required'         => array('metal' => $reqM, 'crystal' => $reqC, 'deuterium' => $reqD),
-                                    'reason'           => "Investigación de tecnología #{$tId} en laboratorio de #{$labId}",
-                                );
-                                break;
+                    $tCost = $resLock['cost'] ?? BuildFunctions::getElementPrice($this->ctx->user, $labData, $resLock['element_id']);
+                    $reqM = isset($tCost[901]) ? (float)$tCost[901] : (float)($tCost['metal'] ?? 0.0);
+                    $reqC = isset($tCost[902]) ? (float)$tCost[902] : (float)($tCost['crystal'] ?? 0.0);
+                    $reqD = isset($tCost[903]) ? (float)$tCost[903] : (float)($tCost['deuterium'] ?? 0.0);
+
+                    if ($labData['metal'] < $reqM || $labData['crystal'] < $reqC || $labData['deuterium'] < $reqD) {
+                        $demands[] = array(
+                            'target_planet_id' => $targetLabId,
+                            'type'             => 'research',
+                            'element_id'       => (int)$resLock['element_id'],
+                            'count'            => 1,
+                            'priority'         => 3,
+                            'urgency_score'    => 2400.0,
+                            'required'         => array('metal' => $reqM, 'crystal' => $reqC, 'deuterium' => $reqD),
+                            'reason'           => "Ahorro estratégico prioritario de tecnología #{$resLock['element_id']} en planeta laboratorio #{$targetLabId}",
+                        );
+                    }
+                }
+            } else {
+                // Priority B: Select best imperial lab and evaluate comprehensive catalog
+                $bestLabId = $this->ctx->homePlanetId > 0 ? $this->ctx->homePlanetId : 0;
+                $highestSpeed = -1;
+                foreach ($planets as $pCandId => $pCandEntry) {
+                    $pCandData = $pCandEntry['data'];
+                    $candLab = (int)($pCandData[$resource[31]] ?? 0);
+                    if ($candLab > 0) {
+                        $spd = $candLab * 10;
+                        if (!empty($pCandData[$resource[6]])) $spd += 50 + ((int)$pCandData[$resource[6]] * 5);
+                        if (!empty($pCandData[$resource[84]])) $spd += 10 + ((int)$pCandData[$resource[84]] * 2);
+                        if ($spd > $highestSpeed) {
+                            $highestSpeed = $spd;
+                            $bestLabId = (int)$pCandId;
+                        }
+                    }
+                }
+
+                if ($bestLabId > 0) {
+                    $labBody = $empire->getPlanet($bestLabId);
+                    if (!empty($labBody)) {
+                        $labData = $labBody['data'];
+                        $fullTechs = array(124, 123, 108, 113, 117, 118, 114, 131, 132, 133, 106, 109, 110, 111, 120, 121, 122, 134);
+                        if (class_exists('BotProductionAllocator')) {
+                            $allocator = new BotProductionAllocator($this->ctx, $this->gateway);
+                            $templateTechId = $allocator->getMandatoryResearchTech($empire, $labData);
+                            if ($templateTechId > 0) {
+                                $fullTechs = array_values(array_unique(array_merge(array((int)$templateTechId), $fullTechs)));
+                            }
+                        }
+                        foreach ($fullTechs as $tId) {
+                            if (BuildFunctions::isTechnologieAccessible($this->ctx->user, $labData, $tId, array())) {
+                                $cost = BuildFunctions::getElementPrice($this->ctx->user, $labData, $tId);
+                                $reqM = isset($cost[901]) ? (float)$cost[901] : (float)($cost['metal'] ?? 0.0);
+                                $reqC = isset($cost[902]) ? (float)$cost[902] : (float)($cost['crystal'] ?? 0.0);
+                                $reqD = isset($cost[903]) ? (float)$cost[903] : (float)($cost['deuterium'] ?? 0.0);
+                                if ($labData['metal'] < $reqM || $labData['crystal'] < $reqC || $labData['deuterium'] < $reqD) {
+                                    $demands[] = array(
+                                        'target_planet_id' => $bestLabId,
+                                        'type'             => 'research',
+                                        'element_id'       => $tId,
+                                        'count'            => 1,
+                                        'priority'         => 3,
+                                        'urgency_score'    => 800.0,
+                                        'required'         => array('metal' => $reqM, 'crystal' => $reqC, 'deuterium' => $reqD),
+                                        'reason'           => "Investigación de tecnología #{$tId} en mejor laboratorio #{$bestLabId}",
+                                    );
+                                    break;
+                                }
                             }
                         }
                     }

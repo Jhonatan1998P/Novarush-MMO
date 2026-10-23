@@ -267,13 +267,9 @@ class BotGameServices
     /**
      * Add building to real planet building queue
      */
-    public static function enqueueBuilding(array &$user, array &$planet, $elementId, $forDestroy = false)
+    public static function enqueueBuilding(array &$user, array &$planet, $elementId, $forDestroy = false, $maxAllowedSlotsOverride = null)
     {
         global $resource, $pricelist, $reslist;
-
-        if (!BuildFunctions::isTechnologieAccessible($user, $planet, $elementId, array())) {
-            return false;
-        }
 
         $currentQueue = !empty($planet['b_building_id']) ? @unserialize($planet['b_building_id']) : array();
         if (!is_array($currentQueue)) {
@@ -282,8 +278,29 @@ class BotGameServices
         $actualCount  = count($currentQueue);
 
         $config = Config::get();
-        $maxSlots = $config->max_elements_build + (isset($user['factor']['BuildSlots']) ? (int)$user['factor']['BuildSlots'] : 0);
-        if ($config->max_elements_build != 0 && $actualCount >= $maxSlots) {
+        $maxSlots = ($maxAllowedSlotsOverride !== null)
+            ? (int)$maxAllowedSlotsOverride
+            : ($config->max_elements_build + (isset($user['factor']['BuildSlots']) ? (int)$user['factor']['BuildSlots'] : 0));
+
+        if ($maxSlots > 0 && $actualCount >= $maxSlots) {
+            return false;
+        }
+
+        // Proyectar planeta sumando ordenes previas en cola para validar accesibilidad y nivel
+        $projPlanet = $planet;
+        foreach ($currentQueue as $q) {
+            $qElem = (int)$q[0];
+            $qCol  = $resource[$qElem] ?? null;
+            if ($qCol) {
+                if (($q[4] ?? 'build') === 'destroy') {
+                    $projPlanet[$qCol] = max(0, (int)($projPlanet[$qCol] ?? 0) - 1);
+                } else {
+                    $projPlanet[$qCol] = (int)($projPlanet[$qCol] ?? 0) + 1;
+                }
+            }
+        }
+
+        if (!BuildFunctions::isTechnologieAccessible($user, $projPlanet, $elementId, array())) {
             return false;
         }
 
@@ -293,45 +310,34 @@ class BotGameServices
         }
 
         if ($forDestroy) {
-            $buildLevel = (int)($planet[$resource[$elementId]] ?? 0);
-            foreach ($currentQueue as $q) {
-                if ($q[0] == $elementId) {
-                    if ($q[4] === 'destroy') {
-                        $buildLevel--;
-                    } else {
-                        $buildLevel++;
-                    }
-                }
-            }
+            $buildLevel = (int)($projPlanet[$resource[$elementId]] ?? 0);
             if ($buildLevel <= 0) {
                 return false;
             }
         } else {
-            $buildLevel = (int)($planet[$resource[$elementId]] ?? 0) + 1;
-            foreach ($currentQueue as $q) {
-                if ($q[0] == $elementId) {
-                    $buildLevel++;
-                }
-            }
-
+            $buildLevel = (int)($projPlanet[$resource[$elementId]] ?? 0) + 1;
             if (isset($pricelist[$elementId]['max']) && $pricelist[$elementId]['max'] < $buildLevel) {
                 return false;
             }
         }
 
-        $levelForPrice = ($forDestroy) ? $buildLevel : (($actualCount == 0) ? null : ($buildLevel - 1));
+        $levelForPrice = ($forDestroy) ? $buildLevel : ($buildLevel - 1);
         $costResources = BuildFunctions::getElementPrice($user, $planet, $elementId, $forDestroy, $levelForPrice);
-        if (!BuildFunctions::isElementBuyable($user, $planet, $elementId, $costResources, $forDestroy, $levelForPrice)) {
-            return false;
+
+        // Regla de Cobro Canonica: Slot 0 cobra al instante; Slots 1..N-1 no descuentan por adelantado
+        if ($actualCount == 0) {
+            if (!BuildFunctions::isElementBuyable($user, $planet, $elementId, $costResources, $forDestroy, $levelForPrice)) {
+                return false;
+            }
+
+            $planet['metal']     -= isset($costResources[901]) ? $costResources[901] : 0;
+            $planet['crystal']   -= isset($costResources[902]) ? $costResources[902] : 0;
+            $planet['deuterium'] -= isset($costResources[903]) ? $costResources[903] : 0;
         }
 
-        // Deduct resources atomically
-        $planet['metal']     -= isset($costResources[901]) ? $costResources[901] : 0;
-        $planet['crystal']   -= isset($costResources[902]) ? $costResources[902] : 0;
-        $planet['deuterium'] -= isset($costResources[903]) ? $costResources[903] : 0;
-
-        $elementTime  = BuildFunctions::getBuildingTime($user, $planet, $elementId, $costResources, $forDestroy, $levelForPrice);
-        $buildEndTime = ($actualCount == 0) ? (BotClock::get() + $elementTime) : ($currentQueue[$actualCount - 1][3] + $elementTime);
+        $elementTime  = BuildFunctions::getBuildingTime($user, $projPlanet, $elementId, $costResources, $forDestroy, $levelForPrice);
+        $now = class_exists('BotClock') ? BotClock::get() : TIMESTAMP;
+        $buildEndTime = ($actualCount == 0) ? ($now + $elementTime) : ($currentQueue[$actualCount - 1][3] + $elementTime);
 
         $currentQueue[] = array($elementId, $buildLevel, $elementTime, $buildEndTime, $forDestroy ? 'destroy' : 'build');
 
@@ -360,7 +366,7 @@ class BotGameServices
         $planet['b_building_id'] = serialize($currentQueue);
         $planet['b_building']    = $currentQueue[0][3];
 
-        if (class_exists('BotPremiumStrategist')) {
+        if ($actualCount == 0 && class_exists('BotPremiumStrategist')) {
             BotPremiumStrategist::updateCachedPlanetResources($planet['id'], $planet['metal'], $planet['crystal'], $planet['deuterium']);
         }
 
@@ -467,7 +473,7 @@ class BotGameServices
     /**
      * Add technology to real research queue
      */
-    public static function enqueueResearch(array &$user, array &$planet, $elementId)
+    public static function enqueueResearch(array &$user, array &$planet, $elementId, $maxAllowedSlotsOverride = null)
     {
         global $resource, $pricelist, $reslist;
 
@@ -475,72 +481,115 @@ class BotGameServices
             $user['factor'] = getFactors($user, 'basic', class_exists('BotClock') ? BotClock::get() : TIMESTAMP);
         }
 
-        if (!BuildFunctions::isTechnologieAccessible($user, $planet, $elementId, array())) {
-            return false;
-        }
-
-        if ($user['b_tech_planet'] != 0) {
-            return false; // Lab busy
-        }
-
         $currentQueue = !empty($user['b_tech_queue']) ? @unserialize($user['b_tech_queue']) : array();
         if (!is_array($currentQueue)) {
             $currentQueue = array();
         }
-        $actualCount  = count($currentQueue);
 
+        $now = class_exists('BotClock') ? BotClock::get() : TIMESTAMP;
+        if (!empty($user['b_tech_planet']) && empty($currentQueue)) {
+            $tId = (int)$user['b_tech_id'];
+            $col = $resource[$tId] ?? null;
+            $curLvl = $col ? (int)($user[$col] ?? 0) : 0;
+            $currentQueue[] = array(
+                $tId,
+                $curLvl + 1,
+                max(1, (int)$user['b_tech'] - $now),
+                (int)$user['b_tech'],
+                (int)$user['b_tech_planet']
+            );
+        }
+
+        $actualCount = count($currentQueue);
         $config = Config::get();
-        $maxSlots = $config->max_elements_tech + (isset($user['factor']['ResearchSlots']) ? (int)$user['factor']['ResearchSlots'] : 0);
-        if ($config->max_elements_tech != 0 && $actualCount >= $maxSlots) {
+        $maxSlots = ($maxAllowedSlotsOverride !== null)
+            ? (int)$maxAllowedSlotsOverride
+            : ($config->max_elements_tech + (isset($user['factor']['ResearchSlots']) ? (int)$user['factor']['ResearchSlots'] : 0));
+
+        if ($maxSlots > 0 && $actualCount >= $maxSlots) {
             return false;
         }
 
-        $buildLevel = $user[$resource[$elementId]] + 1;
+        // Proyectar tecnologias sumando ordenes previas en cola
+        $projUser = $user;
+        foreach ($currentQueue as $q) {
+            $qElem = (int)$q[0];
+            $qCol  = $resource[$qElem] ?? null;
+            if ($qCol) {
+                $projUser[$qCol] = (int)($projUser[$qCol] ?? 0) + 1;
+            }
+        }
+
+        if (!BuildFunctions::isTechnologieAccessible($projUser, $planet, $elementId, array())) {
+            return false;
+        }
+
+        $buildLevel = (int)($projUser[$resource[$elementId]] ?? 0) + 1;
         if (isset($pricelist[$elementId]['max']) && $pricelist[$elementId]['max'] < $buildLevel) {
             return false;
         }
 
-        $costResources = BuildFunctions::getElementPrice($user, $planet, $elementId, false);
-        if (!BuildFunctions::isElementBuyable($user, $planet, $elementId, $costResources)) {
-            return false;
-        }
-
-        $planet['metal']     -= isset($costResources[901]) ? $costResources[901] : 0;
-        $planet['crystal']   -= isset($costResources[902]) ? $costResources[902] : 0;
-        $planet['deuterium'] -= isset($costResources[903]) ? $costResources[903] : 0;
-
-        $elementTime  = BuildFunctions::getBuildingTime($user, $planet, $elementId, $costResources);
-        $buildEndTime = BotClock::get() + $elementTime;
-
-        $currentQueue[] = array($elementId, $buildLevel, $elementTime, $buildEndTime, $planet['id']);
+        $levelForPrice = $buildLevel - 1;
+        $costResources = BuildFunctions::getElementPrice($projUser, $planet, $elementId, false, $levelForPrice);
 
         $db = Database::get();
-        $res1 = $db->update("UPDATE %%PLANETS%% SET metal = :m, crystal = :c, deuterium = :d WHERE id = :pid;", array(
-            ':m'   => $planet['metal'],
-            ':c'   => $planet['crystal'],
-            ':d'   => $planet['deuterium'],
-            ':pid' => $planet['id'],
-        ));
 
-        $res2 = $db->update("UPDATE %%USERS%% SET b_tech = :b_tech, b_tech_planet = :pid, b_tech_id = :tid, b_tech_queue = :queue WHERE id = :uid;", array(
-            ':b_tech' => $buildEndTime,
-            ':pid'    => $planet['id'],
-            ':tid'    => $elementId,
-            ':queue'  => serialize($currentQueue),
-            ':uid'    => $user['id'],
-        ));
+        // Regla de Cobro Canonica: Slot 0 cobra al instante; Slots 1..N-1 no descuentan por adelantado
+        if ($actualCount == 0) {
+            if (!BuildFunctions::isElementBuyable($projUser, $planet, $elementId, $costResources, false, $levelForPrice)) {
+                return false;
+            }
 
-        if ($res1 === false || $res2 === false || $db->rowCount() <= 0) {
-            return false;
-        }
+            $planet['metal']     -= isset($costResources[901]) ? $costResources[901] : 0;
+            $planet['crystal']   -= isset($costResources[902]) ? $costResources[902] : 0;
+            $planet['deuterium'] -= isset($costResources[903]) ? $costResources[903] : 0;
 
-        $user['b_tech_queue']  = serialize($currentQueue);
-        $user['b_tech_planet'] = $planet['id'];
-        $user['b_tech_id']     = $elementId;
-        $user['b_tech']        = $buildEndTime;
+            $elementTime  = BuildFunctions::getBuildingTime($projUser, $planet, $elementId, $costResources, false, $levelForPrice);
+            $buildEndTime = $now + $elementTime;
+            $currentQueue[] = array($elementId, $buildLevel, $elementTime, $buildEndTime, $planet['id']);
 
-        if (class_exists('BotPremiumStrategist')) {
-            BotPremiumStrategist::updateCachedPlanetResources($planet['id'], $planet['metal'], $planet['crystal'], $planet['deuterium']);
+            $res1 = $db->update("UPDATE %%PLANETS%% SET metal = :m, crystal = :c, deuterium = :d WHERE id = :pid;", array(
+                ':m'   => $planet['metal'],
+                ':c'   => $planet['crystal'],
+                ':d'   => $planet['deuterium'],
+                ':pid' => $planet['id'],
+            ));
+
+            $res2 = $db->update("UPDATE %%USERS%% SET b_tech = :b_tech, b_tech_planet = :pid, b_tech_id = :tid, b_tech_queue = :queue WHERE id = :uid;", array(
+                ':b_tech' => $buildEndTime,
+                ':pid'    => $planet['id'],
+                ':tid'    => $elementId,
+                ':queue'  => serialize($currentQueue),
+                ':uid'    => $user['id'],
+            ));
+
+            if ($res1 === false || $res2 === false || $db->rowCount() <= 0) {
+                return false;
+            }
+
+            $user['b_tech_queue']  = serialize($currentQueue);
+            $user['b_tech_planet'] = $planet['id'];
+            $user['b_tech_id']     = $elementId;
+            $user['b_tech']        = $buildEndTime;
+
+            if (class_exists('BotPremiumStrategist')) {
+                BotPremiumStrategist::updateCachedPlanetResources($planet['id'], $planet['metal'], $planet['crystal'], $planet['deuterium']);
+            }
+        } else {
+            $elementTime  = BuildFunctions::getBuildingTime($projUser, $planet, $elementId, $costResources, false, $levelForPrice);
+            $buildEndTime = $currentQueue[$actualCount - 1][3] + $elementTime;
+            $currentQueue[] = array($elementId, $buildLevel, $elementTime, $buildEndTime, $planet['id']);
+
+            $res = $db->update("UPDATE %%USERS%% SET b_tech_queue = :queue WHERE id = :uid;", array(
+                ':queue' => serialize($currentQueue),
+                ':uid'   => $user['id'],
+            ));
+
+            if ($res === false || $db->rowCount() <= 0) {
+                return false;
+            }
+
+            $user['b_tech_queue'] = serialize($currentQueue);
         }
 
         return true;

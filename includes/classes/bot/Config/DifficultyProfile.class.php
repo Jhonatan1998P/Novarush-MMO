@@ -44,6 +44,8 @@ class BotDifficultyProfile
     public $antiBaitEnabled;                // Whether bot actively monitors and evades in-flight ninja ambushes
     public $antiBaitWindowSeconds;          // Seconds before impact window for live tactical snapshot (e.g. 180s, 120s, 90s)
     public $antiBaitAccuracy;               // Probability of noticing and successfully recalling from ambush (0.0 to 1.0)
+    public $maxBuildQueueSlots;             // Capacidad máxima de cola de construcción por dificultad
+    public $maxTechQueueSlots;              // Capacidad máxima de cola de investigación por dificultad
 
     public function __construct($name = self::NORMAL)
     {
@@ -79,6 +81,8 @@ class BotDifficultyProfile
                 $this->antiBaitEnabled              = false; // Ciego ante trampas ninjas (novato)
                 $this->antiBaitWindowSeconds        = 0;
                 $this->antiBaitAccuracy             = 0.0;
+                $this->maxBuildQueueSlots           = 2;
+                $this->maxTechQueueSlots            = 2;
                 break;
 
             case self::HARD:
@@ -106,6 +110,8 @@ class BotDifficultyProfile
                 $this->antiBaitEnabled              = true;  // Monitorea y evade a T-120s
                 $this->antiBaitWindowSeconds        = 120;
                 $this->antiBaitAccuracy             = 0.85;  // 85% agudeza de evasión
+                $this->maxBuildQueueSlots           = 5;
+                $this->maxTechQueueSlots            = 5;
                 break;
 
             case self::TITAN:
@@ -134,6 +140,8 @@ class BotDifficultyProfile
                 $this->antiBaitEnabled              = true;  // Paranoia táctica pre-impacto a T-90s
                 $this->antiBaitWindowSeconds        = 90;
                 $this->antiBaitAccuracy             = 1.00;  // 100% Infalible: imposible de estampar
+                $this->maxBuildQueueSlots           = 10;
+                $this->maxTechQueueSlots            = 10;
                 break;
 
             case self::NORMAL:
@@ -163,6 +171,8 @@ class BotDifficultyProfile
                 $this->antiBaitEnabled              = true;  // Revisa a T-180s
                 $this->antiBaitWindowSeconds        = 180;
                 $this->antiBaitAccuracy             = 0.50;  // 50% de probabilidad de notar trampa
+                $this->maxBuildQueueSlots           = 3;
+                $this->maxTechQueueSlots            = 3;
                 break;
         }
     }
@@ -503,6 +513,16 @@ class BotDifficultyProfile
     public function isNightmare()
     {
         return $this->isTitan();
+    }
+
+    public function getMaxBuildQueueSlots()
+    {
+        return isset($this->maxBuildQueueSlots) ? max(1, (int)$this->maxBuildQueueSlots) : 3;
+    }
+
+    public function getMaxTechQueueSlots()
+    {
+        return isset($this->maxTechQueueSlots) ? max(1, (int)$this->maxTechQueueSlots) : 3;
     }
 
     public static function getAll()

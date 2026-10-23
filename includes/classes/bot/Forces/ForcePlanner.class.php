@@ -639,9 +639,17 @@ class BotForcePlanner
         $costC = isset($pricelist[$unitId]['cost'][902]) ? (float)$pricelist[$unitId]['cost'][902] : 0.0;
         $costD = isset($pricelist[$unitId]['cost'][903]) ? (float)$pricelist[$unitId]['cost'][903] : 0.0;
 
-        $availM = min((float)$pData['metal'], (float)($categoryCredits['metal'] ?? 0.0));
-        $availC = min((float)$pData['crystal'], (float)($categoryCredits['crystal'] ?? 0.0));
-        $availD = min((float)$pData['deuterium'], (float)($categoryCredits['deuterium'] ?? 0.0));
+        $slot1Res = array('metal' => 0.0, 'crystal' => 0.0, 'deuterium' => 0.0);
+        if (isset($this->ctx->budgetManager) && method_exists($this->ctx->budgetManager, 'getNextQueuedSlotCost') && !empty($pData['id'])) {
+            $slot1Res = $this->ctx->budgetManager->getNextQueuedSlotCost((int)$pData['id']);
+        }
+        $physAvailM = max(0.0, (float)$pData['metal'] - (float)$slot1Res['metal']);
+        $physAvailC = max(0.0, (float)$pData['crystal'] - (float)$slot1Res['crystal']);
+        $physAvailD = max(0.0, (float)$pData['deuterium'] - (float)$slot1Res['deuterium']);
+
+        $availM = min($physAvailM, (float)($categoryCredits['metal'] ?? 0.0));
+        $availC = min($physAvailC, (float)($categoryCredits['crystal'] ?? 0.0));
+        $availD = min($physAvailD, (float)($categoryCredits['deuterium'] ?? 0.0));
 
         if ($lockedDeficitRes === 901 && $costM > 0) {
             $availM = max(0.0, $availM - $lockedDeficitAmount);
@@ -696,44 +704,11 @@ class BotForcePlanner
         }
 
         $engineSec = (float)BuildFunctions::getBuildingTime($user, $planet, $elementId);
-        if ($engineSec > 1.0) {
-            return $engineSec * 1000.0;
+        if ($engineSec > 0.0) {
+            return max(0.1, $engineSec * 1000.0);
         }
 
-        // Cuando $engineSec <= 1.0 (alcanzó el piso de 1s de BuildFunctions), calculamos el tiempo sub-segundo exacto
-        $costResources = BuildFunctions::getElementPrice($user, $planet, $elementId, false, 1);
-        $costSumTerm = 0.0;
-        foreach ($costResources as $resId => $amt) {
-            if ($amt > 0) {
-                $costSumTerm += pow((float)$amt, 0.3) / 0.003;
-            }
-        }
-        if ($costSumTerm <= 0.0 && isset($pricelist[$elementId]['cost'])) {
-            foreach (array(901, 902, 903) as $rId) {
-                $amt = (float)($pricelist[$elementId]['cost'][$rId] ?? 0.0);
-                if ($amt > 0) {
-                    $costSumTerm += pow($amt, 0.3) / 0.003;
-                }
-            }
-        }
-
-        $gameSpeed = max(1.0, (float)(Config::get()->game_speed ?? 2500.0));
-
-        $sfleet = 0.0;
-        if (isset($user['factor']['BuildTime'])) {
-            $sfleet = (float)$user['factor']['BuildTime'];
-        } elseif (isset($user['factor']['Sfleet'])) {
-            $sfleet = (float)$user['factor']['Sfleet'];
-        }
-
-        $denom = $gameSpeed * (1.0 + $hangarLvl + $modBonus) * pow(2.0, $nanoLvl) * max(0.1, 1.0 + $sfleet);
-        if ($denom <= 0.0) {
-            return 1000.0;
-        }
-
-        $exactSec = ($costSumTerm * 3600.0) / $denom;
-        $finalSec = min(1.0, max(0.0001, $exactSec));
-        return $finalSec * 1000.0;
+        return 1000.0;
     }
 
     public function getConstructibleBatch(array $pData, array $categoryCredits, $unitId, $queuedJobs, $maxAllowedSlots, $queueRemainingSec, $maxHangarDuration, $batchTimeTarget, $lockedDefRes = 0, $isEmergency = false, $lockedDefAmount = 0.0)
@@ -1198,7 +1173,12 @@ class BotForcePlanner
                         1 => 'def_slot1',
                     );
 
+                    $slot1DefBlocked = ($capa1Ratio >= 0.22 && $hasHigherDefCapas);
                     $rolloverTimeMs = 0.0;
+                    if ($slot1DefBlocked) {
+                        $rolloverTimeMs = $totalDefTimeMs * $defSlotShares[1];
+                        $defSlotShares[1] = 0.0;
+                    }
 
                     for ($dSlot = 4; $dSlot >= 1; $dSlot--) {
                         if ($queuedJobs >= 14 || $defJobsEnqueued >= $maxDefJobsThisCycle) {
@@ -1440,7 +1420,12 @@ class BotForcePlanner
                         1 => 'fodder',
                     );
 
-                    $rolloverTimeMs = 0.0;
+                    $slot1FleetBlocked = ($fodderRatio >= 0.22 && $hasAnyCombatWarship);
+                    $rolloverTimeMs = $leftoverSlot0TimeMs;
+                    if ($slot1FleetBlocked) {
+                        $rolloverTimeMs += ($totalFleetTimeMs * $fleetSlotShares[1]);
+                        $fleetSlotShares[1] = 0.0;
+                    }
 
                     for ($sNum = 5; $sNum >= 1; $sNum--) {
                         if ($queuedJobs >= 14) {
@@ -1448,9 +1433,6 @@ class BotForcePlanner
                         }
 
                         $slotTimeMs = ($totalFleetTimeMs * $fleetSlotShares[$sNum]) + $rolloverTimeMs;
-                        if ($sNum === 1) {
-                            $slotTimeMs += $leftoverSlot0TimeMs;
-                        }
 
                         $chosenShipId = (int)($fleetDoctrine[$fleetSlotKeys[$sNum]] ?? 0);
 

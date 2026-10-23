@@ -520,20 +520,6 @@ class BotExpansionPlanner
                 if ($newMoonId) {
                     $moonsCreated++;
 
-                    // Anti-Deadlock: If graviton_tech == 0, unlock immediately for Lunar Base (#41)
-                    $curGrav = (int)($this->ctx->user[$resource[199]] ?? 0);
-                    if ($curGrav === 0) {
-                        $curAstro = (int)($this->ctx->user[$resource[124]] ?? 0);
-                        if ($curAstro < 10) {
-                            $db->update(
-                                "UPDATE %%PLANETS%% SET crystal = GREATEST(0, crystal - 5000000), deuterium = GREATEST(0, deuterium - 1500000) WHERE id = :pid;",
-                                array(':pid' => $targetPlanetId)
-                            );
-                        }
-                        $db->update("UPDATE %%USERS%% SET graviton_tech = 1 WHERE id = :uid;", array(':uid' => $this->ctx->botId));
-                        $this->ctx->user[$resource[199]] = 1;
-                        $this->ctx->user['graviton_tech'] = 1;
-                    }
 
                     if (isset($this->ctx->decisionLog)) {
                         $this->ctx->decisionLog->record(

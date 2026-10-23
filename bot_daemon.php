@@ -8,6 +8,8 @@
  *   php bot_daemon.php --once -> Ejecuta un único ciclo y termina
  */
 
+chdir(dirname(__FILE__));
+
 $isMainScript = (isset($_SERVER['SCRIPT_FILENAME']) && realpath($_SERVER['SCRIPT_FILENAME']) === realpath(__FILE__));
 $once = (isset($argv) && in_array('--once', $argv));
 

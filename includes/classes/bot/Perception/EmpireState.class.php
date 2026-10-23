@@ -145,20 +145,27 @@ class BotEmpireState
     public function updateBodyData($planetId, array $changes)
     {
         $planetId = (int)$planetId;
+        $targetRef = null;
         if (isset($this->planets[$planetId])) {
+            $targetRef = &$this->planets[$planetId];
+        } elseif (isset($this->moons[$planetId])) {
+            $targetRef = &$this->moons[$planetId];
+        }
+
+        if ($targetRef !== null) {
             foreach ($changes as $k => $v) {
-                $this->planets[$planetId]['data'][$k] = $v;
-                if (isset($this->planets[$planetId][$k])) {
-                    $this->planets[$planetId][$k] = $v;
+                $targetRef['data'][$k] = $v;
+                if (array_key_exists($k, $targetRef)) {
+                    $targetRef[$k] = $v;
                 }
             }
-            return true;
-        } elseif (isset($this->moons[$planetId])) {
-            foreach ($changes as $k => $v) {
-                $this->moons[$planetId]['data'][$k] = $v;
-                if (isset($this->moons[$planetId][$k])) {
-                    $this->moons[$planetId][$k] = $v;
-                }
+            if (array_key_exists('b_building_id', $changes)) {
+                $bq = !empty($changes['b_building_id']) ? @unserialize($changes['b_building_id']) : array();
+                $targetRef['building_queue'] = is_array($bq) ? $bq : array();
+            }
+            if (array_key_exists('b_hangar_id', $changes)) {
+                $hq = !empty($changes['b_hangar_id']) ? @unserialize($changes['b_hangar_id']) : array();
+                $targetRef['hangar_queue'] = is_array($hq) ? $hq : array();
             }
             return true;
         }

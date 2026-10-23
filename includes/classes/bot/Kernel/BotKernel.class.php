@@ -91,8 +91,11 @@ class BotKernel
 
             // 4. Build Perception Model
             $world = new BotWorldModel($ctx);
-            if (isset($world->empire) && method_exists($world->empire, 'getUser')) {
-                $ctx->user = $world->empire->getUser();
+            if (isset($world->empire)) {
+                $ctx->empire = $world->empire;
+                if (method_exists($world->empire, 'getUser')) {
+                    $ctx->user = $world->empire->getUser();
+                }
             }
 
             // Seed in-memory planet cache for BotPremiumStrategist

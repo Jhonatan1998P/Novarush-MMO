@@ -47,18 +47,52 @@ class BotActionGateway
             $updater = new ResourceUpdate();
             list($u, $p) = $updater->CalcResource($this->ctx->user, $planet, true, BotClock::get());
 
-            if (!BuildFunctions::isTechnologieAccessible($u, $p, $elementId, array())) {
+            $maxBuildSlots = (isset($this->ctx->difficulty) && method_exists($this->ctx->difficulty, 'getMaxBuildQueueSlots'))
+                ? $this->ctx->difficulty->getMaxBuildQueueSlots()
+                : 3;
+
+            $currentQueue = !empty($p['b_building_id']) ? @unserialize($p['b_building_id']) : array();
+            if (!is_array($currentQueue)) {
+                $currentQueue = array();
+            }
+            $actualCount = count($currentQueue);
+            if ($actualCount >= $maxBuildSlots) {
                 if (!$isOuterTx) $db->rollBack();
                 return false;
             }
 
-            $costResources = BuildFunctions::getElementPrice($u, $p, $elementId, false);
-            if (!BuildFunctions::isElementBuyable($u, $p, $elementId, $costResources)) {
+            global $resource;
+            // Proyectar planeta sumando ordenes previas en cola
+            $projPlanet = $p;
+            foreach ($currentQueue as $q) {
+                $qElem = (int)$q[0];
+                $qCol  = $resource[$qElem] ?? null;
+                if ($qCol) {
+                    if (($q[4] ?? 'build') === 'destroy') {
+                        $projPlanet[$qCol] = max(0, (int)($projPlanet[$qCol] ?? 0) - 1);
+                    } else {
+                        $projPlanet[$qCol] = (int)($projPlanet[$qCol] ?? 0) + 1;
+                    }
+                }
+            }
+
+            if (!BuildFunctions::isTechnologieAccessible($u, $projPlanet, $elementId, array())) {
                 if (!$isOuterTx) $db->rollBack();
                 return false;
             }
 
-            $ok = BotGameServices::enqueueBuilding($u, $p, $elementId);
+            $buildLevel = (int)($projPlanet[$resource[$elementId]] ?? 0) + 1;
+            $levelForPrice = $buildLevel - 1;
+            $costResources = BuildFunctions::getElementPrice($u, $p, $elementId, false, $levelForPrice);
+
+            if ($actualCount == 0) {
+                if (!BuildFunctions::isElementBuyable($u, $p, $elementId, $costResources, false, $levelForPrice)) {
+                    if (!$isOuterTx) $db->rollBack();
+                    return false;
+                }
+            }
+
+            $ok = BotGameServices::enqueueBuilding($u, $p, $elementId, false, $maxBuildSlots);
             if (!$ok) {
                 if (!$isOuterTx) $db->rollBack();
                 return false;
@@ -67,11 +101,21 @@ class BotActionGateway
             if (!$isOuterTx) $db->commit();
             $this->ctx->user = $u;
 
-            if (isset($this->ctx->budgetManager)) {
+            if (isset($this->ctx->empire) && method_exists($this->ctx->empire, 'updateBodyData')) {
+                $this->ctx->empire->updateBodyData($planetId, array(
+                    'metal'         => (float)$p['metal'],
+                    'crystal'       => (float)$p['crystal'],
+                    'deuterium'     => (float)$p['deuterium'],
+                    'b_building'    => $p['b_building'],
+                    'b_building_id' => $p['b_building_id'],
+                ));
+            }
+
+            if ($actualCount == 0 && isset($this->ctx->budgetManager)) {
                 $this->ctx->budgetManager->deductFromBudget($planetId, 'mines', $costResources);
-                $activeLock = $this->ctx->budgetManager->getSavingsLock();
+                $activeLock = $this->ctx->budgetManager->getSavingsLockForCategory($planetId, 'mines');
                 if (!empty($activeLock) && (int)($activeLock['planet_id'] ?? 0) === (int)$planetId && (int)($activeLock['element_id'] ?? 0) === (int)$elementId) {
-                    $this->ctx->budgetManager->clearSavingsLock();
+                    $this->ctx->budgetManager->clearSavingsLock('mines');
                 }
             }
 
@@ -135,6 +179,16 @@ class BotActionGateway
 
             if (!$isOuterTx) $db->commit();
             $this->ctx->user = $u;
+
+            if (isset($this->ctx->empire) && method_exists($this->ctx->empire, 'updateBodyData')) {
+                $this->ctx->empire->updateBodyData($planetId, array(
+                    'metal'         => (float)$p['metal'],
+                    'crystal'       => (float)$p['crystal'],
+                    'deuterium'     => (float)$p['deuterium'],
+                    'b_building'    => $p['b_building'],
+                    'b_building_id' => $p['b_building_id'],
+                ));
+            }
 
             if (isset($this->ctx->budgetManager)) {
                 $this->ctx->budgetManager->deductFromBudget($planetId, 'mines', $costResources);
@@ -202,6 +256,16 @@ class BotActionGateway
             if (!$isOuterTx) $db->commit();
             $this->ctx->user = $u;
 
+            if (isset($this->ctx->empire) && method_exists($this->ctx->empire, 'updateBodyData')) {
+                $this->ctx->empire->updateBodyData($planetId, array(
+                    'metal'         => (float)$p['metal'],
+                    'crystal'       => (float)$p['crystal'],
+                    'deuterium'     => (float)$p['deuterium'],
+                    'b_hangar'      => $p['b_hangar'] ?? 0,
+                    'b_hangar_id'   => $p['b_hangar_id'] ?? '',
+                ));
+            }
+
             if (isset($this->ctx->budgetManager)) {
                 $cat = $categoryOverride ?? (($elementId >= 400) ? 'defense' : ($elementId == 212 ? 'mines' : 'fleet'));
                 $this->ctx->budgetManager->deductFromBudget($planetId, $cat, $costResources);
@@ -255,6 +319,14 @@ class BotActionGateway
             if (!$isOuterTx) $db->commit();
             $this->ctx->user = $u;
 
+            if (isset($this->ctx->empire) && method_exists($this->ctx->empire, 'updateBodyData')) {
+                $this->ctx->empire->updateBodyData($planetId, array(
+                    'metal'         => (float)$p['metal'],
+                    'crystal'       => (float)$p['crystal'],
+                    'deuterium'     => (float)$p['deuterium'],
+                ));
+            }
+
             if (isset($this->ctx->budgetManager)) {
                 $this->ctx->budgetManager->creditScrapRefund($planetId, $refund);
             }
@@ -302,18 +374,53 @@ class BotActionGateway
                 $u['factor'] = $user['factor'];
             }
 
-            if (!BuildFunctions::isTechnologieAccessible($u, $p, $techId, array())) {
+            $maxTechSlots = (isset($this->ctx->difficulty) && method_exists($this->ctx->difficulty, 'getMaxTechQueueSlots'))
+                ? $this->ctx->difficulty->getMaxTechQueueSlots()
+                : 3;
+
+            $currentQueue = !empty($u['b_tech_queue']) ? @unserialize($u['b_tech_queue']) : array();
+            if (!is_array($currentQueue)) {
+                $currentQueue = array();
+            }
+            if (!empty($u['b_tech_planet']) && empty($currentQueue)) {
+                $actualCount = 1;
+            } else {
+                $actualCount = count($currentQueue);
+            }
+
+            if ($actualCount >= $maxTechSlots) {
                 if (!$isOuterTx) $db->rollBack();
                 return false;
             }
 
-            $costResources = BuildFunctions::getElementPrice($u, $p, $techId, false);
-            if (!BuildFunctions::isElementBuyable($u, $p, $techId, $costResources)) {
+            global $resource;
+            // Proyectar tecnologias sumando ordenes previas en cola
+            $projUser = $u;
+            foreach ($currentQueue as $q) {
+                $qElem = (int)$q[0];
+                $qCol  = $resource[$qElem] ?? null;
+                if ($qCol) {
+                    $projUser[$qCol] = (int)($projUser[$qCol] ?? 0) + 1;
+                }
+            }
+
+            if (!BuildFunctions::isTechnologieAccessible($projUser, $p, $techId, array())) {
                 if (!$isOuterTx) $db->rollBack();
                 return false;
             }
 
-            $ok = BotGameServices::enqueueResearch($u, $p, $techId);
+            $buildLevel = (int)($projUser[$resource[$techId]] ?? 0) + 1;
+            $levelForPrice = $buildLevel - 1;
+            $costResources = BuildFunctions::getElementPrice($projUser, $p, $techId, false, $levelForPrice);
+
+            if ($actualCount == 0) {
+                if (!BuildFunctions::isElementBuyable($projUser, $p, $techId, $costResources, false, $levelForPrice)) {
+                    if (!$isOuterTx) $db->rollBack();
+                    return false;
+                }
+            }
+
+            $ok = BotGameServices::enqueueResearch($u, $p, $techId, $maxTechSlots);
             if (!$ok) {
                 if (!$isOuterTx) $db->rollBack();
                 return false;
@@ -322,11 +429,19 @@ class BotActionGateway
             if (!$isOuterTx) $db->commit();
             $this->ctx->user = $u;
 
-            if (isset($this->ctx->budgetManager)) {
+            if ($actualCount == 0 && isset($this->ctx->empire) && method_exists($this->ctx->empire, 'updateBodyData')) {
+                $this->ctx->empire->updateBodyData($planetId, array(
+                    'metal'         => (float)$p['metal'],
+                    'crystal'       => (float)$p['crystal'],
+                    'deuterium'     => (float)$p['deuterium'],
+                ));
+            }
+
+            if ($actualCount == 0 && isset($this->ctx->budgetManager)) {
                 $this->ctx->budgetManager->deductFromBudget($planetId, 'research', $costResources);
-                $activeLock = $this->ctx->budgetManager->getSavingsLock();
+                $activeLock = $this->ctx->budgetManager->getSavingsLockForCategory(0, 'research');
                 if (!empty($activeLock) && (int)($activeLock['element_id'] ?? 0) === (int)$techId) {
-                    $this->ctx->budgetManager->clearSavingsLock();
+                    $this->ctx->budgetManager->clearSavingsLock('research');
                 }
             }
 
@@ -639,6 +754,23 @@ class BotActionGateway
                     ':d'   => $dCargo,
                     ':pid' => $startPlanet['id'],
                 ));
+            }
+
+            if (isset($this->ctx->empire) && method_exists($this->ctx->empire, 'updateBodyData')) {
+                $curEmpireBody = $this->ctx->empire->getPlanet($startPlanet['id']);
+                $bodyData = !empty($curEmpireBody) ? $curEmpireBody['data'] : $startPlanet;
+                $planetChanges = array(
+                    'metal'     => max(0.0, (float)($bodyData['metal'] ?? 0.0) - (float)$mCargo),
+                    'crystal'   => max(0.0, (float)($bodyData['crystal'] ?? 0.0) - (float)$cCargo),
+                    'deuterium' => max(0.0, (float)($bodyData['deuterium'] ?? 0.0) - (float)$dCargo - (float)$consumption),
+                );
+                foreach ($fleetArray as $shipId => $shipCount) {
+                    $shipCol = $resource[$shipId] ?? null;
+                    if ($shipCol) {
+                        $planetChanges[$shipCol] = max(0, (int)($bodyData[$shipCol] ?? 0) - (int)$shipCount);
+                    }
+                }
+                $this->ctx->empire->updateBodyData($startPlanet['id'], $planetChanges);
             }
 
             // Synchronize Virtual Budget for fuel consumption and dispatched cargo

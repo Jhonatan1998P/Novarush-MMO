@@ -23,6 +23,7 @@ class BotContext
     public $decisionLog;
     public $telemetry;
     public $budgetManager;
+    public $empire;
     public $botRow;
 
     public function __construct(array $botRow, array $userRow)

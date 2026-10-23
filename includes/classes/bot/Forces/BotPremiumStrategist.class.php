@@ -283,6 +283,9 @@ class BotPremiumStrategist
 
                 if ($db->rowCount() > 0) {
                     self::invalidatePlanetCache($bestPlanetId);
+                    if (isset($empire) && method_exists($empire, 'updateBodyData')) {
+                        $empire->updateBodyData($bestPlanetId, array($resCol => $bestStock - $cost));
+                    }
                     // Credit 1.000 MO
                     PremiumEconomy::credit($this->ctx->user, 921, 1000, 'fair_res', $elId, "n={$n};amt=1");
 
@@ -475,6 +478,14 @@ class BotPremiumStrategist
             ));
             self::updateCachedPlanetResources($planetId, $newM, $newC, $newD);
 
+            if (isset($this->ctx->empire) && method_exists($this->ctx->empire, 'updateBodyData')) {
+                $this->ctx->empire->updateBodyData($planetId, array(
+                    'metal'     => (float)$newM,
+                    'crystal'   => (float)$newC,
+                    'deuterium' => (float)$newD,
+                ));
+            }
+
             if (isset($this->ctx->budgetManager)) {
                 $this->ctx->budgetManager->syncDemandTraderRebalance($planetId, 'mines', $newM, $newC, $newD, $exchanges, true, true);
             }
@@ -602,6 +613,14 @@ class BotPremiumStrategist
             ':pid' => $planetId,
         ));
         self::updateCachedPlanetResources($planetId, $newM, $newC, $newD);
+
+        if (isset($this->ctx->empire) && method_exists($this->ctx->empire, 'updateBodyData')) {
+            $this->ctx->empire->updateBodyData($planetId, array(
+                'metal'     => (float)$newM,
+                'crystal'   => (float)$newC,
+                'deuterium' => (float)$newD,
+            ));
+        }
 
         // Synchronize virtual budgets in budgetManager
         if (isset($this->ctx->budgetManager)) {
@@ -800,6 +819,14 @@ class BotPremiumStrategist
             ':pid'   => (int)$planetId,
         ));
         self::invalidatePlanetCache($planetId);
+
+        if (isset($this->ctx->empire) && method_exists($this->ctx->empire, 'updateBodyData')) {
+            $this->ctx->empire->updateBodyData($planetId, array(
+                'metal'     => max(0.0, $physMetal - $totalMetCost),
+                'crystal'   => max(0.0, $physCrystal - $totalCryCost),
+                'deuterium' => (float)$planetRow['deuterium'] + $totalDeutGained,
+            ));
+        }
 
         // Synchronize virtual category budgets
         foreach ($categoryDebits as $cat => $deb) {
@@ -1071,7 +1098,29 @@ class BotPremiumStrategist
                 break;
             }
 
-            $ok = $this->rebalancePlanet50_35_15($demand['planet_id'], $demand['category'], true);
+            $lock = null;
+            if (isset($this->ctx->budgetManager)) {
+                $lock = $this->ctx->budgetManager->getSavingsLockForCategory($demand['planet_id'], $demand['category']);
+                if (empty($lock) && $demand['category'] === 'research') {
+                    $resLock = $this->ctx->budgetManager->getSavingsLockForCategory(0, 'research');
+                    if (!empty($resLock) && (int)($resLock['planet_id'] ?? 0) === (int)$demand['planet_id']) {
+                        $lock = $resLock;
+                    }
+                }
+                if (empty($lock)) {
+                    $genLock = $this->ctx->budgetManager->getSavingsLock();
+                    if (!empty($genLock) && (int)($genLock['planet_id'] ?? 0) === (int)$demand['planet_id'] && ($genLock['category'] ?? '') === $demand['category']) {
+                        $lock = $genLock;
+                    }
+                }
+            }
+
+            if (!empty($lock) && !empty($lock['cost']) && is_array($lock['cost'])) {
+                $ok = $this->executeExactDeltaTrade($demand['planet_id'], $lock['cost'], "demand_unlock_" . $demand['category'], true);
+            } else {
+                $ok = $this->rebalancePlanet50_35_15($demand['planet_id'], $demand['category'], true);
+            }
+
             if ($ok) {
                 $executed++;
             }
@@ -1118,6 +1167,14 @@ class BotPremiumStrategist
 
         // 2. Savings lock check on this planet
         if (isset($this->ctx->budgetManager)) {
+            $minesLock = $this->ctx->budgetManager->getSavingsLockForCategory($pId, 'mines');
+            if (!empty($minesLock)) {
+                return 'mines';
+            }
+            $resLock = $this->ctx->budgetManager->getSavingsLockForCategory(0, 'research');
+            if (!empty($resLock) && (int)($resLock['planet_id'] ?? 0) === $pId) {
+                return 'research';
+            }
             $lock = $this->ctx->budgetManager->getSavingsLock();
             if (!empty($lock) && isset($lock['planet_id']) && (int)$lock['planet_id'] === $pId) {
                 $lockCat = $lock['category'] ?? null;
@@ -1553,6 +1610,19 @@ class BotPremiumStrategist
             ':s206' => 10 * $batchToOpen,
             ':pid'  => $targetPlanetId,
         ));
+
+        $tPlanetEntry = $empire->getPlanet($targetPlanetId);
+        $curData = !empty($tPlanetEntry) ? $tPlanetEntry['data'] : array();
+        if (isset($empire) && method_exists($empire, 'updateBodyData')) {
+            $empire->updateBodyData($targetPlanetId, array(
+                'metal'           => (float)($curData['metal'] ?? 0.0) + $mBatch,
+                'crystal'         => (float)($curData['crystal'] ?? 0.0) + $cBatch,
+                'deuterium'       => (float)($curData['deuterium'] ?? 0.0) + $dBatch,
+                $resource[204]    => (int)($curData[$resource[204]] ?? 0) + (25 * $batchToOpen),
+                $resource[205]    => (int)($curData[$resource[205]] ?? 0) + (15 * $batchToOpen),
+                $resource[206]    => (int)($curData[$resource[206]] ?? 0) + (10 * $batchToOpen),
+            ));
+        }
 
         // Credit container rewards directly into budget categories according to personality weights
         if (isset($this->ctx->budgetManager)) {
