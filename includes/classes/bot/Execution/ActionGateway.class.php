@@ -990,7 +990,7 @@ class BotActionGateway
      * @param int $targetP
      * @return int|false Fleet ID or false
      */
-    public function dispatchColonization($originPlanetId, $targetG, $targetS, $targetP)
+    public function dispatchColonization($originPlanetId, $targetG, $targetS, $targetP, array $cargoResources = array(), $speedFactor = 10, &$outStartTime = null)
     {
         return $this->launchFleet(
             array(208 => 1),
@@ -1002,8 +1002,9 @@ class BotActionGateway
             (int)$targetS,
             (int)$targetP,
             1, // Target type 1: Planet
-            array(),
-            10 // 100% speed
+            $cargoResources,
+            $speedFactor,
+            $outStartTime
         );
     }
 }

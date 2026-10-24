@@ -20,133 +20,152 @@ class BotStagingPlanner
     }
 
     /**
-     * Determine best staging base or Forward Operating Base (FOB) closest to target
+     * Determine best staging base or Forward Operating Base (FOB) closest to target.
+     * Doctrina FOB Exclusivamente Lunar Anti-Phalanx:
+     * - La FOB SOLO puede ser una Luna (planet_type === 3).
+     * - Si empty($allMoons), limpiar fob_planet_id = 0 en BD y memoria, y retornar 0.
+     * - Si !empty($allMoons), migrar o descartar fob_planet_id si era un planeta.
+     * - Si targetCoord está presente: elegir la luna con salto cuántico (sprungtor > 0)
+     *   más cercana al objetivo si la dificultad lo permite, o la luna más cercana en distancia.
+     * - Sin targetCoord: elegir la luna con mayor infraestructura de salto/hangar o la primera válida.
      *
      * @param BotEmpireState $empire
      * @param array|null $targetCoord Optional ['galaxy' => int, 'system' => int]
-     * @return int Target planet/moon ID
+     * @return int Target moon ID (strictly planet_type === 3) or 0 if no moons
      */
     public function getBestStagingBase(BotEmpireState $empire, array $targetCoord = null)
     {
-        $allPlanets = $empire->getPlanets();
-        $allMoons   = $empire->getMoons();
-        if (empty($allPlanets) && empty($allMoons)) {
+        $allMoons = $empire->getMoons();
+
+        // Regla Anti-Phalanx Absoluta: Si el imperio no posee ninguna luna, no hay FOB (retornar 0)
+        // y limpiar fob_planet_id en BD y memoria para no regalar un objetivo al Phalanx enemigo.
+        if (empty($allMoons)) {
+            if (!empty($this->ctx->botRow['fob_planet_id'])) {
+                $this->ctx->updateBotRow(array('fob_planet_id' => 0));
+            }
             return 0;
         }
 
-        // Prioridad Suprema de Red de Salto Cuántico:
-        // Si el imperio posee lunas con Salto Cuántico operativo (sprungtor > 0),
-        // la luna con salto cuántico es la FOB natural suprema para concentrar flotas a 0 deuterio
-        if (!empty($allMoons)) {
-            $bestMoonWithGate = 0;
-            $bestMoonFields = -1;
-            foreach ($allMoons as $mId => $mData) {
-                if ((int)($mData['sprungtor'] ?? 0) > 0) {
-                    $fields = (int)($mData['field_current'] ?? 0);
-                    if ($fields > $bestMoonFields) {
-                        $bestMoonFields = $fields;
-                        $bestMoonWithGate = (int)$mId;
-                    }
-                }
-            }
-            if ($bestMoonWithGate > 0) {
-                return $bestMoonWithGate;
-            }
-        }
-
-        // Prioritize locked target FOB designated by StrikePlanner
+        // Sanitización y migración de fob_planet_id si apuntaba a un planeta
         if (!empty($this->ctx->botRow['fob_planet_id']) && (int)$this->ctx->botRow['fob_planet_id'] > 0) {
             $fobId = (int)$this->ctx->botRow['fob_planet_id'];
             $fobBody = $empire->getPlanet($fobId);
             if ($fobBody !== null) {
-                // Doctrina Lunar Anti-Phalanx: Si la FOB actual es un planeta, verificar si tiene Luna propia
-                if ((int)$fobBody['planet_type'] !== 3) {
+                if ((int)($fobBody['planet_type'] ?? $fobBody['data']['planet_type'] ?? 1) !== 3) {
+                    // Apuntaba a un planeta: verificar si tiene luna propia en las mismas coordenadas
+                    $migratedMoonId = 0;
+                    $pG = (int)($fobBody['galaxy'] ?? $fobBody['data']['galaxy'] ?? 0);
+                    $pS = (int)($fobBody['system'] ?? $fobBody['data']['system'] ?? 0);
+                    $pP = (int)($fobBody['planet'] ?? $fobBody['data']['planet'] ?? 0);
                     foreach ($allMoons as $mId => $mData) {
-                        if ($mData['galaxy'] == $fobBody['galaxy'] && $mData['system'] == $fobBody['system'] && $mData['planet'] == $fobBody['planet']) {
-                            return (int)$mId;
+                        $mG = (int)($mData['galaxy'] ?? $mData['data']['galaxy'] ?? 0);
+                        $mS = (int)($mData['system'] ?? $mData['data']['system'] ?? 0);
+                        $mP = (int)($mData['planet'] ?? $mData['data']['planet'] ?? 0);
+                        if ($mG === $pG && $mS === $pS && $mP === $pP) {
+                            $migratedMoonId = (int)$mId;
+                            break;
                         }
                     }
+                    if ($migratedMoonId > 0) {
+                        $this->ctx->updateBotRow(array('fob_planet_id' => $migratedMoonId));
+                    } else {
+                        // El planeta no tiene luna propia: descartar fob_planet_id
+                        $this->ctx->updateBotRow(array('fob_planet_id' => 0));
+                    }
                 }
-                return $fobId;
+            } else {
+                $this->ctx->updateBotRow(array('fob_planet_id' => 0));
             }
         }
 
-        // If target coordinates are provided, find closest colony/moon (FOB)
+        $canUseGate = (isset($this->ctx->difficulty) && method_exists($this->ctx->difficulty, 'canUseQuantumJumpStaging'))
+            ? $this->ctx->difficulty->canUseQuantumJumpStaging()
+            : false;
+
+        // Caso 1: Objetivo activo ($targetCoord)
         if ($targetCoord !== null && isset($targetCoord['galaxy'], $targetCoord['system'])) {
             $tG = (int)$targetCoord['galaxy'];
             $tS = (int)$targetCoord['system'];
 
-            $bestPlanetId = 0;
-            $minPlanetDist = PHP_INT_MAX;
-
-            foreach ($allPlanets as $pId => $pData) {
-                $pGalaxy = (int)$pData['galaxy'];
-                $pSystem = (int)$pData['system'];
-
-                if ($pGalaxy == $tG) {
-                    $dist = abs($pSystem - $tS);
-                } else {
-                    $dist = 10000 + (abs($pGalaxy - $tG) * 1000) + abs($pSystem - $tS);
+            $calcDist = function($mG, $mS) use ($tG, $tS) {
+                if ($mG == $tG) {
+                    return abs($mS - $tS);
                 }
+                return 10000 + (abs($mG - $tG) * 1000) + abs($mS - $tS);
+            };
 
-                if ($dist < $minPlanetDist) {
-                    $minPlanetDist = $dist;
-                    $bestPlanetId = $pId;
-                }
-            }
-
-            // Prioridad Absoluta de Luna como FOB (BotWarfareDoctrine v3.4):
-            // 1. Si el planeta óptimo tiene Luna propia en esas mismas coordenadas, asigna la Luna como FOB
-            if ($bestPlanetId > 0 && isset($allPlanets[$bestPlanetId])) {
-                $optP = $allPlanets[$bestPlanetId];
+            // Si la dificultad permite salto cuántico, buscar lunas con Puerta de Salto Cuántico (sprungtor > 0)
+            if ($canUseGate) {
+                $gateMoons = array();
                 foreach ($allMoons as $mId => $mData) {
-                    if ($mData['galaxy'] == $optP['galaxy'] && $mData['system'] == $optP['system'] && $mData['planet'] == $optP['planet']) {
-                        return (int)$mId;
+                    $gate = (int)($mData['sprungtor'] ?? $mData['data']['sprungtor'] ?? 0);
+                    if ($gate > 0) {
+                        $gateMoons[$mId] = $mData;
+                    }
+                }
+
+                if (!empty($gateMoons)) {
+                    $bestGateMoonId = 0;
+                    $minGateDist = PHP_INT_MAX;
+                    foreach ($gateMoons as $mId => $mData) {
+                        $mG = (int)($mData['galaxy'] ?? $mData['data']['galaxy'] ?? 0);
+                        $mS = (int)($mData['system'] ?? $mData['data']['system'] ?? 0);
+                        $dist = $calcDist($mG, $mS);
+                        if ($dist < $minGateDist) {
+                            $minGateDist = $dist;
+                            $bestGateMoonId = (int)$mId;
+                        }
+                    }
+                    if ($bestGateMoonId > 0) {
+                        return $bestGateMoonId;
                     }
                 }
             }
 
-            // 2. Si existe una Luna propia a distancia competitiva (misma galaxia y diferencia <= 10 sistemas)
+            // En su defecto, elegir la Luna propia más cercana al objetivo en distancia galáctica/sistema
             $bestMoonId = 0;
             $minMoonDist = PHP_INT_MAX;
             foreach ($allMoons as $mId => $mData) {
-                $mGalaxy = (int)$mData['galaxy'];
-                $mSystem = (int)$mData['system'];
-
-                if ($mGalaxy == $tG) {
-                    $dist = abs($mSystem - $tS);
-                } else {
-                    $dist = 10000 + (abs($mGalaxy - $tG) * 1000) + abs($mSystem - $tS);
-                }
-
+                $mG = (int)($mData['galaxy'] ?? $mData['data']['galaxy'] ?? 0);
+                $mS = (int)($mData['system'] ?? $mData['data']['system'] ?? 0);
+                $dist = $calcDist($mG, $mS);
                 if ($dist < $minMoonDist) {
                     $minMoonDist = $dist;
-                    $bestMoonId = $mId;
+                    $bestMoonId = (int)$mId;
                 }
             }
 
-            if ($bestMoonId > 0 && ($minMoonDist <= ($minPlanetDist + 10))) {
-                return (int)$bestMoonId;
-            }
-
-            if ($bestPlanetId > 0) {
-                return (int)$bestPlanetId;
+            if ($bestMoonId > 0) {
+                return $bestMoonId;
             }
         }
 
-        // 1. Prefer moon if available
-        if (!empty($allMoons)) {
-            $moonIds = array_keys($allMoons);
-            return $moonIds[0];
+        // Caso 2: Sin $targetCoord
+        // Si ya hay una luna asignada como FOB en fob_planet_id y sigue existiendo en $allMoons, respetarla
+        if (!empty($this->ctx->botRow['fob_planet_id']) && isset($allMoons[(int)$this->ctx->botRow['fob_planet_id']])) {
+            return (int)$this->ctx->botRow['fob_planet_id'];
         }
 
-        // 2. Otherwise return home planet or planet with highest defense
-        if ($this->ctx->homePlanetId > 0 && $empire->getPlanet($this->ctx->homePlanetId) !== null) {
-            return $this->ctx->homePlanetId;
+        // Si no hay FOB fijada, elegir la luna con mayor infraestructura de salto cuántico / hangar / campos
+        $bestMoonId = 0;
+        $bestScore = -1;
+        foreach ($allMoons as $mId => $mData) {
+            $gate   = (int)($mData['sprungtor'] ?? $mData['data']['sprungtor'] ?? 0);
+            $hangar = (int)($mData['hangar'] ?? $mData['data']['hangar'] ?? 0);
+            $fields = (int)($mData['field_current'] ?? $mData['data']['field_current'] ?? 0);
+            $score  = ($gate * 1000) + ($hangar * 10) + $fields;
+            if ($score > $bestScore) {
+                $bestScore = $score;
+                $bestMoonId = (int)$mId;
+            }
         }
 
-        $pIds = array_keys($allPlanets);
-        return $pIds[0];
+        if ($bestMoonId > 0) {
+            return $bestMoonId;
+        }
+
+        $moonIds = array_keys($allMoons);
+        return (int)$moonIds[0];
     }
 
     /**
@@ -164,14 +183,23 @@ class BotStagingPlanner
             require 'includes/vars/General.php';
         }
 
+        if ($stagingBaseId <= 0) {
+            return 0;
+        }
+
         $target = $empire->getPlanet($stagingBaseId);
         if (empty($target)) {
             return 0;
         }
 
+        $tData = isset($target['data']) ? $target['data'] : $target;
+        if ((int)($tData['planet_type'] ?? 1) !== 3) {
+            return 0;
+        }
+
         $fleetList = (isset($reslist['fleet']) && is_array($reslist['fleet'])) ? $reslist['fleet'] : array();
 
-        $fobData = $target['data'];
+        $fobData = $tData;
         $fobCombatFleet = array();
         foreach ($fleetList as $shipId) {
             if (in_array($shipId, array(202, 203, 208, 209, 210, 212, 217, 219, 233))) continue;
@@ -291,36 +319,42 @@ class BotStagingPlanner
 
         $rallied = 0;
 
+        $canQuantumJump = (isset($this->ctx->difficulty) && method_exists($this->ctx->difficulty, 'canUseQuantumJumpStaging'))
+            ? $this->ctx->difficulty->canUseQuantumJumpStaging()
+            : false;
+
         // --- PHASE 1: DIRECT QUANTUM JUMP GATE NETWORK (0 FLEET SLOTS, 0 DEUTERIUM) ---
-        foreach ($allBodies as $pId => $body) {
-            $pData = $body['data'];
-            if ((int)($pData['planet_type'] ?? 1) === 3) {
-                $destMoonId = $findReadyFobMoon($pId);
-                if ($destMoonId > 0 && $pId != $destMoonId) {
-                    $originJumpReady = ((int)($pData['sprungtor'] ?? 0) > 0 && $now >= ((int)($pData['last_jump_time'] ?? 0) + $gateWaitTime));
-                    if ($originJumpReady) {
-                        $jumpShips = array();
-                        foreach ($fleetList as $shipId) {
-                            if (in_array($shipId, array(208, 210, 212, 233))) continue;
-                            $cnt = isset($pData[$resource[$shipId]]) ? (int)$pData[$resource[$shipId]] : 0;
-                            if ($cnt > 0) {
-                                $jumpShips[$shipId] = $cnt;
-                            }
-                        }
-                        if (!empty($jumpShips)) {
-                            $jumpResult = $this->gateway->executeJumpGate($pId, $destMoonId, $jumpShips);
-                            if ($jumpResult) {
-                                $rallied++;
-                                foreach ($jumpShips as $sId => $sCnt) {
-                                    $effectiveFobFleet[$sId] = ($effectiveFobFleet[$sId] ?? 0) + $sCnt;
+        if ($canQuantumJump) {
+            foreach ($allBodies as $pId => $body) {
+                $pData = $body['data'];
+                if ((int)($pData['planet_type'] ?? 1) === 3) {
+                    $destMoonId = $findReadyFobMoon($pId);
+                    if ($destMoonId > 0 && $pId != $destMoonId) {
+                        $originJumpReady = ((int)($pData['sprungtor'] ?? 0) > 0 && $now >= ((int)($pData['last_jump_time'] ?? 0) + $gateWaitTime));
+                        if ($originJumpReady) {
+                            $jumpShips = array();
+                            foreach ($fleetList as $shipId) {
+                                if (in_array($shipId, array(208, 210, 212, 233))) continue;
+                                $cnt = isset($pData[$resource[$shipId]]) ? (int)$pData[$resource[$shipId]] : 0;
+                                if ($cnt > 0) {
+                                    $jumpShips[$shipId] = $cnt;
                                 }
-                                $this->ctx->decisionLog->record(
-                                    'fleet_staging_jump_gate',
-                                    "Quantum Jump transfer from Moon #{$pId} to FOB Sector Moon #{$destMoonId}: " . number_format(array_sum($jumpShips)) . " warships transferred instantly (0 Deuterium)",
-                                    array('from_moon' => $pId, 'to_moon' => $destMoonId, 'ships' => $jumpShips),
-                                    "jump_staging_{$pId}_to_{$destMoonId}",
-                                    array_sum($jumpShips)
-                                );
+                            }
+                            if (!empty($jumpShips)) {
+                                $jumpResult = $this->gateway->executeJumpGate($pId, $destMoonId, $jumpShips);
+                                if ($jumpResult) {
+                                    $rallied++;
+                                    foreach ($jumpShips as $sId => $sCnt) {
+                                        $effectiveFobFleet[$sId] = ($effectiveFobFleet[$sId] ?? 0) + $sCnt;
+                                    }
+                                    $this->ctx->decisionLog->record(
+                                        'fleet_staging_jump_gate',
+                                        "Quantum Jump transfer from Moon #{$pId} to FOB Sector Moon #{$destMoonId}: " . number_format(array_sum($jumpShips)) . " warships transferred instantly (0 Deuterium)",
+                                        array('from_moon' => $pId, 'to_moon' => $destMoonId, 'ships' => $jumpShips),
+                                        "jump_staging_{$pId}_to_{$destMoonId}",
+                                        array_sum($jumpShips)
+                                    );
+                                }
                             }
                         }
                     }
@@ -531,7 +565,7 @@ class BotStagingPlanner
             // --- TACTICAL QUANTUM JUMP GATE NETWORK (0 DEUTERIUM) ---
             if (!empty($selectedShips)) {
                 // Caso A: Salto Directo Luna Origen -> Luna FOB (o Luna Secundaria de Sector) a 0 Deuterio
-                if ((int)$pData['planet_type'] === 3 && (int)($pData['sprungtor'] ?? 0) > 0) {
+                if ($canQuantumJump && (int)($pData['planet_type'] ?? 1) === 3 && (int)($pData['sprungtor'] ?? 0) > 0) {
                     $destMoonId = $findReadyFobMoon($pId);
                     $originJumpReady = ($now >= ((int)($pData['last_jump_time'] ?? 0) + $gateWaitTime));
                     if ($destMoonId > 0 && $originJumpReady) {
@@ -565,25 +599,23 @@ class BotStagingPlanner
                     }
                 }
 
-                // Caso B: Ascenso Orbital Planeta -> Luna Propia para Salto Cuántico posterior
-                if ((int)$pData['planet_type'] === 1 && !empty($pData['id_luna']) && (int)$pData['id_luna'] > 0) {
-                    $ownMoonId = (int)$pData['id_luna'];
-                    $ownMoon = $empire->getPlanet($ownMoonId);
-                    $ownMoonData = !empty($ownMoon) ? $ownMoon['data'] : null;
-                    $ownMoonHasGate = (!empty($ownMoonData) && (int)($ownMoonData['sprungtor'] ?? 0) > 0);
+                // Caso B: Ascenso Orbital Anti-Phalanx Planeta -> Luna Propia
+                $canOrbitalAscent = (isset($this->ctx->difficulty) && method_exists($this->ctx->difficulty, 'canUseOrbitalAscent'))
+                    ? $this->ctx->difficulty->canUseOrbitalAscent()
+                    : false;
 
-                    // Si la propia luna tiene Salto Cuántico y no es la base de destino:
-                    if ($ownMoonHasGate && $ownMoonId !== $stagingBaseId && $actualFleets < ($maxSlots - 1)) {
-                        // Despacho corto orbital: Planeta -> Su propia Luna en la misma coordenada [G:S:P] (gasto casi nulo)
+                if ($canOrbitalAscent && (int)($pData['planet_type'] ?? 1) === 1 && !empty($pData['id_luna']) && (int)$pData['id_luna'] > 0) {
+                    $ownMoonId = (int)$pData['id_luna'];
+                    if ($ownMoonId !== (int)$stagingBaseId && $actualFleets < ($maxSlots - 1)) {
                         $okAscent = $this->gateway->launchFleet(
                             $selectedShips,
                             4, // Despliegue orbital corto
                             $pId,
                             $ownMoonId,
                             $this->ctx->botId,
-                            $pData['galaxy'],
-                            $pData['system'],
-                            $pData['planet'],
+                            (int)$pData['galaxy'],
+                            (int)$pData['system'],
+                            (int)$pData['planet'],
                             3, // Luna propia
                             array(),
                             10 // Máxima velocidad (distancia mínima = 5, arribo en segundos)
@@ -592,8 +624,8 @@ class BotStagingPlanner
                             $rallied++;
                             $actualFleets++;
                             $this->ctx->decisionLog->record(
-                                'orbital_ascent_for_quantum_jump',
-                                "Short orbital ascent from Colony #{$pId} to own Moon #{$ownMoonId} for subsequent Quantum Jump to FOB #{$stagingBaseId}",
+                                'orbital_ascent_anti_phalanx',
+                                "Short orbital ascent from Colony #{$pId} to own Moon #{$ownMoonId} for Anti-Phalanx fleet staging towards FOB #{$stagingBaseId}",
                                 array('origin' => $pId, 'own_moon' => $ownMoonId, 'target_fob' => $stagingBaseId, 'ships' => $selectedShips),
                                 "ascent_{$pId}_to_moon_{$ownMoonId}",
                                 array_sum($selectedShips)
@@ -686,16 +718,26 @@ class BotStagingPlanner
             // Calculate committed deuterium in local queues or active savings lock on this colony
             $localCommittedDeut = 0.0;
             if (isset($this->ctx->budgetManager)) {
-                $lock = $this->ctx->budgetManager->getSavingsLock();
+                $lock = method_exists($this->ctx->budgetManager, 'getSavingsLockForCategory')
+                    ? $this->ctx->budgetManager->getSavingsLockForCategory($pId, 'fleet')
+                    : $this->ctx->budgetManager->getSavingsLock();
                 if (!empty($lock) && isset($lock['planet_id']) && (int)$lock['planet_id'] === (int)$pId) {
                     $localCommittedDeut += max(0.0, (float)($lock['cost'][903] ?? $lock['cost']['deuterium'] ?? 0.0));
                 }
             }
 
-            // Colony deuterium after flight fuel deduction, fleetsave reserve, and local committed queues
+            // Excedente financiado exclusivamente de la bolsa virtual 'fleet'
             $colonyDeut = (float)($pData['deuterium'] ?? 0.0);
-            $excessDeut = max(0.0, $colonyDeut - (float)$chosenConsumption - $localFsReserve - $localCommittedDeut);
-            $cargoDeut = floor(min($netCargo, $excessDeut));
+            $fleetDeutVirtual = $colonyDeut;
+            if (isset($this->ctx->budgetManager) && method_exists($this->ctx->budgetManager, 'getPlanetFleetCredits')) {
+                $fleetCreds = $this->ctx->budgetManager->getPlanetFleetCredits($pId);
+                $fleetDeutVirtual = (float)($fleetCreds['deuterium'] ?? 0.0);
+            }
+
+            $excessFleetDeut    = max(0.0, $fleetDeutVirtual - (float)$chosenConsumption - $localFsReserve - $localCommittedDeut);
+            $excessPhysDeut     = max(0.0, $colonyDeut - (float)$chosenConsumption - $localFsReserve - $localCommittedDeut);
+            $availableCargoDeut = min($excessFleetDeut, $excessPhysDeut);
+            $cargoDeut          = floor(min($netCargo, $availableCargoDeut));
 
             $cargoResources = array();
             if ($cargoDeut > 0.0) {
@@ -707,12 +749,12 @@ class BotStagingPlanner
                 $selectedShips,
                 4, // Mission 4: Stay / Deploy
                 $pId,
-                $target['id'],
+                (int)($target['id'] ?? $stagingBaseId),
                 $this->ctx->botId,
-                $target['galaxy'],
-                $target['system'],
-                $target['planet'],
-                $target['planet_type'],
+                (int)($target['galaxy'] ?? $tData['galaxy']),
+                (int)($target['system'] ?? $tData['system']),
+                (int)($target['planet'] ?? $tData['planet']),
+                (int)($target['planet_type'] ?? $tData['planet_type'] ?? 3),
                 $cargoResources,
                 $chosenSpeed
             );

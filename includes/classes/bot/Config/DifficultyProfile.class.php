@@ -49,7 +49,19 @@ class BotDifficultyProfile
 
     public function __construct($name = self::NORMAL)
     {
-        $this->name = strtolower($name);
+        $raw = is_string($name) ? $name : '';
+        $mb = (function_exists('mb_strtolower')) ? mb_strtolower($raw, 'UTF-8') : $raw;
+        $lower = strtolower($raw);
+
+        if ($mb === 'titán' || $mb === "tit\xc3\xa1n" || $raw === 'titán' || $raw === "tit\xc3\xa1n" ||
+            $lower === 'titán' || $lower === "tit\xc3\xa1n" || $lower === "tit\xe3\xa1n" ||
+            $lower === 'titan' || $mb === 'titan' || $raw === 'titan') {
+            $name = self::TITAN;
+        } else {
+            $name = is_string($name) ? $lower : $name;
+        }
+
+        $this->name = $name;
         $this->configure();
     }
 
@@ -115,6 +127,9 @@ class BotDifficultyProfile
                 break;
 
             case self::TITAN:
+            case 'titán':
+            case "tit\xc3\xa1n":
+            case "tit\xe3\xa1n":
             case self::NIGHTMARE:
                 $this->reactionDelayMin              = 15;
                 $this->reactionDelayMax              = 35;
@@ -523,6 +538,253 @@ class BotDifficultyProfile
     public function getMaxTechQueueSlots()
     {
         return isset($this->maxTechQueueSlots) ? max(1, (int)$this->maxTechQueueSlots) : 3;
+    }
+
+    /**
+     * Maximo de planetas/lunas destino que pueden recibir convoyes logisticos simultaneamente
+     * Easy: 1, Normal: 2, Hard: 3, Nightmare/Titan: 4
+     */
+    public function getMaxLogisticsDestinations()
+    {
+        switch ($this->name) {
+            case self::EASY:
+                return 1;
+            case self::HARD:
+                return 3;
+            case self::NIGHTMARE:
+            case self::TITAN:
+            case 'titán':
+                return 4;
+            case self::NORMAL:
+            default:
+                return 2;
+        }
+    }
+
+    /**
+     * Maximo de colonias donantes que pueden enviar convoyes en paralelo para cubrir una misma demanda
+     * Easy: 1, Normal: 2, Hard: 3, Nightmare/Titan: 4
+     */
+    public function getMaxDonorsPerDemand()
+    {
+        switch ($this->name) {
+            case self::EASY:
+                return 1;
+            case self::HARD:
+                return 3;
+            case self::NIGHTMARE:
+            case self::TITAN:
+            case 'titán':
+                return 4;
+            case self::NORMAL:
+            default:
+                return 2;
+        }
+    }
+
+    /**
+     * Horizonte de slots en espera (building_queue / b_tech_queue) que la logistica pre-financia
+     * Easy: 1 (Slot 1), Normal: 2 (Slots 1..2), Hard: 4 (Slots 1..4), Nightmare/Titan: 9 (Slots 1..9)
+     */
+    public function getLogisticsQueueHorizonSlots()
+    {
+        switch ($this->name) {
+            case self::EASY:
+                return 1;
+            case self::HARD:
+                return 4;
+            case self::NIGHTMARE:
+            case self::TITAN:
+            case 'titán':
+                return 9;
+            case self::NORMAL:
+            default:
+                return 2;
+        }
+    }
+
+    /**
+     * Umbral de autosuficiencia local en minutos: si el planeta destino puede producir el deficit
+     * de esa bolsa por si mismo en <= X minutos, no se despacha convoy.
+     * Easy: 30.0 min, Normal: 15.0 min, Hard: 8.0 min, Nightmare/Titan: 5.0 min
+     */
+    public function getSelfSufficiencyMinutes()
+    {
+        switch ($this->name) {
+            case self::EASY:
+                return 30.0;
+            case self::HARD:
+                return 8.0;
+            case self::NIGHTMARE:
+            case self::TITAN:
+            case 'titán':
+                return 5.0;
+            case self::NORMAL:
+            default:
+                return 15.0;
+        }
+    }
+
+    /**
+     * Permite usar la Red de Salto Cuantico (#43) para concentrar flotas en la Luna FOB a 0 Deuterio
+     */
+    public function canUseQuantumJumpStaging()
+    {
+        return ($this->name === self::HARD || $this->name === self::NIGHTMARE || $this->name === self::TITAN || $this->name === 'titán');
+    }
+
+    /**
+     * Permite realizar Ascenso Orbital Corto (Planeta -> Su propia Luna en [G:S:P]) para ocultar flotas del Phalanx
+     */
+    public function canUseOrbitalAscent()
+    {
+        return ($this->name === self::HARD || $this->name === self::NIGHTMARE || $this->name === self::TITAN || $this->name === 'titán');
+    }
+
+    /**
+     * Factor de velocidad (1..10) para convoyes de transporte logistico (Mision 3)
+     */
+    public function getLogisticsSpeedFactor()
+    {
+        return ($this->name === self::EASY) ? 8 : 10;
+    }
+
+    /**
+     * Ratio objetivo de llenado de almacen (Kickstart) para colonias jovenes (Mina de Metal < 14)
+     */
+    public function getYoungColonyKickstartStorageRatio()
+    {
+        switch ($this->name) {
+            case self::EASY:
+                return 0.15;
+            case self::HARD:
+                return 0.45;
+            case self::NIGHTMARE:
+            case self::TITAN:
+            case 'titán':
+                return 0.65;
+            case self::NORMAL:
+            default:
+                return 0.25;
+        }
+    }
+
+    /**
+     * Maximas misiones de colonizacion concurrentes (en vuelo + en cola)
+     */
+    public function getMaxConcurrentColonizations()
+    {
+        if ($this->name === self::TITAN || $this->name === self::NIGHTMARE || $this->name === 'titán') {
+            return 3;
+        }
+        if ($this->name === self::HARD) {
+            return 2;
+        }
+        return 1;
+    }
+
+    /**
+     * Posiciones orbitales permitidas para colonizacion por orden de preferencia
+     */
+    public function getAllowedColonizationPositions()
+    {
+        if ($this->name === self::TITAN || $this->name === self::NIGHTMARE || $this->name === 'titán') {
+            return array(8, 7, 9, 6, 10);
+        }
+        if ($this->name === self::HARD) {
+            return array(8, 7, 9, 6, 10, 5, 11);
+        }
+        if ($this->name === self::NORMAL) {
+            return array(8, 7, 9, 6, 10, 5, 11, 4, 12);
+        }
+        return array(6, 10, 5, 11, 4, 12, 7, 9, 8, 3, 13);
+    }
+
+    /**
+     * Politica de dispersion geografica de colonias
+     */
+    public function getColonizationSpreadPolicy()
+    {
+        if ($this->name === self::TITAN || $this->name === self::NIGHTMARE || $this->name === 'titán') {
+            return array('max_per_cluster' => 2, 'cluster_radius' => 2, 'node_min_dist' => 20, 'node_max_dist' => 45);
+        }
+        if ($this->name === self::HARD) {
+            return array('max_per_cluster' => 2, 'cluster_radius' => 3, 'node_min_dist' => 15, 'node_max_dist' => 35);
+        }
+        if ($this->name === self::NORMAL) {
+            return array('max_per_cluster' => 3, 'cluster_radius' => 5, 'node_min_dist' => 8, 'node_max_dist' => 20);
+        }
+        return array('max_per_cluster' => 9, 'cluster_radius' => 10, 'node_min_dist' => 1, 'node_max_dist' => 10);
+    }
+
+    /**
+     * Ratio de capacidad neta de carga semilla (Seed Cargo) a transportar en Mision 7
+     */
+    public function getColonizationSeedCargoRatio()
+    {
+        switch ($this->name) {
+            case self::EASY:
+                return 0.0;
+            case self::HARD:
+                return 0.85;
+            case self::NIGHTMARE:
+            case self::TITAN:
+            case 'titán':
+                return 1.00;
+            case self::NORMAL:
+            default:
+                return 0.50;
+        }
+    }
+
+    /**
+     * Ratio objetivo de cobertura de lunas respecto al total de colonias
+     */
+    public function getTargetMoonCoverageRatio()
+    {
+        switch ($this->name) {
+            case self::EASY:
+                return 0.0;
+            case self::NORMAL:
+                return 0.25;
+            case self::HARD:
+                return 0.50;
+            case self::NIGHTMARE:
+            case self::TITAN:
+            case 'titán':
+            default:
+                return 0.80;
+        }
+    }
+
+    /**
+     * Cantidad minima de planetas requeridos para iniciar campana de moonshots
+     */
+    public function getMinPlanetsForMoonshots()
+    {
+        return $this->isTitan() ? 4 : 5;
+    }
+
+    /**
+     * Permite reclutar escuadrones dedicados de Cazas Ligeros para moonshots (715x #204)
+     */
+    public function canRecruitMoonshotSquadrons()
+    {
+        return ($this->name === self::HARD || $this->name === self::NIGHTMARE || $this->name === self::TITAN || $this->name === 'titán');
+    }
+
+    /**
+     * Cooldown entre intentos de moonshots en segundos
+     */
+    public function getMoonshotCooldownSeconds()
+    {
+        if ($this->name === self::TITAN || $this->name === self::NIGHTMARE || $this->name === 'titán') {
+            return 900;
+        }
+        if ($this->name === self::HARD) {
+            return 1800;
+        }
+        return 3600;
     }
 
     public static function getAll()

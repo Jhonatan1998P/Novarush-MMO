@@ -100,8 +100,9 @@ class BotLogisticsPlanner
         $availableMil   = BotActionGateway::getAvailableMilitarySlots($this->ctx->botId, $this->ctx->user);
         $sMilitary      = BotActionGateway::getMilitarySlots($this->ctx->user);
         
+        $maxDest = isset($this->ctx->difficulty) ? $this->ctx->difficulty->getMaxLogisticsDestinations() : self::MAX_CONCURRENT_TARGETS;
         // Strict logistics slot cap: maximum 35% of military slots minus in-flight transports
-        $maxLogisticsCap = max(1, min(self::MAX_CONCURRENT_TARGETS, (int)floor($sMilitary * 0.35)));
+        $maxLogisticsCap = max(1, min($maxDest, (int)floor($sMilitary * 0.35)));
         $logisticsSlotsRemaining = max(0, $maxLogisticsCap - $activeTransports);
         $combatMargin    = min(3, max(1, $sMilitary - 1));
         
@@ -226,6 +227,7 @@ class BotLogisticsPlanner
                         if (!empty($shipsToSend)) {
                             $cargoResources = array(901 => $sendM, 902 => $sendC, 903 => $sendD);
                             $startTime = 0;
+                            $speedFactor = isset($this->ctx->difficulty) ? $this->ctx->difficulty->getLogisticsSpeedFactor() : 10;
                             $ok = $this->gateway->launchFleet(
                                 $shipsToSend,
                                 3, // Mission 3: Transport to parent planet
@@ -237,7 +239,7 @@ class BotLogisticsPlanner
                                 (int)$parentPlanet['planet'],
                                 1, // Parent planet_type = 1
                                 $cargoResources,
-                                10,
+                                $speedFactor,
                                 $startTime
                             );
 
@@ -245,6 +247,12 @@ class BotLogisticsPlanner
                                 $availableSlots--;
                                 $convoysDispatched++;
                                 $activeTargetDestinations[$parentPlanetId] = true;
+
+                                // Sincronizar last_physical en el donante lunar sin duplicar creditos
+                                if (isset($this->ctx->budgetManager)) {
+                                    $this->ctx->budgetManager->debitDonorCategory($mId, 'mines', $cargoResources);
+                                }
+
                                 $this->ctx->decisionLog->record(
                                     'moon_loot_evacuation',
                                     "Evacuación de botín lunar desde luna #{$mId} hacia planeta padre #{$parentPlanetId}: " . number_format($cargoSum) . " recursos (" . number_format($sendM) . "M, " . number_format($sendC) . "C, " . number_format($sendD) . "D)",
@@ -351,8 +359,8 @@ class BotLogisticsPlanner
                 continue;
             }
 
-            // Concurrency rule: Maximum 2 distinct target destinations can receive convoys
-            if (count($servicedDistinctTargets) >= self::MAX_CONCURRENT_TARGETS && !in_array($targetPlanetId, $servicedDistinctTargets)) {
+            // Concurrency rule: Maximum distinct target destinations modulated by difficulty
+            if (count($servicedDistinctTargets) >= $maxDest && !in_array($targetPlanetId, $servicedDistinctTargets)) {
                 continue;
             }
 
@@ -402,15 +410,15 @@ class BotLogisticsPlanner
                 continue;
             }
 
-            // 5. Pool de Donantes: Hasta el 33% de colonias más cercanas con excedente donable positivo
-            $maxDonors = max(1, (int)ceil(count($empire->getPlanets()) * 0.33));
+            // 5. Pool de Donantes Paralelos modulado por dificultad (Easy: 1, Normal: 2, Hard: 3, Titan: 4)
+            $maxDonorsPerDemand = isset($this->ctx->difficulty) ? $this->ctx->difficulty->getMaxDonorsPerDemand() : 2;
             $remainingM = $netDeficit['metal'];
             $remainingC = $netDeficit['crystal'];
             $remainingD = $netDeficit['deuterium'];
 
             $donorsUsedCount = 0;
             foreach ($candidateDonors as $donor) {
-                if ($availableSlots <= 0 || $donorsUsedCount >= $maxDonors) {
+                if ($availableSlots <= 0 || $donorsUsedCount >= $maxDonorsPerDemand) {
                     break;
                 }
                 if ($remainingM <= 0 && $remainingC <= 0 && $remainingD <= 0) {
@@ -437,8 +445,11 @@ class BotLogisticsPlanner
                         $servicedDistinctTargets[] = $targetPlanetId;
                     }
                     $activeTargetDestinations[$targetPlanetId] = true;
-                    // Destination Monopoly: Only 1 donor dispatch per target planet per cycle
-                    break;
+
+                    // Si el déficit ya fue 100% cubierto o se alcanzó el límite de donantes, salir del loop
+                    if ($remainingM <= 0 && $remainingC <= 0 && $remainingD <= 0) {
+                        break;
+                    }
                 }
             }
         }
@@ -464,10 +475,11 @@ class BotLogisticsPlanner
             $ratio = (float)($ratios[$category] ?? 1.0);
         }
 
-        // 10 minutes production threshold = (hourly / 6) * category ratio
-        $prod10MinM = ($metalPerHour / 6.0) * $ratio;
-        $prod10MinC = ($cryPerHour / 6.0) * $ratio;
-        $prod10MinD = ($deutPerHour / 6.0) * $ratio;
+        // Umbral de autosuficiencia local modulado por dificultad en minutos (Easy: 30, Normal: 15, Hard: 8, Titan: 5)
+        $selfSuffMin = isset($this->ctx->difficulty) ? (float)$this->ctx->difficulty->getSelfSufficiencyMinutes() : 15.0;
+        $prodThresholdM = ($metalPerHour * ($selfSuffMin / 60.0)) * $ratio;
+        $prodThresholdC = ($cryPerHour * ($selfSuffMin / 60.0)) * $ratio;
+        $prodThresholdD = ($deutPerHour * ($selfSuffMin / 60.0)) * $ratio;
 
         $availM = (float)($pData['metal'] ?? 0);
         $availC = (float)($pData['crystal'] ?? 0);
@@ -489,9 +501,13 @@ class BotLogisticsPlanner
             $availD = min($availD, $budgetD);
         }
 
-        $curM = $availM + (float)($inFlight['metal'] ?? 0);
-        $curC = $availC + (float)($inFlight['crystal'] ?? 0);
-        $curD = $availD + (float)($inFlight['deuterium'] ?? 0);
+        $inFlightM = (float)($inFlight['metal'] ?? 0);
+        $inFlightC = (float)($inFlight['crystal'] ?? 0);
+        $inFlightD = (float)($inFlight['deuterium'] ?? 0);
+
+        $curM = $availM + $inFlightM;
+        $curC = $availC + $inFlightC;
+        $curD = $availD + $inFlightD;
 
         $reqM = (float)($required['metal'] ?? $required[901] ?? 0);
         $reqC = (float)($required['crystal'] ?? $required[902] ?? 0);
@@ -501,15 +517,35 @@ class BotLogisticsPlanner
         $defC = max(0.0, $reqC - $curC);
         $defD = max(0.0, $reqD - $curD);
 
-        // 10-minute filter: If deficit can be produced locally in <= 10 mins, do NOT send supplies
-        if ($defM <= $prod10MinM) {
+        // Filtro de autosuficiencia: si el déficit se produce localmente en <= selfSuffMin minutos, no se despacha
+        if ($defM <= $prodThresholdM) {
             $defM = 0.0;
         }
-        if ($defC <= $prod10MinC) {
+        if ($defC <= $prodThresholdC) {
             $defC = 0.0;
         }
-        if ($defD <= $prod10MinD) {
+        if ($defD <= $prodThresholdD) {
             $defD = 0.0;
+        }
+
+        // Acotar déficit al espacio físico disponible en almacén (metal_max * 0.95 - metal - inFlight) en planetas
+        $isMoon = ((string)($pData['planet_type'] ?? '1') === '3');
+        if (!$isMoon) {
+            $capM = max(10000.0, (float)($pData['metal_max'] ?? 100000.0));
+            $capC = max(10000.0, (float)($pData['crystal_max'] ?? 100000.0));
+            $capD = max(10000.0, (float)($pData['deuterium_max'] ?? 100000.0));
+
+            $physStockM = (float)($pData['metal'] ?? 0.0);
+            $physStockC = (float)($pData['crystal'] ?? 0.0);
+            $physStockD = (float)($pData['deuterium'] ?? 0.0);
+
+            $freeStorageM = max(0.0, ($capM * 0.95) - $physStockM - $inFlightM);
+            $freeStorageC = max(0.0, ($capC * 0.95) - $physStockC - $inFlightC);
+            $freeStorageD = max(0.0, ($capD * 0.95) - $physStockD - $inFlightD);
+
+            $defM = min($defM, $freeStorageM);
+            $defC = min($defC, $freeStorageC);
+            $defD = min($defD, $freeStorageD);
         }
 
         return array('metal' => $defM, 'crystal' => $defC, 'deuterium' => $defD);
@@ -625,9 +661,23 @@ class BotLogisticsPlanner
                 (float)($pData['deuterium'] ?? 0)
             );
             if ($stockMSE < 15000000.0) {
-                $defM = max(0.0, 10000000.0 - (float)($pData['metal'] ?? 0));
-                $defC = max(0.0, 6000000.0 - (float)($pData['crystal'] ?? 0));
-                $defD = max(0.0, 2000000.0 - (float)($pData['deuterium'] ?? 0));
+                // Acotar demandas de rebalanceo de 'mines' hacia colonias rezagadas al 50% de su capacidad de almacén
+                $capM = max(10000.0, (float)($pData['metal_max'] ?? 100000.0));
+                $capC = max(10000.0, (float)($pData['crystal_max'] ?? 100000.0));
+                $capD = max(10000.0, (float)($pData['deuterium_max'] ?? 100000.0));
+
+                $targetM = min(10000000.0, $capM * 0.50);
+                $targetC = min(6000000.0, $capC * 0.50);
+                $targetD = min(2000000.0, $capD * 0.50);
+
+                $defM = max(0.0, $targetM - (float)($pData['metal'] ?? 0));
+                $defC = max(0.0, $targetC - (float)($pData['crystal'] ?? 0));
+                $defD = max(0.0, $targetD - (float)($pData['deuterium'] ?? 0));
+
+                $defM = min($defM, $capM * 0.50);
+                $defC = min($defC, $capC * 0.50);
+                $defD = min($defD, $capD * 0.50);
+
                 if (($defM + $defC + $defD) > 0) {
                     $demands[] = array(
                         'target_planet_id' => $pId,
@@ -635,7 +685,7 @@ class BotLogisticsPlanner
                         'priority'         => 4,
                         'urgency_score'    => 1000.0,
                         'required'         => array('metal' => $defM, 'crystal' => $defC, 'deuterium' => $defD),
-                        'reason'           => "Rebalanceo de excedentes imperiales (>50M MSE) hacia colonia #{$pId}",
+                        'reason'           => "Rebalanceo de excedentes imperiales acotado al 50% del almacén hacia colonia #{$pId}",
                     );
                 }
             }
@@ -895,35 +945,77 @@ class BotLogisticsPlanner
         foreach ($planets as $pId => $pEntry) {
             $pData = $pEntry['data'];
 
-            // Abastecimiento proactivo para orden en espera en building_queue[1]
-            if (!empty($pEntry['building_queue']) && isset($pEntry['building_queue'][1])) {
-                $nextBldId  = (int)$pEntry['building_queue'][1][0];
-                $nextBldLvl = (int)$pEntry['building_queue'][1][1];
-                $cost = BuildFunctions::getElementPrice($this->ctx->user, $pData, $nextBldId, false, $nextBldLvl - 1);
-                $reqM = isset($cost[901]) ? (float)$cost[901] : (float)($cost['metal'] ?? 0.0);
-                $reqC = isset($cost[902]) ? (float)$cost[902] : (float)($cost['crystal'] ?? 0.0);
-                $reqD = isset($cost[903]) ? (float)$cost[903] : (float)($cost['deuterium'] ?? 0.0);
+            $bQueue = is_array($pEntry['building_queue']) ? $pEntry['building_queue'] : (!empty($pEntry['building_queue']) ? @unserialize($pEntry['building_queue']) : array());
+            $bQueueCount = count($bQueue);
 
-                if ($pData['metal'] < $reqM || $pData['crystal'] < $reqC || $pData['deuterium'] < $reqD) {
-                    $demands[] = array(
-                        'target_planet_id' => $pId,
-                        'type'             => 'building',
-                        'element_id'       => $nextBldId,
-                        'count'            => 1,
-                        'priority'         => 3,
-                        'urgency_score'    => 2800.0,
-                        'required'         => array('metal' => $reqM, 'crystal' => $reqC, 'deuterium' => $reqD),
-                        'reason'           => "Abastecimiento logístico proactivo para orden en espera " . ($resource[$nextBldId] ?? "edificio #{$nextBldId}") . " niv {$nextBldLvl} en planeta #{$pId}",
-                    );
-                    continue;
+            $horizonSlots = isset($this->ctx->difficulty) ? $this->ctx->difficulty->getLogisticsQueueHorizonSlots() : 2;
+            $now = class_exists('BotClock') ? BotClock::get() : TIMESTAMP;
+
+            $isYoungColony = ((int)($pData['metal_mine'] ?? 0) < 14 && (string)($pData['planet_type'] ?? '1') === '1');
+            $kickstartRatio = isset($this->ctx->difficulty) ? $this->ctx->difficulty->getYoungColonyKickstartStorageRatio() : 0.25;
+            $capM = max(10000.0, (float)($pData['metal_max'] ?? 100000.0));
+            $capC = max(10000.0, (float)($pData['crystal_max'] ?? 100000.0));
+            $capD = max(10000.0, (float)($pData['deuterium_max'] ?? 100000.0));
+            $kickFloorM = $isYoungColony ? ($capM * $kickstartRatio) : 0.0;
+            $kickFloorC = $isYoungColony ? ($capC * $kickstartRatio) : 0.0;
+            $kickFloorD = $isYoungColony ? ($capD * $kickstartRatio) : 0.0;
+
+            // 1. Evaluación acumulada multi-slot de building_queue
+            if ($bQueueCount >= 2) {
+                $accumReqM = 0.0;
+                $accumReqC = 0.0;
+                $accumReqD = 0.0;
+                $evaluatedSlots = 0;
+                $firstElemId = (int)($bQueue[1][0] ?? 0);
+
+                $maxSlotIdx = min($bQueueCount - 1, $horizonSlots);
+                for ($slotIdx = 1; $slotIdx <= $maxSlotIdx; $slotIdx++) {
+                    $slotStart = (int)($bQueue[$slotIdx - 1][3] ?? $now);
+                    $secToStart = max(0, $slotStart - $now);
+                    if ($secToStart <= 3600) {
+                        $elemId = (int)$bQueue[$slotIdx][0];
+                        $elemLvl = (int)$bQueue[$slotIdx][1];
+                        $mode = $bQueue[$slotIdx][4] ?? 'build';
+                        $isDestroy = ($mode === 'destroy');
+                        $cost = BuildFunctions::getElementPrice($this->ctx->user, $pData, $elemId, $isDestroy, $isDestroy ? $elemLvl : ($elemLvl - 1));
+
+                        $accumReqM += isset($cost[901]) ? (float)$cost[901] : (float)($cost['metal'] ?? 0.0);
+                        $accumReqC += isset($cost[902]) ? (float)$cost[902] : (float)($cost['crystal'] ?? 0.0);
+                        $accumReqD += isset($cost[903]) ? (float)$cost[903] : (float)($cost['deuterium'] ?? 0.0);
+                        $evaluatedSlots++;
+                    }
+                }
+
+                if ($evaluatedSlots > 0) {
+                    // Aplicar piso kickstart en colonia joven
+                    if ($isYoungColony) {
+                        $accumReqM = max($accumReqM, $kickFloorM);
+                        $accumReqC = max($accumReqC, $kickFloorC);
+                        $accumReqD = max($accumReqD, $kickFloorD);
+                    }
+
+                    if ($pData['metal'] < $accumReqM || $pData['crystal'] < $accumReqC || $pData['deuterium'] < $accumReqD) {
+                        $demands[] = array(
+                            'target_planet_id' => $pId,
+                            'type'             => 'building',
+                            'element_id'       => $firstElemId,
+                            'count'            => $evaluatedSlots,
+                            'priority'         => 3,
+                            'urgency_score'    => $isYoungColony ? 3500.0 : 2800.0,
+                            'required'         => array('metal' => $accumReqM, 'crystal' => $accumReqC, 'deuterium' => $accumReqD),
+                            'reason'           => "Abastecimiento logístico proactivo multi-slot ({$evaluatedSlots} slots en horizonte) para cola de construcción en planeta #{$pId}" . ($isYoungColony ? " con kickstart de colonia joven (Lm < 14)" : ""),
+                        );
+                    }
+                    continue; // Cola activa evaluada
                 }
             }
 
-            if (!empty($pEntry['building_queue']) && count($pEntry['building_queue']) >= 2) continue;
+            // Si hay 2 o más slots y ninguno inicia en <= 3600s, la cola está ocupada a largo plazo
+            if ($bQueueCount >= 2) {
+                continue;
+            }
 
-            $isYoungColony = ((int)($pData['metal_mine'] ?? 0) < 10 || (int)($pData['crystal_mine'] ?? 0) < 8);
-
-            // Check if this planet has an active savings lock for category 'mines'
+            // 2. Cola sin slots de espera: evaluar edificios a construir y kickstart para colonias jóvenes
             $minesLock = null;
             if (isset($this->ctx->budgetManager)) {
                 $minesLock = $this->ctx->budgetManager->getSavingsLockForCategory($pId, 'mines');
@@ -941,7 +1033,7 @@ class BotLogisticsPlanner
             } elseif (empty($minesLock)) {
                 if (class_exists('BotProductionAllocator')) {
                     $allocator = new BotProductionAllocator($this->ctx, $this->gateway);
-                    $freeFields = CalculateMaxPlanetFields($pData) - ((int)$pData['field_current'] + count($pEntry['building_queue'] ?? array()));
+                    $freeFields = CalculateMaxPlanetFields($pData) - ((int)$pData['field_current'] + $bQueueCount);
                     $targetBld = $allocator->getMandatoryMilestoneBuilding($pData, true, true, $empire->getHourlyProductionMSE(), false, (float)($pEntry['hourly_mse'] ?? 0.0), $freeFields);
                     if ($targetBld > 0) {
                         $buildingsToEvaluate = array_values(array_unique(array_merge(array((int)$targetBld), $buildingsToEvaluate)));
@@ -957,6 +1049,12 @@ class BotLogisticsPlanner
                     $reqC = isset($cost[902]) ? (float)$cost[902] : (float)($cost['crystal'] ?? 0.0);
                     $reqD = isset($cost[903]) ? (float)$cost[903] : (float)($cost['deuterium'] ?? 0.0);
 
+                    if ($isYoungColony) {
+                        $reqM = max($reqM, $kickFloorM);
+                        $reqC = max($reqC, $kickFloorC);
+                        $reqD = max($reqD, $kickFloorD);
+                    }
+
                     if ($pData['metal'] < $reqM || $pData['crystal'] < $reqC || $pData['deuterium'] < $reqD) {
                         $score = $isLockedGoal ? 2600.0 : ($isYoungColony ? 3500.0 : 1000.0);
                         $demands[] = array(
@@ -967,7 +1065,7 @@ class BotLogisticsPlanner
                             'priority'         => 3,
                             'urgency_score'    => $score,
                             'required'         => array('metal' => $reqM, 'crystal' => $reqC, 'deuterium' => $reqD),
-                            'reason'           => $isLockedGoal ? "Ahorro estratégico prioritario de {$resource[$bId]} en planeta #{$pId}" : "Construcción de {$resource[$bId]} en planeta #{$pId}",
+                            'reason'           => $isLockedGoal ? "Ahorro estratégico prioritario de {$resource[$bId]} en planeta #{$pId}" : ($isYoungColony ? "Kickstart y construcción de {$resource[$bId]} en colonia joven #{$pId}" : "Construcción de {$resource[$bId]} en planeta #{$pId}"),
                         );
                         break;
                     }
@@ -975,30 +1073,45 @@ class BotLogisticsPlanner
             }
         }
 
-        // Abastecimiento proactivo para investigación en espera en b_tech_queue[1]
-        $techQueue = !empty($this->ctx->user['b_tech_queue']) ? @unserialize($this->ctx->user['b_tech_queue']) : array();
-        if (is_array($techQueue) && isset($techQueue[1])) {
-            $nextTechId  = (int)$techQueue[1][0];
+        // Abastecimiento proactivo multi-slot para investigación en espera en b_tech_queue
+        $rawTechQueue = $this->ctx->user['b_tech_queue'] ?? '';
+        $techQueue = is_array($rawTechQueue) ? $rawTechQueue : (!empty($rawTechQueue) ? @unserialize($rawTechQueue) : array());
+        if (is_array($techQueue) && count($techQueue) >= 2) {
             $targetLabId = (int)($techQueue[1][4] ?? $this->ctx->homePlanetId);
             $labBody = $empire->getPlanet($targetLabId);
             if (!empty($labBody)) {
                 $labData = $labBody['data'];
-                $nextTechLvl = (int)($techQueue[1][1] ?? 1);
-                $cost = BuildFunctions::getElementPrice($this->ctx->user, $labData, $nextTechId, false, $nextTechLvl - 1);
-                $reqM = isset($cost[901]) ? (float)$cost[901] : (float)($cost['metal'] ?? 0.0);
-                $reqC = isset($cost[902]) ? (float)$cost[902] : (float)($cost['crystal'] ?? 0.0);
-                $reqD = isset($cost[903]) ? (float)$cost[903] : (float)($cost['deuterium'] ?? 0.0);
+                $accumTechM = 0.0;
+                $accumTechC = 0.0;
+                $accumTechD = 0.0;
+                $evalTechSlots = 0;
+                $firstTechId = (int)$techQueue[1][0];
 
-                if ($labData['metal'] < $reqM || $labData['crystal'] < $reqC || $labData['deuterium'] < $reqD) {
+                $maxTechIdx = min(count($techQueue) - 1, $horizonSlots);
+                for ($tIdx = 1; $tIdx <= $maxTechIdx; $tIdx++) {
+                    $slotStart = (int)($techQueue[$tIdx - 1][3] ?? $now);
+                    $secToStart = max(0, $slotStart - $now);
+                    if ($secToStart <= 3600) {
+                        $tId = (int)$techQueue[$tIdx][0];
+                        $tLvl = (int)$techQueue[$tIdx][1];
+                        $tCost = BuildFunctions::getElementPrice($this->ctx->user, $labData, $tId, false, $tLvl - 1);
+                        $accumTechM += isset($tCost[901]) ? (float)$tCost[901] : (float)($tCost['metal'] ?? 0.0);
+                        $accumTechC += isset($tCost[902]) ? (float)$tCost[902] : (float)($tCost['crystal'] ?? 0.0);
+                        $accumTechD += isset($tCost[903]) ? (float)$tCost[903] : (float)($tCost['deuterium'] ?? 0.0);
+                        $evalTechSlots++;
+                    }
+                }
+
+                if ($evalTechSlots > 0 && ($labData['metal'] < $accumTechM || $labData['crystal'] < $accumTechC || $labData['deuterium'] < $accumTechD)) {
                     $demands[] = array(
                         'target_planet_id' => $targetLabId,
                         'type'             => 'research',
-                        'element_id'       => $nextTechId,
-                        'count'            => 1,
+                        'element_id'       => $firstTechId,
+                        'count'            => $evalTechSlots,
                         'priority'         => 3,
                         'urgency_score'    => 2900.0,
-                        'required'         => array('metal' => $reqM, 'crystal' => $reqC, 'deuterium' => $reqD),
-                        'reason'           => "Abastecimiento proactivo para investigación en espera #{$nextTechId} en planeta laboratorio #{$targetLabId}",
+                        'required'         => array('metal' => $accumTechM, 'crystal' => $accumTechC, 'deuterium' => $accumTechD),
+                        'reason'           => "Abastecimiento proactivo multi-slot ({$evalTechSlots} slots en horizonte) para investigación en espera en planeta laboratorio #{$targetLabId}",
                     );
                 }
             }
@@ -1461,6 +1574,7 @@ class BotLogisticsPlanner
         );
 
         $startTime = 0;
+        $speedFactor = isset($this->ctx->difficulty) ? $this->ctx->difficulty->getLogisticsSpeedFactor() : 10;
         $ok = $this->gateway->launchFleet(
             $shipsToSend,
             3, // Mission 3: Transport
@@ -1472,7 +1586,7 @@ class BotLogisticsPlanner
             $targetCoords[2],
             $targetCoords[3],
             $cargoResources,
-            10,
+            $speedFactor,
             $startTime
         );
 
@@ -1493,6 +1607,7 @@ class BotLogisticsPlanner
                 $this->ctx->botId,
                 'logistics_arrival_spend',
                 array(
+                    'fleet_id'   => (int)$ok,
                     'planet_id'  => (int)$targetPlanetId,
                     'element_id' => (int)($demand['element_id'] ?? 0),
                     'type'       => $demand['type'] ?? 'building',
@@ -1504,7 +1619,7 @@ class BotLogisticsPlanner
                     ),
                     'count'      => (int)($demand['count'] ?? 1),
                 ),
-                $arrival + 2
+                $arrival
             );
 
             $this->ctx->decisionLog->record(

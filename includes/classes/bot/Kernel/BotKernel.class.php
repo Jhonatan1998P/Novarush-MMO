@@ -21,6 +21,7 @@ require_once 'includes/classes/bot/Forces/BotExpeditionPlanner.class.php';
 require_once 'includes/classes/bot/Forces/BotExpansionPlanner.class.php';
 require_once 'includes/classes/bot/Forces/BotPremiumStrategist.class.php';
 require_once 'includes/classes/bot/Forces/BotCivicStrategist.class.php';
+require_once 'includes/classes/bot/Evaluation/EconomyValuator.class.php';
 
 /**
  * NovaRush Bot AI v2 - Bot Kernel
@@ -190,9 +191,41 @@ class BotKernel
             $recycled = 0;
 
             if (!$isFleetBlocked) {
-                $hubBody = $world->empire->getPlanet($hubId);
-                $empirePlanets = $world->empire->getPlanets();
-                $baseForOps = !empty($hubBody) ? $hubBody : (!empty($empirePlanets) ? reset($empirePlanets) : null);
+                $hubBody = ($hubId > 0) ? $world->empire->getPlanet($hubId) : null;
+                $baseForOps = null;
+
+                if (!empty($hubBody)) {
+                    $baseForOps = $hubBody;
+                } else {
+                    // Si $hubId <= 0 o no hay luna FOB, seleccionar el planeta con mayor poder militar
+                    $empirePlanets = $world->empire->getPlanets();
+                    if (!empty($empirePlanets)) {
+                        global $resource, $reslist;
+                        if (empty($reslist)) {
+                            require 'includes/vars/General.php';
+                        }
+                        $fleetList = (isset($reslist['fleet']) && is_array($reslist['fleet'])) ? $reslist['fleet'] : array();
+                        $bestPlanet = null;
+                        $maxMilitaryMse = -1.0;
+
+                        foreach ($empirePlanets as $pId => $pPlanet) {
+                            $pData = isset($pPlanet['data']) ? $pPlanet['data'] : $pPlanet;
+                            $planetMse = 0.0;
+                            foreach ($fleetList as $shipId) {
+                                if (in_array($shipId, array(208, 210, 212, 233))) continue;
+                                $cnt = isset($pData[$resource[$shipId]]) ? (int)$pData[$resource[$shipId]] : 0;
+                                if ($cnt > 0) {
+                                    $planetMse += BotEconomyValuator::getElementPriceMSE((int)$shipId, (float)$cnt);
+                                }
+                            }
+                            if ($planetMse > $maxMilitaryMse) {
+                                $maxMilitaryMse = $planetMse;
+                                $bestPlanet = $pPlanet;
+                            }
+                        }
+                        $baseForOps = ($bestPlanet !== null) ? $bestPlanet : reset($empirePlanets);
+                    }
+                }
 
                 if (!empty($baseForOps)) {
                     $isAttacksDisabled = (defined('BOT_ATTACKS_DISABLED') && BOT_ATTACKS_DISABLED);
@@ -472,6 +505,23 @@ class BotKernel
                 }
             } elseif ($taskType === 'logistics_arrival_spend') {
                 if (is_array($payload) && !empty($payload['planet_id'])) {
+                    // Sincronización exacta de llegada: Si la tarea incluye fleet_id de un convoy en vuelo,
+                    // verificar si el transporte sigue en vuelo de ida (fleet_mess = 0).
+                    // Si es así, posponer la tarea hasta que FlyingFleetHandler entregue los recursos físicamente.
+                    if (!empty($payload['fleet_id'])) {
+                        $fleetId = (int)$payload['fleet_id'];
+                        $fleetRow = $db->selectSingle("SELECT fleet_id, fleet_mess FROM %%FLEETS%% WHERE fleet_id = :fId LIMIT 1;", array(
+                            ':fId' => $fleetId
+                        ));
+                        if (!empty($fleetRow) && (int)$fleetRow['fleet_mess'] === 0) {
+                            $db->update("UPDATE " . DB_PREFIX . "bot_tasks SET scheduled_at = :newTime WHERE task_id = :tId;", array(
+                                ':newTime' => $now + 2,
+                                ':tId'     => $task['task_id'],
+                            ));
+                            continue;
+                        }
+                    }
+
                     $pId       = (int)$payload['planet_id'];
                     $type      = isset($payload['type']) ? $payload['type'] : 'building';
                     $elementId = isset($payload['element_id']) ? (int)$payload['element_id'] : 0;
@@ -500,6 +550,89 @@ class BotKernel
                         $gateway->researchTech($pId, $elementId);
                     } elseif ($type === 'shipyard' && $elementId > 0) {
                         $gateway->constructUnits($pId, $elementId, $count);
+                    }
+                }
+            } elseif ($taskType === 'moonshot_orbital_resolution') {
+                if (is_array($payload) && !empty($payload['target_planet_id'])) {
+                    $targetPlanetId = (int)$payload['target_planet_id'];
+                    $fleetId = !empty($payload['fleet_id']) ? (int)$payload['fleet_id'] : 0;
+
+                    if ($fleetId > 0) {
+                        $fleetRow = $db->selectSingle("SELECT fleet_id, fleet_mess, fleet_start_time FROM %%FLEETS%% WHERE fleet_id = :fId LIMIT 1;", array(
+                            ':fId' => $fleetId
+                        ));
+                        // Si la flota sigue en vuelo (fleet_start_time > $now), pospone scheduled_at
+                        if (!empty($fleetRow) && (int)$fleetRow['fleet_start_time'] > $now) {
+                            $db->update("UPDATE " . DB_PREFIX . "bot_tasks SET scheduled_at = :newTime WHERE task_id = :tId;", array(
+                                ':newTime' => (int)$fleetRow['fleet_start_time'],
+                                ':tId'     => $task['task_id'],
+                            ));
+                            continue;
+                        }
+                    }
+
+                    // Cuando llega (fleet_start_time <= $now):
+                    // Destruye los 715 #204 del ejercicio orbital
+                    if ($fleetId > 0) {
+                        $fleetRow = $db->selectSingle("SELECT fleet_id, fleet_array FROM %%FLEETS%% WHERE fleet_id = :fId LIMIT 1;", array(
+                            ':fId' => $fleetId
+                        ));
+                        if (!empty($fleetRow)) {
+                            $db->delete("DELETE FROM %%FLEETS%% WHERE fleet_id = :fId;", array(':fId' => $fleetId));
+                            $db->delete("DELETE FROM %%FLEETS_EVENT%% WHERE fleetID = :fId;", array(':fId' => $fleetId));
+                        } else {
+                            // Si la flota ya aterrizó por MissionCaseStay, descontar los 715 LF del planeta objetivo
+                            $db->update("UPDATE %%PLANETS%% SET light_hunter = GREATEST(0, light_hunter - 715) WHERE id = :pid;", array(
+                                ':pid' => $targetPlanetId
+                            ));
+                        }
+                    }
+
+                    // Suma el 70% CDR legal (1,501,500 M + 500,500 C) en der_metal/der_crystal de $targetPlanetId
+                    $db->update("UPDATE %%PLANETS%% SET 
+                                 der_metal = der_metal + 1501500, 
+                                 der_crystal = der_crystal + 500500 
+                                 WHERE id = :pid;", array(':pid' => $targetPlanetId));
+
+                    // Ejecuta la tirada legal del 20% con PlayerUtil::createMoon(...)
+                    $targetPlanetRow = $db->selectSingle("SELECT id, id_owner, id_luna, galaxy, system, planet, name FROM %%PLANETS%% WHERE id = :pid LIMIT 1;", array(
+                        ':pid' => $targetPlanetId
+                    ));
+
+                    if (!empty($targetPlanetRow) && (int)$targetPlanetRow['id_luna'] === 0) {
+                        $chanceCreateMoon = 20;
+                        $randChance = mt_rand(1, 100);
+                        if ($randChance <= $chanceCreateMoon) {
+                            $universe = Universe::current();
+                            $g = (int)$targetPlanetRow['galaxy'];
+                            $s = (int)$targetPlanetRow['system'];
+                            $p = (int)$targetPlanetRow['planet'];
+                            require_once 'includes/classes/bot/BotNameHelper.class.php';
+                            $moonName = BotNameHelper::getRandomMoonName();
+
+                            $newMoonId = PlayerUtil::createMoon($universe, $g, $s, $p, $ctx->botId, $chanceCreateMoon, null, $moonName);
+                            if ($newMoonId) {
+                                if (isset($ctx->decisionLog)) {
+                                    $ctx->decisionLog->record(
+                                        'moonshot_success',
+                                        "Moonshot Successful on Planet #{$targetPlanetId} [{$g}:{$s}:{$p}]: Moon '{$moonName}' (#{$newMoonId}) created with {$chanceCreateMoon}% chance (Roll: {$randChance}/100, 2.002M debris generated)",
+                                        array('planet_id' => $targetPlanetId, 'coords' => array($g, $s, $p), 'moon_id' => $newMoonId, 'moon_name' => $moonName, 'chance' => $chanceCreateMoon, 'roll' => $randChance),
+                                        "moon_created_{$targetPlanetId}",
+                                        50000.0
+                                    );
+                                }
+                            }
+                        } else {
+                            if (isset($ctx->decisionLog)) {
+                                $ctx->decisionLog->record(
+                                    'moonshot_attempt_debris_created',
+                                    "Moonshot attempt on Planet #{$targetPlanetId}: 2.002M debris generated in orbit (Roll: {$randChance}/100 > {$chanceCreateMoon}% chance, ready for recycling)",
+                                    array('planet_id' => $targetPlanetId, 'chance' => $chanceCreateMoon, 'roll' => $randChance),
+                                    "moonshot_attempt_{$targetPlanetId}",
+                                    2000.0
+                                );
+                            }
+                        }
                     }
                 }
             }

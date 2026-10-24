@@ -14,7 +14,7 @@ require_once 'includes/classes/class.BuildFunctions.php';
  *
  * Responsibilities:
  * A: Autonomous production of Colony Ships (#208).
- * B: Optimal coordinate selection & dispatch of Mission 7 (Colonisation).
+ * B: Optimal coordinate selection & dispatch of Mission 7 (Colonisation) with Seed Cargo Kit.
  * C: Moonshot Doctrine & Organic Moon Creation (20% Moon Chance via 715 Light Fighters / 2.002M debris).
  */
 class BotExpansionPlanner
@@ -105,7 +105,8 @@ class BotExpansionPlanner
             return 0;
         }
 
-        $toRecruit = min(2, $needed);
+        $maxConcurrent = isset($this->ctx->difficulty) ? $this->ctx->difficulty->getMaxConcurrentColonizations() : 1;
+        $toRecruit = min($maxConcurrent, $needed);
         $recruited = 0;
 
         // Sort candidate planets prioritizing home planet, FOB, and planets with higher resources and shipyard
@@ -142,13 +143,18 @@ class BotExpansionPlanner
             $availC = (float)$pData['crystal'];
             $availD = (float)$pData['deuterium'];
 
-            $canAfford = ($availM >= $costM && $availC >= $costC && $availD >= $costD);
-            if (!$canAfford && isset($this->ctx->budgetManager)) {
-                $canAfford = $this->ctx->budgetManager->tryInternalBucketSwap($pId, 'fleet', $cost);
+            // Exigir reserva fisica de combustible: $availD >= $costD + 15000.0
+            if ($availM < $costM || $availC < $costC || $availD < ($costD + 15000.0)) {
+                continue;
             }
 
-            if ($canAfford) {
-                $ok = $this->gateway->constructUnits($pId, 208, 1, 'Reclutamiento autónomo de Colonizador para Expansión Imperial');
+            $canAffordBudget = (!isset($this->ctx->budgetManager)) || $this->ctx->budgetManager->canAffordBudget($pId, 'fleet', $cost);
+            if (!$canAffordBudget && isset($this->ctx->budgetManager)) {
+                $canAffordBudget = $this->ctx->budgetManager->tryInternalBucketSwap($pId, 'fleet', $cost);
+            }
+
+            if ($canAffordBudget) {
+                $ok = $this->gateway->constructUnits($pId, 208, 1, 'Reclutamiento autónomo de Colonizador para Expansión Imperial', 'fleet');
                 if ($ok) {
                     $recruited++;
                     if (isset($this->ctx->decisionLog)) {
@@ -168,7 +174,7 @@ class BotExpansionPlanner
     }
 
     /**
-     * Responsabilidad B: Selección Óptima de Coordenadas y Despacho de Misión 7
+     * Responsabilidad B: Selección Óptima de Coordenadas y Despacho de Misión 7 con Kit de Fundación Colonial
      *
      * @param BotWorldModel $world
      * @return int Number of colonization fleets dispatched
@@ -188,7 +194,9 @@ class BotExpansionPlanner
         );
         $inFlightColonyShips = (int)($inFlightRow['cnt'] ?? 0);
 
-        if (($currentPlanets + $inFlightColonyShips) >= $maxPlanets) {
+        $maxConcurrentColo = isset($this->ctx->difficulty) ? $this->ctx->difficulty->getMaxConcurrentColonizations() : 1;
+
+        if (($currentPlanets + $inFlightColonyShips) >= $maxPlanets || $inFlightColonyShips >= $maxConcurrentColo) {
             return 0;
         }
 
@@ -196,7 +204,7 @@ class BotExpansionPlanner
         $universe = Universe::current();
 
         foreach ($planets as $pId => $pEntry) {
-            if (($currentPlanets + $inFlightColonyShips) >= $maxPlanets) {
+            if (($currentPlanets + $inFlightColonyShips) >= $maxPlanets || $inFlightColonyShips >= $maxConcurrentColo) {
                 break;
             }
 
@@ -223,8 +231,79 @@ class BotExpansionPlanner
 
             list($tG, $tS, $tP) = $targetCoord;
 
-            $fleetId = $this->gateway->dispatchColonization($pId, $tG, $tS, $tP);
+            // Calculate flight distance and consumption for #208
+            $startCoords = array($originG, $originS, (int)$pData['planet']);
+            $targetCoords = array($tG, $tS, $tP);
+            $distance = FleetFunctions::GetTargetDistance($startCoords, $targetCoords);
+            $fleetSpeed = FleetFunctions::GetFleetMaxSpeed(array(208 => 1), $this->ctx->user);
+            $speedFactor = 10;
+            $gameSpeed = FleetFunctions::GetGameSpeedFactor();
+            $flightDuration = FleetFunctions::GetMissionDuration($speedFactor, $fleetSpeed, $distance, $gameSpeed, $this->ctx->user);
+            $consumption = FleetFunctions::GetFleetConsumption(array(208 => 1), $flightDuration, $distance, $this->ctx->user, $gameSpeed);
+
+            if ((float)$pData['deuterium'] < $consumption) {
+                continue;
+            }
+
+            // Calculate net cargo room of #208: GetFleetRoom(array(208 => 1), $this->ctx->user) - $consumption
+            $fleetRoom = FleetFunctions::GetFleetRoom(array(208 => 1), $this->ctx->user);
+            $netCargoRoom = max(0.0, (float)$fleetRoom - (float)$consumption);
+
+            $seedRatio = isset($this->ctx->difficulty) ? $this->ctx->difficulty->getColonizationSeedCargoRatio() : 0.50;
+            $targetSeedCapacity = $netCargoRoom * $seedRatio;
+
+            // Kit de Fundación Colonial (50% M / 35% C / 15% D) tomado exclusivamente de getDonorSurplusByCategory($pId, 'mines', $pData)
+            $cargoResources = array();
+            $seedCargoDebit = array('metal' => 0.0, 'crystal' => 0.0, 'deuterium' => 0.0);
+
+            if ($targetSeedCapacity > 0.0 && isset($this->ctx->budgetManager)) {
+                $surplus = $this->ctx->budgetManager->getDonorSurplusByCategory($pId, 'mines', $pData);
+                $desiredM = $targetSeedCapacity * 0.50;
+                $desiredC = $targetSeedCapacity * 0.35;
+                $desiredD = $targetSeedCapacity * 0.15;
+
+                $availSurplusM = max(0.0, (float)($surplus['metal'] ?? 0.0));
+                $availSurplusC = max(0.0, (float)($surplus['crystal'] ?? 0.0));
+                $availSurplusD = max(0.0, (float)($surplus['deuterium'] ?? 0.0));
+
+                $physM = max(0.0, (float)($pData['metal'] ?? 0.0));
+                $physC = max(0.0, (float)($pData['crystal'] ?? 0.0));
+                $physD = max(0.0, (float)($pData['deuterium'] ?? 0.0) - (float)$consumption);
+
+                $actualM = min($desiredM, $availSurplusM, $physM);
+                $actualC = min($desiredC, $availSurplusC, $physC);
+                $actualD = min($desiredD, $availSurplusD, $physD);
+
+                $sumCargo = $actualM + $actualC + $actualD;
+                if ($sumCargo > $targetSeedCapacity && $sumCargo > 0) {
+                    $scale = $targetSeedCapacity / $sumCargo;
+                    $actualM *= $scale;
+                    $actualC *= $scale;
+                    $actualD *= $scale;
+                }
+
+                if ($actualM > 0 || $actualC > 0 || $actualD > 0) {
+                    $cargoResources = array(
+                        901 => floor($actualM),
+                        902 => floor($actualC),
+                        903 => floor($actualD),
+                    );
+                    $seedCargoDebit = array(
+                        'metal'     => $cargoResources[901],
+                        'crystal'   => $cargoResources[902],
+                        'deuterium' => $cargoResources[903],
+                    );
+                }
+            }
+
+            $outStartTime = null;
+            $fleetId = $this->gateway->dispatchColonization($pId, $tG, $tS, $tP, $cargoResources, $speedFactor, $outStartTime);
             if ($fleetId) {
+                // Debit Seed Cargo from donor 'mines' category
+                if (isset($this->ctx->budgetManager) && ($seedCargoDebit['metal'] > 0 || $seedCargoDebit['crystal'] > 0 || $seedCargoDebit['deuterium'] > 0)) {
+                    $this->ctx->budgetManager->debitDonorCategory($pId, 'mines', $seedCargoDebit);
+                }
+
                 $dispatched++;
                 $inFlightColonyShips++;
                 $pData[$resource[208]] = max(0, $stationedColonizers - 1);
@@ -233,8 +312,8 @@ class BotExpansionPlanner
                 if (isset($this->ctx->decisionLog)) {
                     $this->ctx->decisionLog->record(
                         'colonization_dispatch',
-                        "Dispatched Colony Ship (#208) from Planet #{$pId} to optimal coordinates [{$tG}:{$tS}:{$tP}] (Mission 7)",
-                        array('origin_planet' => $pId, 'target_coords' => array('galaxy' => $tG, 'system' => $tS, 'planet' => $tP), 'fleet_id' => $fleetId),
+                        "Dispatched Colony Ship (#208) from Planet #{$pId} to optimal coordinates [{$tG}:{$tS}:{$tP}] (Mission 7, Seed Cargo: M:{$seedCargoDebit['metal']} C:{$seedCargoDebit['crystal']} D:{$seedCargoDebit['deuterium']})",
+                        array('origin_planet' => $pId, 'target_coords' => array('galaxy' => $tG, 'system' => $tS, 'planet' => $tP), 'fleet_id' => $fleetId, 'seed_cargo' => $seedCargoDebit),
                         "colonize_{$tG}_{$tS}_{$tP}",
                         20000.0
                     );
@@ -248,9 +327,9 @@ class BotExpansionPlanner
                         "[{$tG}:{$tS}:{$tP}]",
                         7,
                         array(208 => 1),
-                        array(901 => 0, 902 => 0, 903 => 0),
+                        $cargoResources,
                         0,
-                        "Despacho de Misión 7 para fundación de nueva colonia imperial"
+                        "Despacho de Misión 7 para fundación de nueva colonia imperial con carga semilla"
                     );
                 }
             }
@@ -261,8 +340,7 @@ class BotExpansionPlanner
 
     /**
      * Búsqueda algorítmica de coordenadas óptimas libres [G:S:P]
-     * Alterna expansión local (+-1 a +-12) y nodos estratégicos a media distancia (+-15 a +-45)
-     * Prioriza posiciones templadas de gran tamaño: [8, 7, 9, 6, 10, 5, 11, 4, 12] luego [3, 13, 2, 14, 1, 15]
+     * Modulada por getAllowedColonizationPositions() y getColonizationSpreadPolicy()
      *
      * @param int $universe
      * @param int $originG
@@ -274,57 +352,93 @@ class BotExpansionPlanner
         $config = Config::get();
         $maxGalaxy = (int)($config->max_galaxy ?? 1);
         $maxSystem = (int)($config->max_system ?? 400);
-
-        // Candidate system offsets: local and medium nodes
-        $systemOffsets = array(
-            1, -1, 2, -2, 3, -3, 4, -4, 5, -5, 6, -6, 7, -7, 8, -8,
-            15, -15, 20, -20, 25, -25, 30, -30, 35, -35, 40, -40, 45, -45,
-            9, -9, 10, -10, 11, -11, 12, -12
-        );
-
-        // Position hierarchy: core temperate large fields first, then peripheral
-        $positionPriority = array(8, 7, 9, 6, 10, 5, 11, 4, 12, 3, 13, 2, 14, 1, 15);
-
         $db = Database::get();
 
-        foreach ($systemOffsets as $sOff) {
-            $candidateS = $originS + $sOff;
-            if ($candidateS < 1 || $candidateS > $maxSystem) {
-                continue;
+        // 1. Get spread policy and allowed positions
+        $policy = isset($this->ctx->difficulty) ? $this->ctx->difficulty->getColonizationSpreadPolicy() : array(
+            'max_per_cluster' => 2, 'cluster_radius' => 2, 'node_min_dist' => 20, 'node_max_dist' => 45
+        );
+        $allowedPositions = isset($this->ctx->difficulty) ? $this->ctx->difficulty->getAllowedColonizationPositions() : array(8, 7, 9, 6, 10);
+        $fallbackPositions = array(4, 12, 3, 13, 2, 14, 1, 15);
+
+        // 2. Count bot colonies in local cluster
+        $botPlanets = $db->select("SELECT galaxy, system, planet FROM %%PLANETS%% WHERE id_owner = :bid AND planet_type = 1;", array(':bid' => $this->ctx->botId));
+        $clusterCount = 0;
+        if (is_array($botPlanets)) {
+            foreach ($botPlanets as $bp) {
+                if ((int)$bp['galaxy'] === (int)$originG && abs((int)$bp['system'] - (int)$originS) <= (int)$policy['cluster_radius']) {
+                    $clusterCount++;
+                }
             }
+        }
 
-            foreach ($positionPriority as $candidateP) {
-                // 1. Position format valid
-                if (!PlayerUtil::checkPosition($universe, $originG, $candidateS, $candidateP)) {
+        // 3. Determine system offsets based on cluster capacity
+        $systemOffsets = array();
+        $clusterFull = ($clusterCount >= (int)$policy['max_per_cluster']);
+
+        if (!$clusterFull) {
+            // Local exploration first: within cluster radius
+            for ($r = 1; $r <= (int)$policy['cluster_radius']; $r++) {
+                $systemOffsets[] = $r;
+                $systemOffsets[] = -$r;
+            }
+        }
+
+        // Add distant node offsets
+        $minDist = (int)$policy['node_min_dist'];
+        $maxDist = (int)$policy['node_max_dist'];
+        for ($d = $minDist; $d <= $maxDist; $d += 5) {
+            $systemOffsets[] = $d;
+            $systemOffsets[] = -$d;
+        }
+        for ($d = $minDist + 1; $d <= $maxDist; $d += 5) {
+            $systemOffsets[] = $d;
+            $systemOffsets[] = -$d;
+        }
+
+        // 4. Try allowed positions first, fallback positions second
+        $positionPasses = array($allowedPositions, $fallbackPositions);
+
+        foreach ($positionPasses as $positionsToTry) {
+            foreach ($systemOffsets as $sOff) {
+                $candidateS = $originS + $sOff;
+                if ($candidateS < 1 || $candidateS > $maxSystem) {
                     continue;
                 }
 
-                // 2. Position is free of any existing planet
-                if (!PlayerUtil::isPositionFree($universe, $originG, $candidateS, $candidateP)) {
-                    continue;
+                foreach ($positionsToTry as $candidateP) {
+                    // 1. Position format valid
+                    if (!PlayerUtil::checkPosition($universe, $originG, $candidateS, $candidateP)) {
+                        continue;
+                    }
+
+                    // 2. Position is free of any existing planet
+                    if (!PlayerUtil::isPositionFree($universe, $originG, $candidateS, $candidateP)) {
+                        continue;
+                    }
+
+                    // 3. User tech allows this position (Astro limits position 1-3 and 13-15)
+                    if (!PlayerUtil::allowPlanetPosition($candidateP, $this->ctx->user)) {
+                        continue;
+                    }
+
+                    // 4. Anti-Collision Lock: check no fleet with mission 7 is already inbound to this coordinate
+                    $inboundColo = $db->selectSingle(
+                        "SELECT COUNT(*) as cnt FROM %%FLEETS%% 
+                         WHERE fleet_mission = 7 
+                         AND fleet_end_galaxy = :g 
+                         AND fleet_end_system = :s 
+                         AND fleet_end_planet = :p 
+                         AND fleet_mess = 0;",
+                        array(':g' => $originG, ':s' => $candidateS, ':p' => $candidateP)
+                    );
+
+                    if ((int)($inboundColo['cnt'] ?? 0) > 0) {
+                        continue;
+                    }
+
+                    return array($originG, $candidateS, $candidateP);
                 }
-
-                // 3. User tech allows this position (Astro limits position 1-3 and 13-15)
-                if (!PlayerUtil::allowPlanetPosition($candidateP, $this->ctx->user)) {
-                    continue;
-                }
-
-                // 4. Anti-Collision Lock: check no fleet with mission 7 is already inbound to this coordinate
-                $inboundColo = $db->selectSingle(
-                    "SELECT COUNT(*) as cnt FROM %%FLEETS%% 
-                     WHERE fleet_mission = 7 
-                     AND fleet_end_galaxy = :g 
-                     AND fleet_end_system = :s 
-                     AND fleet_end_planet = :p 
-                     AND fleet_mess = 0;",
-                    array(':g' => $originG, ':s' => $candidateS, ':p' => $candidateP)
-                );
-
-                if ((int)($inboundColo['cnt'] ?? 0) > 0) {
-                    continue;
-                }
-
-                return array($originG, $candidateS, $candidateP);
             }
         }
 
@@ -333,7 +447,7 @@ class BotExpansionPlanner
 
     /**
      * Responsabilidad C: Doctrina de Moonshots y Creación Orgánica de Lunas (20% Chance)
-     * Lote de 715 Cazas Ligeros (204) = 2,145,000 M + 715,000 C -> 70% CDR = 2,002,000 Escombros -> 20% Moon Chance.
+     * Vuelo real en %%FLEETS%% con 715 Cazas Ligeros (#204), resolución en BotKernel y Zero-Cheats.
      *
      * @param BotWorldModel $world
      * @return array ['attempts' => int, 'moons_created' => int]
@@ -343,13 +457,14 @@ class BotExpansionPlanner
         global $resource;
 
         $planets = $world->empire->getPlanets();
-        if (count($planets) < 5) {
+        $minPlanets = isset($this->ctx->difficulty) ? $this->ctx->difficulty->getMinPlanetsForMoonshots() : 5;
+        if (count($planets) < $minPlanets) {
             return array('attempts' => 0, 'moons_created' => 0);
         }
 
         // Guardia de Madurez Económica para Moonshots:
         // Un ensayo consume 715 Cazas Ligeros (2.145M Metal + 715k Cristal = 2.86M M+C).
-        // El bot NO debe quemar recursos en moonshots hasta tener >= 5 planetas y que 2.86M
+        // El bot NO debe quemar recursos en moonshots hasta tener >= minPlanets y que 2.86M
         // represente <= 2.5 horas de producción imperial (producción M+C >= 1.144M/h).
         $hourlyMC = 0.0;
         foreach ($planets as $pEntry) {
@@ -365,7 +480,7 @@ class BotExpansionPlanner
             return array('attempts' => 0, 'moons_created' => 0);
         }
 
-        // Identify planets without a moon
+        // Identificar planetas sin luna
         $moonlessPlanets = array();
         foreach ($planets as $pId => $pEntry) {
             $pData = $pEntry['data'];
@@ -378,10 +493,18 @@ class BotExpansionPlanner
             return array('attempts' => 0, 'moons_created' => 0);
         }
 
-        // Moonshot Priority:
-        // 1. FOB Planet
-        // 2. Home Planet
-        // 3. Colonies with highest physical production / defenses
+        // Cobertura objetivo de lunas
+        $targetRatio = isset($this->ctx->difficulty) ? $this->ctx->difficulty->getTargetMoonCoverageRatio() : 0.50;
+        $targetMoonCount = (int)ceil(count($planets) * $targetRatio);
+        $currentMoons = count($world->empire->getMoons());
+        if ($currentMoons >= $targetMoonCount || $targetMoonCount <= 0) {
+            return array('attempts' => 0, 'moons_created' => 0);
+        }
+
+        // Prioridad de Moonshots:
+        // 1. Luna FOB
+        // 2. Planeta Principal
+        // 3. Colonias con mayor producción física
         $fobId = (int)($this->ctx->botRow['fob_planet_id'] ?? 0);
         $homeId = (int)($this->ctx->botRow['home_planet_id'] ?? 0);
 
@@ -399,35 +522,45 @@ class BotExpansionPlanner
 
         $db = Database::get();
         $attempts = 0;
-        $moonsCreated = 0;
-        $now = class_exists('BotClock') ? BotClock::get() : TIMESTAMP;
-
-        // Cover at least up to 50% of planets with moons
-        $targetMoonCount = (int)ceil(count($planets) * 0.50);
-        $currentMoons = count($world->empire->getMoons());
-        if ($currentMoons >= $targetMoonCount) {
-            return array('attempts' => 0, 'moons_created' => 0);
-        }
-
-        $neededMoons = $targetMoonCount - $currentMoons;
+        $cooldown = isset($this->ctx->difficulty) ? $this->ctx->difficulty->getMoonshotCooldownSeconds() : 1800;
+        $isSimulation = (defined('SIMULATION_MODE') && SIMULATION_MODE);
 
         foreach ($moonlessPlanets as $targetPlanetId => $targetPlanet) {
-            if ($moonsCreated >= $neededMoons || $attempts >= 2) {
+            if ($attempts >= 1) {
                 break;
             }
 
-            // Cooldown de ensayo orbital (1800s entre ensayos por planeta, excepto en simulación/bootstrap)
-            $isSimulation = (defined('SIMULATION_MODE') && SIMULATION_MODE);
+            // Verificar si ya existe una tarea moonshot_orbital_resolution pendiente para este planeta
+            $pendingMoonshots = $db->select(
+                "SELECT task_id, payload FROM " . DB_PREFIX . "bot_tasks 
+                 WHERE bot_id = :bid AND task_type = 'moonshot_orbital_resolution' AND status = 'pending';",
+                array(':bid' => $this->ctx->botId)
+            );
+            if (!empty($pendingMoonshots)) {
+                $alreadyPendingForTarget = false;
+                foreach ($pendingMoonshots as $pt) {
+                    $pPayload = json_decode($pt['payload'], true);
+                    if (!empty($pPayload['target_planet_id']) && (int)$pPayload['target_planet_id'] === (int)$targetPlanetId) {
+                        $alreadyPendingForTarget = true;
+                        break;
+                    }
+                }
+                if ($alreadyPendingForTarget) {
+                    continue;
+                }
+            }
+
+            // Cooldown entre ensayos orbitales (excepto en simulación)
             if (!$isSimulation) {
                 $lastAttempt = $db->selectSingle(
                     "SELECT id FROM %%BOT_DECISIONS%% 
                      WHERE bot_id = :bid AND (chosen_action = :act OR chosen_action = :act2) 
-                     AND created_at >= DATE_SUB(NOW(), INTERVAL 1800 SECOND) 
+                     AND created_at >= DATE_SUB(NOW(), INTERVAL {$cooldown} SECOND) 
                      LIMIT 1;",
-                    array(':bid' => $this->ctx->botId, ':act' => "moonshot_attempt_{$targetPlanetId}", ':act2' => "moon_created_{$targetPlanetId}")
+                    array(':bid' => $this->ctx->botId, ':act' => "moonshot_dispatch_{$targetPlanetId}", ':act2' => "moon_created_{$targetPlanetId}")
                 );
                 if (!empty($lastAttempt)) {
-                    continue; // Cooldown activo para este planeta
+                    continue;
                 }
             }
 
@@ -447,117 +580,129 @@ class BotExpansionPlanner
                 continue;
             }
 
-            // Check moonshot material availability:
-            // 715 Light Fighters (204) OR Physical Resources: 2,145,000 Metal + 715,000 Crystal
-            $availLF = (int)($targetPlanet[$resource[204]] ?? 0);
-            $availM  = (float)($targetPlanet['metal'] ?? 0.0);
-            $availC  = (float)($targetPlanet['crystal'] ?? 0.0);
+            // Buscar colonia donante ($candId !== $targetPlanetId) con >= 715 Cazas Ligeros (#204)
+            $donorColony = null;
+            $bestRecruitColony = null;
+            $maxShipyardLvl = -1;
 
-            $hasShips = ($availLF >= 715);
-            $hasSurplus = ($availM >= 2500000.0 && $availC >= 1000000.0);
+            foreach ($planets as $candId => $candEntry) {
+                if ((int)$candId === (int)$targetPlanetId) {
+                    continue;
+                }
+                $cData = $candEntry['data'];
+                $cLF = (int)($cData[$resource[204]] ?? 0);
+                if ($cLF >= 715 && $donorColony === null) {
+                    $donorColony = $cData;
+                }
 
-            if (!$hasShips && !$hasSurplus) {
-                // Check if any other colony of this bot has >= 715 LF to spare
-                $donorColony = null;
-                foreach ($planets as $candId => $candEntry) {
-                    if ($candId === $targetPlanetId) continue;
-                    if ((int)($candEntry['data'][$resource[204]] ?? 0) >= 715) {
-                        $donorColony = $candEntry['data'];
-                        break;
+                $syLvl = (int)($cData[$resource[21]] ?? 0);
+                if ($syLvl > $maxShipyardLvl) {
+                    $maxShipyardLvl = $syLvl;
+                    $bestRecruitColony = $cData;
+                }
+            }
+
+            // Si ninguna colonia tiene >= 715 #204 estacionados:
+            if ($donorColony === null) {
+                if ($this->ctx->difficulty->canRecruitMoonshotSquadrons() && $bestRecruitColony !== null) {
+                    $bId = (int)$bestRecruitColony['id'];
+                    $curLF = (int)($bestRecruitColony[$resource[204]] ?? 0);
+
+                    // Contar LF en cola de hangar
+                    $queuedLF = 0;
+                    $hQueue = !empty($planets[$bId]['hangar_queue']) ? $planets[$bId]['hangar_queue'] : array();
+                    foreach ($hQueue as $hq) {
+                        if (isset($hq[0]) && (int)$hq[0] === 204) {
+                            $queuedLF += (int)$hq[1];
+                        }
+                    }
+
+                    $neededLF = 715 - ($curLF + $queuedLF);
+                    if ($neededLF > 0) {
+                        $batchLF = min(250, $neededLF);
+                        $cost = BuildFunctions::getElementPrice($this->ctx->user, $bestRecruitColony, 204, false, $batchLF);
+                        $canAfford = (!isset($this->ctx->budgetManager)) || $this->ctx->budgetManager->canAffordBudget($bId, 'fleet', $cost);
+                        if (!$canAfford && isset($this->ctx->budgetManager)) {
+                            $canAfford = $this->ctx->budgetManager->tryInternalBucketSwap($bId, 'fleet', $cost);
+                        }
+
+                        if ($canAfford) {
+                            $ok = $this->gateway->constructUnits($bId, 204, $batchLF, 'Reclutamiento de escuadrón para Moonshot orbital (715x #204)', 'fleet');
+                            if ($ok && isset($this->ctx->decisionLog)) {
+                                $this->ctx->decisionLog->record(
+                                    'moonshot_squadron_recruit',
+                                    "Enqueued batch of {$batchLF}x Light Fighters (#204) on Colony #{$bId} for Moonshot campaign (Current: {$curLF}, Queued: {$queuedLF}, Target: 715)",
+                                    array('planet_id' => $bId, 'batch' => $batchLF, 'needed' => $neededLF),
+                                    "recruit_moonshot_{$bId}",
+                                    15000.0
+                                );
+                            }
+                        }
                     }
                 }
-                if ($donorColony !== null) {
-                    $hasShips = true;
-                    $donorPlanetId = $donorColony['id'];
-                } else {
-                    continue; // Cannot fund moonshot on this colony right now
-                }
-            } else {
-                $donorPlanetId = $targetPlanetId;
+                continue;
             }
 
-            // Deduct atomic cost for 715 Light Fighters
-            if ($hasShips) {
-                $db->update(
-                    "UPDATE %%PLANETS%% SET light_hunter = CASE WHEN light_hunter >= 715 THEN light_hunter - 715 ELSE 0 END WHERE id = :pid;",
-                    array(':pid' => $donorPlanetId)
-                );
-            } else {
-                $db->update(
-                    "UPDATE %%PLANETS%% SET metal = GREATEST(0, metal - 2145000), crystal = GREATEST(0, crystal - 715000) WHERE id = :pid;",
-                    array(':pid' => $targetPlanetId)
-                );
-            }
-
-            // Credit 70% debris cloud (1,501,500 Metal + 500,500 Crystal = 2,002,000 Debris)
-            $db->update(
-                "UPDATE %%PLANETS%% SET 
-                 der_metal = der_metal + 1501500, 
-                 der_crystal = der_crystal + 500500 
-                 WHERE id = :pid;",
-                array(':pid' => $targetPlanetId)
+            // La colonia donante TIENE >= 715 #204. Despachar vuelo real en %%FLEETS%% (Misión 4)
+            $donorPlanetId = (int)$donorColony['id'];
+            $startTime = null;
+            $fleetId = $this->gateway->launchFleet(
+                array(204 => 715),
+                4, // Mission 4: Deploy / Stay
+                $donorPlanetId,
+                $targetPlanetId,
+                $this->ctx->botId,
+                (int)$targetPlanet['galaxy'],
+                (int)$targetPlanet['system'],
+                (int)$targetPlanet['planet'],
+                1, // Planet
+                array(),
+                10, // Speed 100%
+                $startTime
             );
 
-            $attempts++;
+            if ($fleetId) {
+                $attempts++;
 
-            // Calculate moon creation probability: 20% legal max
-            $debrisTotal = 2002000;
-            $config = Config::get();
-            $moonFactor = isset($config->moon_factor) ? (float)$config->moon_factor : 1.0;
-            $moonChanceCap = isset($config->moon_chance) ? (int)$config->moon_chance : 20;
-            $chanceCreateMoon = min((int)round($debrisTotal / 100000 * $moonFactor), $moonChanceCap); // 20%
-            $randChance = mt_rand(1, 100);
+                // Programar moonshot_orbital_resolution en BotScheduler::scheduleTask para $startTime
+                $payload = array(
+                    'fleet_id'         => (int)$fleetId,
+                    'donor_planet_id'  => (int)$donorPlanetId,
+                    'target_planet_id' => (int)$targetPlanetId,
+                    'galaxy'           => (int)$targetPlanet['galaxy'],
+                    'system'           => (int)$targetPlanet['system'],
+                    'planet'           => (int)$targetPlanet['planet'],
+                    'ships'            => 715,
+                );
 
-            if ($randChance <= $chanceCreateMoon) {
-                $universe = Universe::current();
-                $g = (int)$targetPlanet['galaxy'];
-                $s = (int)$targetPlanet['system'];
-                $p = (int)$targetPlanet['planet'];
-                $moonName = BotNameHelper::getRandomMoonName();
+                BotScheduler::scheduleTask($this->ctx->botId, 'moonshot_orbital_resolution', $payload, $startTime);
 
-                $newMoonId = PlayerUtil::createMoon($universe, $g, $s, $p, $this->ctx->botId, $chanceCreateMoon, null, $moonName);
-
-                if ($newMoonId) {
-                    $moonsCreated++;
-
-
-                    if (isset($this->ctx->decisionLog)) {
-                        $this->ctx->decisionLog->record(
-                            'moonshot_success',
-                            "Moonshot Successful on Planet #{$targetPlanetId} [{$g}:{$s}:{$p}]: Moon '{$moonName}' (#{$newMoonId}) created with {$chanceCreateMoon}% chance (Roll: {$randChance}/100, 2.002M debris generated)",
-                            array('planet_id' => $targetPlanetId, 'coords' => array($g, $s, $p), 'moon_id' => $newMoonId, 'moon_name' => $moonName, 'chance' => $chanceCreateMoon, 'roll' => $randChance),
-                            "moon_created_{$targetPlanetId}",
-                            50000.0
-                        );
-                    }
-
-                    if (isset($this->ctx->telemetry) && method_exists($this->ctx->telemetry, 'logFleetMission')) {
-                        $this->ctx->telemetry->logFleetMission(
-                            $targetPlanet['name'] ?? "Planeta #{$targetPlanetId}",
-                            "[{$g}:{$s}:{$p}]",
-                            "Órbita Lunar",
-                            "[{$g}:{$s}:{$p}]",
-                            1,
-                            array(204 => 715),
-                            array(901 => 0, 902 => 0, 903 => 0),
-                            0,
-                            "Moonshot orbital exitoso: Luna '{$moonName}' (#{$newMoonId}) nacida al 20%"
-                        );
-                    }
-                }
-            } else {
                 if (isset($this->ctx->decisionLog)) {
                     $this->ctx->decisionLog->record(
-                        'moonshot_attempt_debris_created',
-                        "Moonshot attempt on Planet #{$targetPlanetId}: 2.002M debris generated in orbit (Roll: {$randChance}/100 > {$chanceCreateMoon}% chance, ready for recycling)",
-                        array('planet_id' => $targetPlanetId, 'chance' => $chanceCreateMoon, 'roll' => $randChance),
-                        "moonshot_attempt_{$targetPlanetId}",
-                        2000.0
+                        'moonshot_dispatch',
+                        "Launched 715 Light Fighters (#204) from Colony #{$donorPlanetId} to Planet #{$targetPlanetId} [{$targetPlanet['galaxy']}:{$targetPlanet['system']}:{$targetPlanet['planet']}] for 20% Moonshot orbital exercise (Fleet #{$fleetId}, ETA: " . date('Y-m-d H:i:s', $startTime) . ")",
+                        array('donor_planet' => $donorPlanetId, 'target_planet' => $targetPlanetId, 'fleet_id' => $fleetId, 'eta' => $startTime),
+                        "moonshot_dispatch_{$targetPlanetId}",
+                        30000.0
+                    );
+                }
+
+                if (isset($this->ctx->telemetry) && method_exists($this->ctx->telemetry, 'logFleetMission')) {
+                    $this->ctx->telemetry->logFleetMission(
+                        $donorColony['name'] ?? "Colonia #{$donorPlanetId}",
+                        "[{$donorColony['galaxy']}:{$donorColony['system']}:{$donorColony['planet']}]",
+                        $targetPlanet['name'] ?? "Planeta #{$targetPlanetId}",
+                        "[{$targetPlanet['galaxy']}:{$targetPlanet['system']}:{$targetPlanet['planet']}]",
+                        4,
+                        array(204 => 715),
+                        array(901 => 0, 902 => 0, 903 => 0),
+                        0,
+                        "Despacho de escuadrón de 715 Cazas Ligeros para ejercicio orbital Moonshot (20%)"
                     );
                 }
             }
         }
 
-        return array('attempts' => $attempts, 'moons_created' => $moonsCreated);
+        return array('attempts' => $attempts, 'moons_created' => 0);
     }
 }
