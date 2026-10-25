@@ -238,32 +238,40 @@ class BuildFunctions
 
         if(in_array($Element, $reslist['build'])) {		
 			$speedFactor = 1 + max(0, (float)(isset($USER['factor']['Sbuild']) ? $USER['factor']['Sbuild'] : 0));
-			$time	= $elementCost/($config->game_speed * (1 + $PLANET[$resource[$resglobal['build_speed']]]) * $speedFactor);
+			$buildPoints = max(2000.0, (float)(isset($PLANET[$resource[$resglobal['build_speed']]]) ? $PLANET[$resource[$resglobal['build_speed']]] : 0));
+			$time	= $elementCost/($config->game_speed * (1 + $buildPoints) * $speedFactor);
 		}elseif (in_array($Element, $reslist['fleet'])) {			
 			$speedFactor = 1 + max(0, (float)(isset($USER['factor']['Sfleet']) ? $USER['factor']['Sfleet'] : 0));
-			$time	= $elementCost/($config->game_speed * (1 + $PLANET[$resource[$resglobal['fleet_speed']]]) * $speedFactor);			
+			$speedField = $resource[$resglobal['fleet_speed']] ?? 'fleet';
+			$fleetPoints = max(2000.0, (float)($PLANET[$speedField] ?? 0.0));
+			$time	= $elementCost/($config->game_speed * (1 + $fleetPoints) * $speedFactor);			
 		}elseif (in_array($Element, $reslist['defense'])) {
-			$speedFactor = 1 + max(0, (float)(isset($USER['factor']['Sfleet']) ? $USER['factor']['Sfleet'] : 0));
-			$time	= $elementCost/($config->game_speed * (1 + $PLANET[$resource[$resglobal['defense_speed']]]) * $speedFactor);	
+			$speedFactor = 1 + max(0, (float)(isset($USER['factor']['Sdefense']) ? $USER['factor']['Sdefense'] : (isset($USER['factor']['Sfleet']) ? $USER['factor']['Sfleet'] : 0)));
+			$speedField = $resource[$resglobal['defense_speed']] ?? 'defense';
+			$defPoints = max(2000.0, (float)($PLANET[$speedField] ?? 0.0));
+			$time	= $elementCost/($config->game_speed * (1 + $defPoints) * $speedFactor);	
         }elseif (in_array($Element, $reslist['missile'])) {
-			$speedFactor = 1 + max(0, (float)(isset($USER['factor']['Sfleet']) ? $USER['factor']['Sfleet'] : 0));
-			$time	= $elementCost/($config->game_speed * (1 + $PLANET[$resource[$resglobal['missile_speed']]]) * $speedFactor);	
+			$speedFactor = 1 + max(0, (float)(isset($USER['factor']['Smissile']) ? $USER['factor']['Smissile'] : (isset($USER['factor']['Sfleet']) ? $USER['factor']['Sfleet'] : 0)));
+			$speedField = $resource[$resglobal['missile_speed']] ?? 'missile';
+			$misPoints = max(2000.0, (float)($PLANET[$speedField] ?? 0.0));
+			$time	= $elementCost/($config->game_speed * (1 + $misPoints) * $speedFactor);	
         }elseif (in_array($Element, $reslist['tech'])) {
-            $interKey = $resource[$resglobal['tech_speed']].'_inter';
+            $speedField = $resource[$resglobal['tech_speed']] ?? 'tech';
+            $interKey = $speedField.'_inter';
             if (!isset($PLANET[$interKey])) {
                 $PLANET[$interKey] = ResourceUpdate::getNetworkLevel($USER, $PLANET);
             }
 
             if(is_numeric($PLANET[$interKey]))
             {
-                $Level	= $PLANET[$resource[$resglobal['tech_speed']]];
+                $Level	= (float)($PLANET[$speedField] ?? 0.0);
             } else {
                 $Level = 0;
                 if (is_array($PLANET[$interKey])) {
                     foreach($PLANET[$interKey] as $Levels)
                     {
                         if(!isset($requeriments[$Element][$resglobal['tech_speed']]) || $Levels >= $requeriments[$Element][$resglobal['tech_speed']])
-                            $Level += $Levels;
+                            $Level += (float)$Levels;
                     }
                 }
             }

@@ -72,8 +72,11 @@ class BotKernel
 
             $db = Database::get();
 
-            // Load user data
-            $userRow = $db->selectSingle("SELECT * FROM %%USERS%% WHERE id = :id LIMIT 1;", array(':id' => $botId));
+            // Load user data (joining %%STATPOINTS%% to ensure bot knows its real points & rank)
+            $userRow = $db->selectSingle("SELECT u.*, COALESCE(s.total_points, 0) as total_points, COALESCE(s.total_rank, 0) as total_rank 
+                FROM %%USERS%% u 
+                LEFT JOIN %%STATPOINTS%% s ON s.id_owner = u.id AND s.stat_type = 1 
+                WHERE u.id = :id LIMIT 1;", array(':id' => $botId));
             if (empty($userRow)) {
                 BotLockManager::releaseBotLock($botId);
                 return array('error' => 'User account not found');
@@ -95,7 +98,13 @@ class BotKernel
             if (isset($world->empire)) {
                 $ctx->empire = $world->empire;
                 if (method_exists($world->empire, 'getUser')) {
+                    $cachedPoints = $ctx->user['total_points'] ?? 0;
+                    $cachedRank   = $ctx->user['total_rank'] ?? 0;
                     $ctx->user = $world->empire->getUser();
+                    if (!isset($ctx->user['total_points']) || $ctx->user['total_points'] <= 0) {
+                        $ctx->user['total_points'] = $cachedPoints;
+                        $ctx->user['total_rank']   = $cachedRank;
+                    }
                 }
             }
 
@@ -323,10 +332,10 @@ class BotKernel
                 'decisions'   => $ctx->decisionLog->getRecordedThisTurn(),
             );
 
-        } catch (Exception $e) {
-            BotLockManager::releaseBotLock($botId);
+        } catch (Throwable $e) {
             return array('error' => $e->getMessage() . " at " . $e->getFile() . ":" . $e->getLine());
         } finally {
+            BotLockManager::releaseBotLock($botId);
             if (class_exists('BotPremiumStrategist')) {
                 BotPremiumStrategist::invalidatePlanetCache();
             }

@@ -208,9 +208,8 @@ class BotExpansionPlanner
                 break;
             }
 
-            $maxSlots = FleetFunctions::GetMaxFleetSlots($this->ctx->user);
-            $actualFleets = FleetFunctions::GetCurrentFleets($this->ctx->botId);
-            if ($actualFleets >= $maxSlots) {
+            $availMilSlots = BotActionGateway::getAvailableMilitarySlots($this->ctx->botId, $this->ctx->user);
+            if ($availMilSlots <= 0) {
                 break;
             }
 

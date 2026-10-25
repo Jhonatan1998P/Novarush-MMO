@@ -165,6 +165,14 @@ class BotStrikePlanner
                 $targetPointsRow = $db->selectSingle("SELECT total_points FROM %%STATPOINTS%% WHERE id_owner = :uid AND stat_type = 1;", array(':uid' => (int)$pRow['id_owner']));
                 $targetPoints = !empty($targetPointsRow) ? (float)$targetPointsRow['total_points'] : 0.0;
                 $botPoints = (float)($this->ctx->user['total_points'] ?? 0);
+                if ($botPoints <= 0) {
+                    $spRow = $db->selectSingle("SELECT total_points, total_rank FROM %%STATPOINTS%% WHERE id_owner = :uid AND stat_type = 1 LIMIT 1;", array(':uid' => $this->ctx->botId));
+                    if (!empty($spRow)) {
+                        $botPoints = (float)($spRow['total_points'] ?? 0);
+                        $this->ctx->user['total_points'] = $botPoints;
+                        $this->ctx->user['total_rank']   = (int)($spRow['total_rank'] ?? 0);
+                    }
+                }
                 $targetUserData = array('id_owner' => (int)$pRow['id_owner'], 'total_points' => $targetPoints);
                 $botUserData = array('id_owner' => $this->ctx->botId, 'total_points' => $botPoints);
                 $noobCheck = CheckNoobProtec($botUserData, $targetUserData, $targetUserData);

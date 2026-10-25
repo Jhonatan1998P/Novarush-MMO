@@ -18,6 +18,7 @@ class BotActionGateway
     public static $jumpGateExecutions = 0;
     public static $jumpGateShipsTransferred = 0;
     public static $jumpGateLog = array();
+    const EMERGENCY_RESERVED_SLOTS = 1;
 
     protected $ctx;
 
@@ -504,19 +505,33 @@ class BotActionGateway
     }
 
     /**
+     * Retorna el maximo de slots de flota utilizables por operaciones normales,
+     * reservando SIEMPRE al menos 1 slot libre para Fleetsave de emergencia.
+     */
+    public static function getUsableMaxFleetSlots(array $user)
+    {
+        $maxSlots = (int)FleetFunctions::GetMaxFleetSlots($user);
+        if ($maxSlots <= 1) {
+            return 0;
+        }
+        return $maxSlots - self::EMERGENCY_RESERVED_SLOTS;
+    }
+
+    /**
      * Get available expedition slots for new expeditions
      */
     public static function getAvailableExpeditionSlots($botId, array $user)
     {
-        $maxSlots     = FleetFunctions::GetMaxFleetSlots($user);
-        $actualFleets = FleetFunctions::GetCurrentFleets($botId);
-        if ($actualFleets >= $maxSlots) {
+        $maxSlots     = (int)FleetFunctions::GetMaxFleetSlots($user);
+        $usableSlots  = max(0, $maxSlots - self::EMERGENCY_RESERVED_SLOTS);
+        $actualFleets = (int)FleetFunctions::GetCurrentFleets($botId);
+        if ($actualFleets >= $usableSlots) {
             return 0;
         }
 
         $sExp      = self::getExpeditionSlots($user);
         $activeExp = self::getActiveExpFleets($botId);
-        return max(0, min($maxSlots - $actualFleets, $sExp - $activeExp));
+        return max(0, min($usableSlots - $actualFleets, $sExp - $activeExp));
     }
 
     /**
@@ -524,15 +539,16 @@ class BotActionGateway
      */
     public static function getAvailableMilitarySlots($botId, array $user)
     {
-        $maxSlots     = FleetFunctions::GetMaxFleetSlots($user);
-        $actualFleets = FleetFunctions::GetCurrentFleets($botId);
-        if ($actualFleets >= $maxSlots) {
+        $maxSlots     = (int)FleetFunctions::GetMaxFleetSlots($user);
+        $usableSlots  = max(0, $maxSlots - self::EMERGENCY_RESERVED_SLOTS);
+        $actualFleets = (int)FleetFunctions::GetCurrentFleets($botId);
+        if ($actualFleets >= $usableSlots) {
             return 0;
         }
 
         $sMilitary    = self::getMilitarySlots($user);
         $activeNonExp = self::getActiveNonExpFleets($botId);
-        return max(0, min($maxSlots - $actualFleets, $sMilitary - $activeNonExp));
+        return max(0, min($usableSlots - $actualFleets, $sMilitary - $activeNonExp));
     }
 
     /**
@@ -556,16 +572,36 @@ class BotActionGateway
         global $resource;
 
         // 1. Enforce Fleet Slots & Dedicated Expedition Slots rule parity
-        $maxSlots     = FleetFunctions::GetMaxFleetSlots($this->ctx->user);
-        $actualFleets = FleetFunctions::GetCurrentFleets($this->ctx->botId);
+        $maxSlots     = (int)FleetFunctions::GetMaxFleetSlots($this->ctx->user);
+        $actualFleets = (int)FleetFunctions::GetCurrentFleets($this->ctx->botId);
         $sExp         = self::getExpeditionSlots($this->ctx->user);
         $activeExp    = self::getActiveExpFleets($this->ctx->botId);
         $activeNonExp = max(0, $actualFleets - $activeExp);
         $sMilitary    = self::getMilitarySlots($this->ctx->user);
 
+        // Check if this is an authentic emergency fleetsave against an incoming hostile threat
+        $db = Database::get();
+        $isEmergencyFleetsave = false;
+        if ((int)$mission === 4) {
+            $incomingThreat = $db->selectSingle(
+                "SELECT fleet_id FROM %%FLEETS%% 
+                 WHERE fleet_end_id = :pid AND fleet_mission IN (1, 2, 9) AND fleet_mess = 0 
+                 LIMIT 1;",
+                array(':pid' => (int)$startPlanetId)
+            );
+            if (!empty($incomingThreat)) {
+                $isEmergencyFleetsave = true;
+            }
+        }
+
+        // Lock 1 slot strictly for emergency fleetsave: ordinary missions cannot consume the emergency reserved slot
+        $usableSlots = max(0, $maxSlots - self::EMERGENCY_RESERVED_SLOTS);
+        if (!$isEmergencyFleetsave && $actualFleets >= $usableSlots) {
+            return false;
+        }
+
         // Emergency Slot Preemption for Survival Fleetsave (Mission 4):
-        if ($mission == 4 && ($maxSlots <= $actualFleets || $activeNonExp >= $sMilitary)) {
-            $db = Database::get();
+        if ($isEmergencyFleetsave && ($maxSlots <= $actualFleets || $activeNonExp >= $sMilitary)) {
             $preempt = $db->selectSingle(
                 "SELECT fleet_id, fleet_start_id, fleet_array, fleet_resource_metal, fleet_resource_crystal, fleet_resource_deuterium 
                  FROM %%FLEETS%% 
@@ -610,7 +646,7 @@ class BotActionGateway
 
         if ($maxSlots <= $actualFleets) {
             // Mission 4 has emergency survival exception if preemption wasn't possible
-            if ($mission != 4 || $actualFleets > ($maxSlots + 1)) {
+            if (!$isEmergencyFleetsave || $actualFleets > ($maxSlots + 1)) {
                 return false;
             }
         }
@@ -624,7 +660,7 @@ class BotActionGateway
             // Military / Logistics / Deployment / Spy missions:
             // Dedicated expedition slots sExp are locked exclusively for expeditions.
             // Non-expedition fleets can only use S_militar = max(1, S_total - S_exp).
-            if ($activeNonExp >= $sMilitary && $mission != 4) {
+            if ($activeNonExp >= $sMilitary && !$isEmergencyFleetsave) {
                 return false;
             }
         }
@@ -642,9 +678,18 @@ class BotActionGateway
                     'onlinetime'   => (int)$targetUserPoints['onlinetime'],
                     'banaday'      => (int)$targetUserPoints['banaday'],
                 );
+                $botPoints = (float)($this->ctx->user['total_points'] ?? 0);
+                if ($botPoints <= 0) {
+                    $spRow = $db->selectSingle("SELECT total_points, total_rank FROM %%STATPOINTS%% WHERE id_owner = :uid AND stat_type = 1 LIMIT 1;", array(':uid' => $this->ctx->botId));
+                    if (!empty($spRow)) {
+                        $botPoints = (float)($spRow['total_points'] ?? 0);
+                        $this->ctx->user['total_points'] = $botPoints;
+                        $this->ctx->user['total_rank']   = (int)($spRow['total_rank'] ?? 0);
+                    }
+                }
                 $botUserData = array(
                     'id_owner'     => $this->ctx->botId,
-                    'total_points' => (float)($this->ctx->user['total_points'] ?? 0),
+                    'total_points' => $botPoints,
                 );
                 $prot = CheckNoobProtec($botUserData, $targetUserData, $targetUserData);
                 if ($prot['NoobPlayer'] || $prot['StrongPlayer']) {
@@ -874,9 +919,18 @@ class BotActionGateway
                     'onlinetime'   => (int)$targetUserPoints['onlinetime'],
                     'banaday'      => (int)$targetUserPoints['banaday'],
                 );
+                $botPoints = (float)($this->ctx->user['total_points'] ?? 0);
+                if ($botPoints <= 0) {
+                    $spRow = $db->selectSingle("SELECT total_points, total_rank FROM %%STATPOINTS%% WHERE id_owner = :uid AND stat_type = 1 LIMIT 1;", array(':uid' => $this->ctx->botId));
+                    if (!empty($spRow)) {
+                        $botPoints = (float)($spRow['total_points'] ?? 0);
+                        $this->ctx->user['total_points'] = $botPoints;
+                        $this->ctx->user['total_rank']   = (int)($spRow['total_rank'] ?? 0);
+                    }
+                }
                 $botUserData = array(
                     'id_owner'     => $this->ctx->botId,
-                    'total_points' => (float)($this->ctx->user['total_points'] ?? 0),
+                    'total_points' => $botPoints,
                 );
                 $prot = CheckNoobProtec($botUserData, $targetUserData, $targetUserData);
                 if ($prot['NoobPlayer'] || $prot['StrongPlayer']) {

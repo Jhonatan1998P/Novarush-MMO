@@ -142,8 +142,8 @@ class PlayerUtil
 			':universe'				=> $universe,
 			':language'				=> $userLanguage,
 			':registerAddress'		=> !empty($userIpAddress) ? $userIpAddress : Session::getClientIp(),
-			':onlinetime'			=> TIMESTAMP,
-			':registerTimestamp'	=> TIMESTAMP,
+			':onlinetime'			=> class_exists('BotClock') ? BotClock::get() : TIMESTAMP,
+			':registerTimestamp'	=> class_exists('BotClock') ? BotClock::get() : TIMESTAMP,
 			':password'				=> $userPassword,
 			':dpath'				=> DEFAULT_THEME,
 			':timezone'				=> $config->timezone,
@@ -277,7 +277,7 @@ class PlayerUtil
 			':galaxy'			=> $galaxy,
 			':system'			=> $system,
 			':position'			=> $position,
-			':updateTimestamp'	=> class_exists('BotClock') ? BotClock::now() : TIMESTAMP,
+			':updateTimestamp'	=> class_exists('BotClock') ? BotClock::get() : TIMESTAMP,
 			':type'				=> 1,
 			':imageName'		=> $imageName,
 			':diameter'			=> $diameter,
@@ -286,7 +286,8 @@ class PlayerUtil
 			':maxTemperature'	=> $maxTemperature,
 			':metal_start'		=> (float)$config->metal_start * $resourceMultiplier,
 			':crystal_start'	=> (float)$config->crystal_start * $resourceMultiplier,
-			':deuterium_start'	=> (float)$config->deuterium_start * $resourceMultiplier
+			':deuterium_start'	=> (float)$config->deuterium_start * $resourceMultiplier,
+			':build_start'		=> 2000.0
 		);
 
 		$sql = 'INSERT INTO %%PLANETS%% SET
@@ -305,7 +306,8 @@ class PlayerUtil
 		temp_max 	= :maxTemperature,
 		metal		= :metal_start,
 		crystal		= :crystal_start,
-		deuterium	= :deuterium_start;';
+		deuterium	= :deuterium_start,
+		build		= :build_start;';
 
 		$db = Database::get();
 		$db->insert($sql, $params);
@@ -386,7 +388,7 @@ class PlayerUtil
 			':galaxy'			=> $galaxy,
 			':system'			=> $system,
 			':planet'			=> $position,
-			':updateTimestamp'	=> class_exists('BotClock') ? BotClock::now() : TIMESTAMP,
+			':updateTimestamp'	=> class_exists('BotClock') ? BotClock::get() : TIMESTAMP,
 			':type'				=> 3,
 			':image'			=> 'mond',
 			':diameter'			=> $diameter,

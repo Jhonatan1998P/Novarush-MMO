@@ -37,7 +37,10 @@ class BotWorldModel
     {
         try {
             $db = Database::get();
-            $uRow = $db->selectSingle("SELECT * FROM %%USERS%% WHERE id = :bid;", array(':bid' => $this->ctx->botId));
+            $uRow = $db->selectSingle("SELECT u.*, COALESCE(s.total_points, 0) as total_points, COALESCE(s.total_rank, 0) as total_rank 
+                FROM %%USERS%% u 
+                LEFT JOIN %%STATPOINTS%% s ON s.id_owner = u.id AND s.stat_type = 1 
+                WHERE u.id = :bid LIMIT 1;", array(':bid' => $this->ctx->botId));
             if (!empty($uRow)) {
                 $uRow['factor'] = getFactors($uRow, 'basic');
                 $this->ctx->user = $uRow;

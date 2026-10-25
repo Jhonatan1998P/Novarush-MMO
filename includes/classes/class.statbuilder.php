@@ -143,6 +143,8 @@ class statbuilder
 		foreach($UniData as $Uni => $Amount) {
 			$config	= Config::get($Uni);
 			$config->users_amount = $Amount;
+			$config->stat_last_update = TIMESTAMP;
+			$config->stat_last_db_update = TIMESTAMP;
 			$config->save();
 		}
 	}

@@ -1214,6 +1214,22 @@ class BotForcePlanner
                         }
 
                         $maxAffordable = $this->calculateTriResourceMaxUnits($pData, $defCredits, $defUnitId, $lockedDefResDef, $lockedDefAmountDef);
+                        if ($maxAffordable < 1 && $unitsByTime >= 1 && isset($this->ctx->budgetManager)) {
+                            $targetUnits = min($unitsByTime, 100);
+                            $costNeeded = array(
+                                901 => (float)($pricelist[$defUnitId]['cost'][901] ?? 0) * $targetUnits,
+                                902 => (float)($pricelist[$defUnitId]['cost'][902] ?? 0) * $targetUnits,
+                                903 => (float)($pricelist[$defUnitId]['cost'][903] ?? 0) * $targetUnits,
+                            );
+                            $this->ctx->budgetManager->tryInternalBucketSwap($pId, 'defense', $costNeeded);
+                            if (class_exists('BotPremiumStrategist')) {
+                                BotPremiumStrategist::tryTraderForCategory($this->ctx, $pId, 'defense', $costNeeded);
+                            }
+                            $pData = $this->refreshPlanetData($pId, $pData);
+                            $rawDefCredits = $this->ctx->budgetManager->getPlanetDefenseCredits($pId);
+                            $defCredits = $this->calculateCycleSpendBudget($pId, $pData, 'defense', $rawDefCredits, $lastDefRecruit, $isEmergency);
+                            $maxAffordable = $this->calculateTriResourceMaxUnits($pData, $defCredits, $defUnitId, $lockedDefResDef, $lockedDefAmountDef);
+                        }
                         $batch = min($unitsByTime, $maxAffordable);
 
                         if ($batch >= 1) {
@@ -1319,6 +1335,22 @@ class BotForcePlanner
                         $unitsByTime = (int)floor($recTimeMs / $unitTimeMs);
                         if ($unitsByTime >= 1) {
                             $maxAff = $this->calculateTriResourceMaxUnits($pData, $fleetCredits, $chosenRecId, $lockedDefResFleet, $lockedDefAmountFleet);
+                            if ($maxAff < 1 && isset($this->ctx->budgetManager)) {
+                                $targetUnits = min($unitsByTime, 50);
+                                $costNeeded = array(
+                                    901 => (float)($pricelist[$chosenRecId]['cost'][901] ?? 0) * $targetUnits,
+                                    902 => (float)($pricelist[$chosenRecId]['cost'][902] ?? 0) * $targetUnits,
+                                    903 => (float)($pricelist[$chosenRecId]['cost'][903] ?? 0) * $targetUnits,
+                                );
+                                $this->ctx->budgetManager->tryInternalBucketSwap($pId, 'fleet', $costNeeded);
+                                if (class_exists('BotPremiumStrategist')) {
+                                    BotPremiumStrategist::tryTraderForCategory($this->ctx, $pId, 'fleet', $costNeeded);
+                                }
+                                $pData = $this->refreshPlanetData($pId, $pData);
+                                $rawFleetCredits = $this->ctx->budgetManager->getPlanetFleetCredits($pId);
+                                $fleetCredits = $this->calculateCycleSpendBudget($pId, $pData, 'fleet', $rawFleetCredits, $lastFleetRecruit, $isEmergency);
+                                $maxAff = $this->calculateTriResourceMaxUnits($pData, $fleetCredits, $chosenRecId, $lockedDefResFleet, $lockedDefAmountFleet);
+                            }
                             if ($chosenRecId === 219) {
                                 $maxAff = min($maxAff, max(0, 1500 - $empireStats['count_219']));
                             }
@@ -1363,6 +1395,22 @@ class BotForcePlanner
                         $unitsByTime = (int)floor($cargoTimeMs / $unitTimeMs);
                         if ($unitsByTime >= 1) {
                             $maxAff = $this->calculateTriResourceMaxUnits($pData, $fleetCredits, $chosenCargoId, $lockedDefResFleet, $lockedDefAmountFleet);
+                            if ($maxAff < 1 && isset($this->ctx->budgetManager)) {
+                                $targetUnits = min($unitsByTime, 50);
+                                $costNeeded = array(
+                                    901 => (float)($pricelist[$chosenCargoId]['cost'][901] ?? 0) * $targetUnits,
+                                    902 => (float)($pricelist[$chosenCargoId]['cost'][902] ?? 0) * $targetUnits,
+                                    903 => (float)($pricelist[$chosenCargoId]['cost'][903] ?? 0) * $targetUnits,
+                                );
+                                $this->ctx->budgetManager->tryInternalBucketSwap($pId, 'fleet', $costNeeded);
+                                if (class_exists('BotPremiumStrategist')) {
+                                    BotPremiumStrategist::tryTraderForCategory($this->ctx, $pId, 'fleet', $costNeeded);
+                                }
+                                $pData = $this->refreshPlanetData($pId, $pData);
+                                $rawFleetCredits = $this->ctx->budgetManager->getPlanetFleetCredits($pId);
+                                $fleetCredits = $this->calculateCycleSpendBudget($pId, $pData, 'fleet', $rawFleetCredits, $lastFleetRecruit, $isEmergency);
+                                $maxAff = $this->calculateTriResourceMaxUnits($pData, $fleetCredits, $chosenCargoId, $lockedDefResFleet, $lockedDefAmountFleet);
+                            }
                             $batchCargo = min($unitsByTime, $maxAff);
                             if ($batchCargo >= 1) {
                                 $enqCargo = (int)$this->gateway->constructUnits($pId, $chosenCargoId, $batchCargo);
@@ -1460,6 +1508,22 @@ class BotForcePlanner
                         }
 
                         $maxAffordable = $this->calculateTriResourceMaxUnits($pData, $fleetCredits, $chosenShipId, $lockedDefResFleet, $lockedDefAmountFleet);
+                        if ($maxAffordable < 1 && $unitsByTime >= 1 && isset($this->ctx->budgetManager)) {
+                            $targetUnits = min($unitsByTime, 100);
+                            $costNeeded = array(
+                                901 => (float)($pricelist[$chosenShipId]['cost'][901] ?? 0) * $targetUnits,
+                                902 => (float)($pricelist[$chosenShipId]['cost'][902] ?? 0) * $targetUnits,
+                                903 => (float)($pricelist[$chosenShipId]['cost'][903] ?? 0) * $targetUnits,
+                            );
+                            $this->ctx->budgetManager->tryInternalBucketSwap($pId, 'fleet', $costNeeded);
+                            if (class_exists('BotPremiumStrategist')) {
+                                BotPremiumStrategist::tryTraderForCategory($this->ctx, $pId, 'fleet', $costNeeded);
+                            }
+                            $pData = $this->refreshPlanetData($pId, $pData);
+                            $rawFleetCredits = $this->ctx->budgetManager->getPlanetFleetCredits($pId);
+                            $fleetCredits = $this->calculateCycleSpendBudget($pId, $pData, 'fleet', $rawFleetCredits, $lastFleetRecruit, $isEmergency);
+                            $maxAffordable = $this->calculateTriResourceMaxUnits($pData, $fleetCredits, $chosenShipId, $lockedDefResFleet, $lockedDefAmountFleet);
+                        }
                         $batch = min($unitsByTime, $maxAffordable);
 
                         if ($batch >= 1) {

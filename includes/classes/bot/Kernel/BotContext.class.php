@@ -32,6 +32,18 @@ class BotContext
         $this->botId            = (int)$botRow['bot_id'];
         $this->homePlanetId     = !empty($botRow['home_planet_id']) ? (int)$botRow['home_planet_id'] : (int)$userRow['id_planet'];
         $this->user             = $userRow;
+
+        // Ensure bot's total_points and total_rank are populated from %%STATPOINTS%% if missing
+        if (empty($this->user['total_points']) || $this->user['total_points'] <= 0) {
+            $db = Database::get();
+            if ($db) {
+                $spRow = $db->selectSingle("SELECT total_points, total_rank FROM %%STATPOINTS%% WHERE id_owner = :uid AND stat_type = 1 LIMIT 1;", array(':uid' => $this->botId));
+                if (!empty($spRow)) {
+                    $this->user['total_points'] = (float)($spRow['total_points'] ?? 0.0);
+                    $this->user['total_rank']   = (int)($spRow['total_rank'] ?? 0);
+                }
+            }
+        }
         
         $diffName               = isset($botRow['difficulty']) ? $botRow['difficulty'] : BotDifficultyProfile::NORMAL;
         $this->difficulty       = new BotDifficultyProfile($diffName);

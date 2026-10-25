@@ -65,27 +65,27 @@ class ResourceUpdate
 		global $reslist, $resource;
 		$Hash	= array();
 		foreach($reslist['prod'] as $ID) {
-			$Hash[]	= $this->PLANET[$resource[$ID]];
-			$Hash[]	= $this->PLANET[$resource[$ID].'_porcent'];
+			$Hash[]	= $this->PLANET[$resource[$ID]] ?? 0;
+			$Hash[]	= $this->PLANET[$resource[$ID].'_porcent'] ?? 10;
 		}
 		
 		$ressource	= array_merge(array(), $reslist['resstype'][1], $reslist['resstype'][2]);
 		foreach($ressource as $ID) {
-			$Hash[]	= $this->config->{$resource[$ID].'_basic_income'};
+			$Hash[]	= $this->config->{$resource[$ID].'_basic_income'} ?? 0;
 		}
 		// $new_code
 		foreach($reslist['resstype'][1] as $resP) {
-            $Hash[]	= $this->USER['factor']['P'.$resource[$resP].''];
+            $Hash[]	= $this->USER['factor']['P'.$resource[$resP]] ?? 0;
 		}
         
         foreach($reslist['resstype'][2] as $resS) {
-            $Hash[]	= $this->USER['factor']['S'.$resource[$resS].''];
+            $Hash[]	= $this->USER['factor']['S'.$resource[$resS]] ?? 0;
 		}
         // $new_code
 		$Hash[]	= $this->config->resource_multiplier;
 		$Hash[]	= $this->config->storage_multiplier;
 		$Hash[]	= $this->config->energySpeed;
-		$Hash[]	= $this->USER['factor']['Resource'];
+		$Hash[]	= $this->USER['factor']['Resource'] ?? 0;
         // $old_code
 		//$Hash[]	= $this->PLANET[$resource[22]];
 		//$Hash[]	= $this->PLANET[$resource[23]];
@@ -93,7 +93,7 @@ class ResourceUpdate
         // $old_code
         //$new_code
         foreach($reslist['storage'] as $storage) {
-            $Hash[]	= $this->PLANET[$resource[$storage]];
+            $Hash[]	= $this->PLANET[$resource[$storage]] ?? 0;
 		}
         //$new_code
 		return md5(implode("::", $Hash));
@@ -113,9 +113,9 @@ class ResourceUpdate
 		if($this->Build)
 		{
 			$this->ShipyardQueue();
-			if($this->Tech == true && $this->USER['b_tech'] != 0 && $this->USER['b_tech'] < $this->TIME)
+			if($this->Tech == true && !empty($this->USER['b_tech']) && $this->USER['b_tech'] < $this->TIME)
 				$this->ResearchQueue();
-			if($this->PLANET['b_building'] != 0)
+			if(!empty($this->PLANET['b_building']))
 				$this->BuildingQueue();
 		}
 		
@@ -145,6 +145,16 @@ class ResourceUpdate
 				}
 			}
 			$this->ExecCalc();
+		} else {
+			if($HASH === false) {
+				$this->ReBuildCache();
+			} else {
+				$this->HASH		= $this->CreateHash();
+				if($this->PLANET['eco_hash'] !== $this->HASH) {
+					$this->PLANET['eco_hash'] = $this->HASH;
+					$this->ReBuildCache();
+				}
+			}
 		}
 	}
 	
@@ -225,24 +235,30 @@ class ResourceUpdate
 	{   
         global $resource, $reslist, $resglobal;
         
-        //foreach($reslist['lab'] as $laba) //проверка всего масива элементов
-		//{   
-            $researchLevelList	= array($PLANET[$resource[$resglobal['tech_speed']]]);
-            if($USER['factor']['ResearchSlotPlanet'] > 0)
-            {
-                $sql = 'SELECT '.$resource[$resglobal['tech_speed']].' FROM %%PLANETS%% WHERE id != :planetId AND id_owner = :userId AND destruyed = 0 ORDER BY '.$resource[$resglobal['tech_speed']].' DESC LIMIT :limit;';
-                $researchResult = Database::get()->select($sql, array(
-                    ':limit'	=> (int) $USER['factor']['ResearchSlotPlanet'],
-                    ':planetId'	=> $PLANET['id'],
-                    ':userId'	=> $USER['id']
-                ));
+        $techField = $resource[$resglobal['tech_speed']] ?? 'tech';
+        $planetTech = (float)($PLANET[$techField] ?? ($PLANET['tech'] ?? 0.0));
+        $researchLevelList = array($planetTech);
 
+        $limit = max(0, (int)($USER['factor']['ResearchSlotPlanet'] ?? 0));
+        $planetId = (int)($PLANET['id'] ?? 0);
+        $userId = (int)($USER['id'] ?? 0);
+
+        if($limit > 0 && $planetId > 0 && $userId > 0)
+        {
+            $sql = 'SELECT '.$techField.' FROM %%PLANETS%% WHERE id != :planetId AND id_owner = :userId AND destruyed = 0 ORDER BY '.$techField.' DESC LIMIT :limit;';
+            $researchResult = Database::get()->select($sql, array(
+                ':limit'	=> $limit,
+                ':planetId'	=> $planetId,
+                ':userId'	=> $userId
+            ));
+
+            if (!empty($researchResult)) {
                 foreach($researchResult as $researchRow)
                 {
-                    $researchLevelList[]	+= $researchRow[$resource[$resglobal['tech_speed']]];
+                    $researchLevelList[] = (float)($researchRow[$techField] ?? 0.0);
                 }
             }
-        //}
+        }
 
 		return $researchLevelList;
 	}
@@ -333,7 +349,7 @@ class ResourceUpdate
 				if(!isset($ProdGrid[$ProdID]['storage'][$ID]))
 					continue;
 					
-				$BuildLevel 		= $this->PLANET[$resource[$ProdID]];
+				$BuildLevel 		= (int)($this->PLANET[$resource[$ProdID]] ?? 0);
 				$temp[$ID]['max']	+= round(eval(self::getProd($ProdGrid[$ProdID]['storage'][$ID])));
 			}
 		}
@@ -342,8 +358,8 @@ class ResourceUpdate
 		
 		foreach($reslist['prod'] as $ProdID)
 		{	
-			$BuildLevelFactor	= $this->PLANET[$resource[$ProdID].'_porcent'];
-			$BuildLevel 		= $this->PLANET[$resource[$ProdID]];
+			$BuildLevelFactor	= (float)($this->PLANET[$resource[$ProdID].'_porcent'] ?? 10.0);
+			$BuildLevel 		= (int)($this->PLANET[$resource[$ProdID]] ?? 0);
 			
 			foreach($ressIDs as $ID) 
 			{
@@ -355,7 +371,7 @@ class ResourceUpdate
 				if($Production > 0) {					
 					$temp[$ID]['plus']	+= $Production;
 				} else {
-					if(in_array($ID, $reslist['resstype'][1]) && $this->PLANET[$resource[$ID]] == 0) {
+					if(in_array($ID, $reslist['resstype'][1]) && (float)($this->PLANET[$resource[$ID]] ?? 0.0) == 0.0) {
 						 continue;
 					}
 					
@@ -365,38 +381,34 @@ class ResourceUpdate
 		}
         
         // $new_code ! 
-        foreach($reslist['resstype'][1] as $resP) //проверка всего масива элементов
-		{
-            $this->PLANET[''.$resource[$resP].'_max']		= $temp[$resP]['max'] * $this->config->storage_multiplier * (1 + $this->USER['factor']['ResourceStorage']);
-            
-            foreach($reslist['resstype'][2] as $resS) //проверка всего масива элементов
-            {
-                $this->PLANET[''.$resource[$resS].'']				= round($temp[$resS]['plus'] * $this->config->energySpeed * (1 + $this->USER['factor']['S'.$resource[$resS].''])); 
-                $this->PLANET[''.$resource[$resS].'_used']		    = $temp[$resS]['minus'] * $this->config->energySpeed;
-            
-                if($this->PLANET[''.$resource[$resglobal['stop_product']].'_used'] == 0) { 
-                    $this->PLANET[''.$resource[$resP].'_perhour']		= 0;
-                //} elseif($this->PLANET[''.$resource[$resP].''] == 0 && $this->PLANET[''.$resource[$resP].'_perhour'] <= 0) {
-                    //$this->PLANET[''.$resource[$resP].'_perhour']		= 0;
-                } else {
-                    $prodLevel	= min(1, $this->PLANET[''.$resource[$resglobal['stop_product']].''] / abs($this->PLANET[''.$resource[$resglobal['stop_product']].'_used']));
-			
-                    $this->PLANET[''.$resource[$resP].'_perhour']		= ($temp[$resP]['plus'] * (1 + $this->USER['factor']['Resource'] + $this->USER['factor']['P'.$resource[$resP].'']) * $prodLevel + $temp[$resP]['minus']) * $this->config->resource_multiplier;  
-                }
-            }
-        }
-        /*
-        foreach($reslist['resstype'][1] as $resP) //проверка всего масива элементов
-		{
-            $this->PLANET[''.$resource[$resP].'_max']		= $temp[$resP]['max'] * $this->config->storage_multiplier * (1 + $this->USER['factor']['ResourceStorage']);
-           
-            $this->PLANET[''.$resource[$resP].'_perhour']		= ($temp[$resP]['plus'] * (1 + $this->USER['factor']['Resource'] + $this->USER['factor']['P'.$resource[$resP].'']) * $prodLevel + $temp[$resP]['minus']) * $this->config->resource_multiplier;  
-        }
-        
-        foreach($reslist['resstype'][2] as $resS) //проверка всего масива элементов
+        // 1. Calculate secondary resources (energy, build, tech, fleet, defense, missile)
+        foreach($reslist['resstype'][2] as $resS)
         {
-            $this->PLANET[''.$resource[$resS].'']				= round($temp[$resS]['plus'] * $this->config->energySpeed * (1 + $this->USER['factor']['S'.$resource[$resS].''])); 
-            $this->PLANET[''.$resource[$resS].'_used']		    = $temp[$resS]['minus'] * $this->config->energySpeed;
+            $sFactor = (float)($this->USER['factor']['S'.$resource[$resS]] ?? 0.0);
+            $this->PLANET[$resource[$resS]] = max(0.0, round($temp[$resS]['plus'] * $this->config->energySpeed * (1 + $sFactor))); 
+            $this->PLANET[$resource[$resS].'_used'] = $temp[$resS]['minus'] * $this->config->energySpeed;
+        }
+
+        // 2. Production level based on energy consumption vs production
+        $stopResource = $resource[$resglobal['stop_product']] ?? 'energy';
+        $energyUsed = abs((float)($this->PLANET[$stopResource.'_used'] ?? 0.0));
+        $energyAvailable = (float)($this->PLANET[$stopResource] ?? 0.0);
+
+        if ($energyUsed == 0.0) {
+            $prodLevel = 1.0;
+        } else {
+            $prodLevel = min(1.0, max(0.0, $energyAvailable / $energyUsed));
+        }
+
+        // 3. Calculate primary resources (metal, crystal, deuterium)
+        foreach($reslist['resstype'][1] as $resP)
+        {
+            $pFactor = (float)($this->USER['factor']['P'.$resource[$resP]] ?? 0.0);
+            $resFactor = (float)($this->USER['factor']['Resource'] ?? 0.0);
+            $storageFactor = (float)($this->USER['factor']['ResourceStorage'] ?? 0.0);
+
+            $this->PLANET[$resource[$resP].'_max'] = $temp[$resP]['max'] * $this->config->storage_multiplier * (1 + $storageFactor);
+            $this->PLANET[$resource[$resP].'_perhour'] = ($temp[$resP]['plus'] * (1 + $resFactor + $pFactor) * $prodLevel + $temp[$resP]['minus']) * $this->config->resource_multiplier;  
         }
        
         // $new_code
@@ -425,7 +437,7 @@ class ResourceUpdate
 	{
 		global $resource;
 
-		$BuildQueue 	= unserialize($this->PLANET['b_hangar_id']);
+		$BuildQueue 	= !empty($this->PLANET['b_hangar_id']) ? @unserialize($this->PLANET['b_hangar_id']) : false;
 		if (!$BuildQueue) {
 			$this->PLANET['b_hangar'] = 0;
 			$this->PLANET['b_hangar_id'] = '';
@@ -882,37 +894,36 @@ class ResourceUpdate
 			}
 		}
         // $new_code
-        $sql = 'UPDATE %%PLANETS%% as p,%%USERS%% as u SET
-            p.eco_hash			= :ecoHash,
-            p.last_update		= :lastUpdateTime,
-            p.b_building		= :b_building,
-            p.b_building_id 	= :b_building_id,
-            p.field_current 	= :field_current,
-            p.b_hangar_id		= :b_hangar_id,
-            p.b_hangar			= :b_hangar,
-            u.b_tech			= :b_tech,
-            u.b_tech_id			= :b_tech_id,
-            u.b_tech_planet		= :b_tech_planet,
-            u.b_tech_queue		= :b_tech_queue
+        $setClauses = array(
+            'p.eco_hash			= :ecoHash',
+            'p.last_update		= :lastUpdateTime',
+            'p.b_building		= :b_building',
+            'p.b_building_id 	= :b_building_id',
+            'p.field_current 	= :field_current',
+            'p.b_hangar_id		= :b_hangar_id',
+            'p.b_hangar			= :b_hangar',
+            'u.b_tech			= :b_tech',
+            'u.b_tech_id			= :b_tech_id',
+            'u.b_tech_planet		= :b_tech_planet',
+            'u.b_tech_queue		= :b_tech_queue'
+        );
+
+        foreach($reslist['resstype'][1] as $resP)
+        {
+            $setClauses[] = 'p.'.$resource[$resP].' = :'.$resource[$resP];
+            $setClauses[] = 'p.'.$resource[$resP].'_perhour = :'.$resource[$resP].'_perhour';
+            $setClauses[] = 'p.'.$resource[$resP].'_max = :'.$resource[$resP].'_max';
+        }
+
+        foreach($reslist['resstype'][2] as $resS)
+        {
+            $setClauses[] = 'p.'.$resource[$resS].'_used = :'.$resource[$resS].'_used';
+            $setClauses[] = 'p.'.$resource[$resS].' = :'.$resource[$resS];
+        }
+
+        $sql = 'UPDATE %%PLANETS%% as p,%%USERS%% as u SET ' . implode(",\n            ", $setClauses) . '
 		'.implode("\n", $buildQueries).'
 		WHERE p.id = :planetId AND u.id = :userId;';
-        
-        foreach($reslist['resstype'][1] as $resP) //проверка всего масива элементов
-		{
-                $sql .= 'UPDATE %%PLANETS%% as p,%%USERS%% as u SET
-                p.'.$resource[$resP].'				= :'.$resource[$resP].',
-                p.'.$resource[$resP].'_perhour		= :'.$resource[$resP].'_perhour,
-                p.'.$resource[$resP].'_max			= :'.$resource[$resP].'_max
-            WHERE p.id = :planetId AND u.id = :userId;';
-        }
-        
-        foreach($reslist['resstype'][2] as $resS) //проверка всего масива элементов
-		{
-                $sql .= 'UPDATE %%PLANETS%% as p,%%USERS%% as u SET
-                p.'.$resource[$resS].'_used		    = :'.$resource[$resS].'_used,
-                p.'.$resource[$resS].'			    = :'.$resource[$resS].'
-            WHERE p.id = :planetId AND u.id = :userId;';
-        }
         // resstype[3] (divisas premium) se gestionan de forma atomica en PremiumEconomy y no se sobreescriben aqui
         // $new_code
         /* $old_code

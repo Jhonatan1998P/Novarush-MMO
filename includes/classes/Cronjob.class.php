@@ -110,6 +110,15 @@ class Cronjob
 				':executionTime'	=> Database::formatDate(TIMESTAMP),
 				':lockToken'		=> $lockToken
 			));
+
+			if ((int)$cronjobID === 2) {
+				try {
+					$config = Config::get();
+					$config->stat_last_update = TIMESTAMP;
+					$config->stat_last_db_update = TIMESTAMP;
+					$config->save();
+				} catch (Throwable $e) {}
+			}
 		}
 	}
 	
@@ -140,20 +149,29 @@ class Cronjob
 
 	static function getLastExecutionTime($cronjobName)
 	{
-		require_once 'includes/libs/tdcron/class.tdcron.php';
-		require_once 'includes/libs/tdcron/class.tdcron.entry.php';
-
-		$sql		= 'SELECT MAX(executionTime) as executionTime FROM %%CRONJOBS_LOG%% INNER JOIN %%CRONJOBS%% USING(cronjobId) WHERE name = :cronjobName;';
-		$lastTime	= Database::get()->selectSingle($sql, array(
+		$db			= Database::get();
+		$sql		= 'SELECT executionTime, lockToken FROM %%CRONJOBS_LOG%% INNER JOIN %%CRONJOBS%% USING(cronjobId) WHERE name = :cronjobName ORDER BY lockToken DESC LIMIT 1;';
+		$lastRow	= $db->selectSingle($sql, array(
 			':cronjobName' => $cronjobName
-		), 'executionTime');
+		));
 
-		if(empty($lastTime))
+		if(empty($lastRow))
 		{
 			return false;
 		}
 
-		return strtotime($lastTime);
+		$tokenTs = 0;
+		if (!empty($lastRow['lockToken']) && strpos($lastRow['lockToken'], '_') !== false) {
+			$parts = explode('_', $lastRow['lockToken']);
+			$tokenTs = (int)$parts[0];
+		}
+
+		if ($tokenTs > 0) {
+			return min($tokenTs, TIMESTAMP);
+		}
+
+		$time = strtotime($lastRow['executionTime']);
+		return min($time, TIMESTAMP);
 	}
 	
 	static function reCalculateCronjobs($cronjobID = NULL)

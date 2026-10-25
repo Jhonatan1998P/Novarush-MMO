@@ -548,14 +548,20 @@ function formatDecisionInSpanish($decision)
 $persMap = array(
     'balanced'   => 'Equilibrada',
     'economic'   => 'Económica',
+    'miner'      => 'Minera',
+    'minero'     => 'Minera',
     'aggressive' => 'Agresiva',
-    'defensive'  => 'Defensiva'
+    'raider'     => 'Raider',
+    'defensive'  => 'Defensiva',
+    'turtle'     => 'Búnker',
+    'bunker'     => 'Búnker'
 );
 $diffMap = array(
     'easy'      => 'Fácil',
     'normal'    => 'Media',
     'hard'      => 'Avanzada',
-    'nightmare' => 'Titán'
+    'nightmare' => 'Pesadilla',
+    'titan'     => 'Titán'
 );
 
 if (!$isMainScript) {
@@ -570,6 +576,20 @@ echo " [{$currentTimeStr}] CICLO ESTRATÉGICO DE IA (TIMESTAMP: " . TIMESTAMP . 
 echo "========================================================================================\n\n";
 
 // Procesar eventos de flotas pendientes en el universo (para que naves llegadas aterricen en planetas)
+// Procesar cronjobs programados del universo que hayan vencido (estadísticas, ranking, etc.)
+require_once 'includes/classes/Cronjob.class.php';
+$pendingCronjobs = Cronjob::getNeedTodoExecutedJobs();
+if (!empty($pendingCronjobs)) {
+    foreach ($pendingCronjobs as $cronId) {
+        try {
+            Cronjob::execute($cronId);
+            echo "  [CRON] Tarea programada #{$cronId} ejecutada exitosamente.\n";
+        } catch (Throwable $e) {
+            echo "  [CRON] Error al ejecutar tarea #{$cronId}: " . $e->getMessage() . "\n";
+        }
+    }
+}
+
 require 'includes/FleetHandler.php';
 
 $results = BotEngine::runAllBots();

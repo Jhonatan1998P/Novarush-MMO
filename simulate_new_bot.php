@@ -283,6 +283,8 @@ $researchCompletionLog     = array();
 $recruitmentLog            = array();
 $logisticsAndExpansionLog  = array();
 $hourlySnapshots           = array();
+$kernelErrors              = array();
+$printedErrors             = array();
 
 $prevBuildings = array();
 $prevTechs     = array();
@@ -337,6 +339,18 @@ while ($simNow < $realEndTime) {
     }
 
     $turnResult = BotKernel::processTurn($botRow);
+
+    if (!empty($turnResult['error'])) {
+        $errStr = (string)$turnResult['error'];
+        $kernelErrors[] = array(
+            'relative_time' => formatRelativeTime($simNow, $simStartTime),
+            'error'         => $errStr,
+        );
+        if (!isset($printedErrors[$errStr])) {
+            $printedErrors[$errStr] = true;
+            echo "\n[KERNEL ERROR at " . formatRelativeTime($simNow, $simStartTime) . " (timestamp: {$simNow})]: " . $errStr . "\n";
+        }
+    }
 
     // 3. Telemetry capture: Delta audits against previous state
     $relTimeStr = formatRelativeTime($simNow, $simStartTime);
@@ -439,15 +453,34 @@ while ($simNow < $realEndTime) {
 
     // Log decisions from turnResult
     if (!empty($turnResult['decisions']) && is_array($turnResult['decisions'])) {
+        $colonizationKeys = array('colonization_dispatch', 'colonizer_recruit');
+        $logisticsKeys    = array('logistics_supply_dispatched', 'moon_loot_evacuation', 'cargos_deployed_to_moon', 'logistics_dispatch');
+        $deploymentKeys   = array('fleet_staging', 'fleet_staging_jump_gate', 'orbital_ascent_anti_phalanx', 'fob_deployment', 'jump_gate_stage');
+        $moonshotKeys     = array('moonshot_dispatch', 'moonshot_success', 'moonshot_attempt_debris_created', 'moonshot_squadron_recruit');
+
         foreach ($turnResult['decisions'] as $d) {
-            $action = $d['action'] ?? '';
-            if (in_array($action, array('colonization_dispatch', 'logistics_dispatch', 'fob_deployment', 'moonshot_dispatch', 'moonshot_success', 'jump_gate_stage'))) {
+            $dType   = $d['type'] ?? ($d['decision_type'] ?? ($d['action'] ?? ''));
+            $dAction = $d['chosen_action'] ?? ($d['action'] ?? $dType);
+
+            $matchedCategory = null;
+            if (in_array($dType, $colonizationKeys) || in_array($dAction, $colonizationKeys)) {
+                $matchedCategory = 'colonization';
+            } elseif (in_array($dType, $logisticsKeys) || in_array($dAction, $logisticsKeys)) {
+                $matchedCategory = 'logistics_convoys';
+            } elseif (in_array($dType, $deploymentKeys) || in_array($dAction, $deploymentKeys)) {
+                $matchedCategory = 'orbital_deployments';
+            } elseif (in_array($dType, $moonshotKeys) || in_array($dAction, $moonshotKeys)) {
+                $matchedCategory = 'moonshots';
+            }
+
+            if ($matchedCategory !== null) {
                 $logisticsAndExpansionLog[] = array(
                     'timestamp'     => $simNow,
                     'relative_time' => $relTimeStr,
-                    'type'          => $action,
-                    'action'        => $d['action'] ?? '',
-                    'reason'        => $d['reason'] ?? '',
+                    'type'          => $dType,
+                    'action'        => $dAction,
+                    'category'      => $matchedCategory,
+                    'reason'        => $d['context_summary'] ?? ($d['reason'] ?? ''),
                     'metadata'      => $d['metadata'] ?? array(),
                 );
             }
@@ -495,16 +528,18 @@ while ($simNow < $realEndTime) {
                 }
             }
 
-            // Defense MSE
-            if (is_array($reslist['defense'])) {
-                foreach ($reslist['defense'] as $dfId) {
-                    $qty = (int)($cp[$resource[$dfId]] ?? 0);
-                    if ($qty > 0 && isset($pricelist[$dfId])) {
-                        $costM = (float)($pricelist[$dfId]['cost'][901] ?? 0);
-                        $costC = (float)($pricelist[$dfId]['cost'][902] ?? 0);
-                        $costD = (float)($pricelist[$dfId]['cost'][903] ?? 0);
-                        $totDefMse += ($costM + ($costC * 2.0) + ($costD * 4.0)) * $qty;
-                    }
+            // Defense & Missile MSE
+            $defAndMissileIds = array_merge(
+                is_array($reslist['defense']) ? $reslist['defense'] : array(),
+                is_array($reslist['missile']) ? $reslist['missile'] : array()
+            );
+            foreach ($defAndMissileIds as $dfId) {
+                $qty = (int)($cp[$resource[$dfId]] ?? 0);
+                if ($qty > 0 && isset($pricelist[$dfId])) {
+                    $costM = (float)($pricelist[$dfId]['cost'][901] ?? 0);
+                    $costC = (float)($pricelist[$dfId]['cost'][902] ?? 0);
+                    $costD = (float)($pricelist[$dfId]['cost'][903] ?? 0);
+                    $totDefMse += ($costM + ($costC * 2.0) + ($costD * 4.0)) * $qty;
                 }
             }
         }
@@ -605,7 +640,7 @@ while ($simNow < $realEndTime) {
     }
 
     $elapsedHours = ($simNow - $simStartTime) / 3600.0;
-    $dynamicMaxStep = ($elapsedHours < 1.0) ? min(45, $maxStep) : ($hasActiveHangar ? min(45, $maxStep) : $maxStep);
+    $dynamicMaxStep = ($elapsedHours < 1.0) ? min(45, $maxStep) : ($hasActiveHangar ? min(90, $maxStep) : $maxStep);
 
     $nextEvent = min($minBuildEnd, $minTechEnd, $minFleetTime, $minTaskTime, $simNow + $dynamicMaxStep);
     $simNow = min($realEndTime, max($simNow + 10, $nextEvent));
@@ -621,11 +656,105 @@ BotClock::set($realEndTime);
 processSimulatedBotFleets($simBotId, $realEndTime);
 $botRow = $db->selectSingle("SELECT * FROM %%BOTS%% WHERE bot_id = :bid;", array(':bid' => $simBotId));
 if (!empty($botRow)) {
-    BotKernel::processTurn($botRow);
+    $finalTurnResult = BotKernel::processTurn($botRow);
+    if (!empty($finalTurnResult['error'])) {
+        $errStr = (string)$finalTurnResult['error'];
+        $kernelErrors[] = array(
+            'relative_time' => formatRelativeTime($realEndTime, $simStartTime),
+            'error'         => $errStr,
+        );
+        if (!isset($printedErrors[$errStr])) {
+            $printedErrors[$errStr] = true;
+            echo "\n[KERNEL ERROR at " . formatRelativeTime($realEndTime, $simStartTime) . " (final turn)]: " . $errStr . "\n";
+        }
+    }
+}
+
+// Capture final hourly snapshot at realEndTime if needed
+if ($nextHourlyMark <= $realEndTime) {
+    $curPlanets = $db->select("SELECT * FROM %%PLANETS%% WHERE id_owner = :bid;", array(':bid' => $simBotId));
+    $curUser = $db->selectSingle("SELECT * FROM %%USERS%% WHERE id = :bid;", array(':bid' => $simBotId));
+    $curPlanetIds = array();
+    $curMoonIds = array();
+    foreach ($curPlanets as $cp) {
+        if ((int)$cp['planet_type'] === 3) {
+            $curMoonIds[] = (int)$cp['id'];
+        } else {
+            $curPlanetIds[] = (int)$cp['id'];
+        }
+    }
+    $simHour = (int)round(($nextHourlyMark - $simStartTime) / 3600);
+    $totM = 0.0; $totC = 0.0; $totD = 0.0; $maxMine = 0;
+    $totFleetMse = 0.0; $totDefMse = 0.0;
+    foreach ($curPlanets as $cp) {
+        $totM += (float)($cp['metal_perhour'] ?? 0);
+        $totC += (float)($cp['crystal_perhour'] ?? 0);
+        $totD += (float)($cp['deuterium_perhour'] ?? 0);
+        $maxMine = max($maxMine, (int)($cp[$resource[1]] ?? 0));
+        if (is_array($reslist['fleet'])) {
+            foreach ($reslist['fleet'] as $fId) {
+                $qty = (int)($cp[$resource[$fId]] ?? 0);
+                if ($qty > 0 && isset($pricelist[$fId])) {
+                    $costM = (float)($pricelist[$fId]['cost'][901] ?? 0);
+                    $costC = (float)($pricelist[$fId]['cost'][902] ?? 0);
+                    $costD = (float)($pricelist[$fId]['cost'][903] ?? 0);
+                    $totFleetMse += ($costM + ($costC * 2.0) + ($costD * 4.0)) * $qty;
+                }
+            }
+        }
+        $defAndMissileIds = array_merge(
+            is_array($reslist['defense']) ? $reslist['defense'] : array(),
+            is_array($reslist['missile']) ? $reslist['missile'] : array()
+        );
+        foreach ($defAndMissileIds as $dfId) {
+            $qty = (int)($cp[$resource[$dfId]] ?? 0);
+            if ($qty > 0 && isset($pricelist[$dfId])) {
+                $costM = (float)($pricelist[$dfId]['cost'][901] ?? 0);
+                $costC = (float)($pricelist[$dfId]['cost'][902] ?? 0);
+                $costD = (float)($pricelist[$dfId]['cost'][903] ?? 0);
+                $totDefMse += ($costM + ($costC * 2.0) + ($costD * 4.0)) * $qty;
+            }
+        }
+    }
+    $totTechLevels = 0;
+    if (is_array($reslist['tech'])) {
+        foreach ($reslist['tech'] as $tId) {
+            $col = $resource[$tId] ?? '';
+            if (!empty($col)) {
+                $totTechLevels += (int)($curUser[$col] ?? 0);
+            }
+        }
+    }
+    $hourlySnapshots[] = array(
+        'sim_hour'             => $simHour,
+        'relative_time'        => formatRelativeTime($nextHourlyMark, $simStartTime),
+        'planets_count'        => count($curPlanetIds),
+        'moons_count'          => count($curMoonIds),
+        'max_metal_mine_level' => $maxMine,
+        'production_per_hour'  => array(
+            'metal'     => round($totM, 2),
+            'crystal'   => round($totC, 2),
+            'deuterium' => round($totD, 2),
+            'mse'       => round($totM + ($totC * 2.0) + ($totD * 4.0), 2),
+        ),
+        'total_fleet_mse'      => round($totFleetMse, 2),
+        'total_defense_mse'    => round($totDefMse, 2),
+        'total_tech_levels'    => $totTechLevels,
+    );
 }
 
 $realExecutionEnd = microtime(true);
 $durationMs = round(($realExecutionEnd - $realExecutionStart) * 1000.0, 2);
+
+// Ensure shipyard queues up to $realEndTime are processed for all bodies with pending hangar jobs
+$closingPlanets = $db->select("SELECT * FROM %%PLANETS%% WHERE id_owner = :bid AND b_hangar_id != '';", array(':bid' => $simBotId));
+if (!empty($closingPlanets)) {
+    $rUp = new ResourceUpdate(true, false);
+    $closingUser = $db->selectSingle("SELECT * FROM %%USERS%% WHERE id = :bid;", array(':bid' => $simBotId));
+    foreach ($closingPlanets as $cpRow) {
+        $rUp->CalcResource($closingUser, $cpRow, true, $realEndTime);
+    }
+}
 
 // --- 2.5 GENERATE FORENSIC EXTENSIVE JSON REPORT ---
 $finalUser    = $db->selectSingle("SELECT * FROM %%USERS%% WHERE id = :bid;", array(':bid' => $simBotId));
@@ -692,11 +821,20 @@ if (is_array($reslist['fleet'])) {
         foreach ($finalPlanets as $fp) {
             $stat += (int)($fp[$col] ?? 0);
             if (!empty($fp['b_hangar_id'])) {
-                $qArr = explode(';', trim($fp['b_hangar_id'], ';'));
-                foreach ($qArr as $item) {
-                    $p = explode(',', $item);
-                    if (isset($p[0], $p[1]) && (int)$p[0] === $fId) {
-                        $queued += (int)$p[1];
+                $hQueue = @unserialize($fp['b_hangar_id']);
+                if (is_array($hQueue)) {
+                    foreach ($hQueue as $item) {
+                        if (isset($item[0], $item[1]) && (int)$item[0] === $fId) {
+                            $queued += (int)$item[1];
+                        }
+                    }
+                } else {
+                    $qArr = explode(';', trim($fp['b_hangar_id'], ';'));
+                    foreach ($qArr as $item) {
+                        $p = explode(',', $item);
+                        if (isset($p[0], $p[1]) && (int)$p[0] === $fId) {
+                            $queued += (int)$p[1];
+                        }
                     }
                 }
             }
@@ -732,16 +870,27 @@ if (is_array($reslist['fleet'])) {
 }
 
 $totalDefenseByType = array();
-if (is_array($reslist['defense'])) {
-    foreach ($reslist['defense'] as $dfId) {
-        $col = $resource[$dfId] ?? '';
-        if (empty($col)) continue;
-        $stat = 0;
-        $queued = 0;
+$defAndMissileIds = array_merge(
+    is_array($reslist['defense']) ? $reslist['defense'] : array(),
+    is_array($reslist['missile']) ? $reslist['missile'] : array()
+);
+foreach ($defAndMissileIds as $dfId) {
+    $col = $resource[$dfId] ?? '';
+    if (empty($col)) continue;
+    $stat = 0;
+    $queued = 0;
 
-        foreach ($finalPlanets as $fp) {
-            $stat += (int)($fp[$col] ?? 0);
-            if (!empty($fp['b_hangar_id'])) {
+    foreach ($finalPlanets as $fp) {
+        $stat += (int)($fp[$col] ?? 0);
+        if (!empty($fp['b_hangar_id'])) {
+            $hQueue = @unserialize($fp['b_hangar_id']);
+            if (is_array($hQueue)) {
+                foreach ($hQueue as $item) {
+                    if (isset($item[0], $item[1]) && (int)$item[0] === $dfId) {
+                        $queued += (int)$item[1];
+                    }
+                }
+            } else {
                 $qArr = explode(';', trim($fp['b_hangar_id'], ';'));
                 foreach ($qArr as $item) {
                     $p = explode(',', $item);
@@ -751,17 +900,17 @@ if (is_array($reslist['defense'])) {
                 }
             }
         }
+    }
 
-        $tot = $stat + $queued;
-        if ($tot > 0) {
-            $totalDefenseByType[] = array(
-                'unit_id'   => $dfId,
-                'unit_name' => $LNG['tech'][$dfId] ?? "Defensa #{$dfId}",
-                'stationed' => $stat,
-                'queued'    => $queued,
-                'total'     => $tot,
-            );
-        }
+    $tot = $stat + $queued;
+    if ($tot > 0) {
+        $totalDefenseByType[] = array(
+            'unit_id'   => $dfId,
+            'unit_name' => $LNG['tech'][$dfId] ?? ((in_array($dfId, $reslist['missile'] ?? array())) ? "Misil #{$dfId}" : "Defensa #{$dfId}"),
+            'stationed' => $stat,
+            'queued'    => $queued,
+            'total'     => $tot,
+        );
     }
 }
 
@@ -802,16 +951,18 @@ foreach ($finalPlanets as $fp) {
     }
 
     $statDef = array();
-    if (is_array($reslist['defense'])) {
-        foreach ($reslist['defense'] as $dfId) {
-            $col = $resource[$dfId] ?? '';
-            if (!empty($col) && (int)($fp[$col] ?? 0) > 0) {
-                $statDef[] = array(
-                    'id'    => $dfId,
-                    'name'  => $LNG['tech'][$dfId] ?? "Defensa #{$dfId}",
-                    'count' => (int)$fp[$col],
-                );
-            }
+    $defAndMissileIds = array_merge(
+        is_array($reslist['defense']) ? $reslist['defense'] : array(),
+        is_array($reslist['missile']) ? $reslist['missile'] : array()
+    );
+    foreach ($defAndMissileIds as $dfId) {
+        $col = $resource[$dfId] ?? '';
+        if (!empty($col) && (int)($fp[$col] ?? 0) > 0) {
+            $statDef[] = array(
+                'id'    => $dfId,
+                'name'  => $LNG['tech'][$dfId] ?? ((in_array($dfId, $reslist['missile'] ?? array())) ? "Misil #{$dfId}" : "Defensa #{$dfId}"),
+                'count' => (int)$fp[$col],
+            );
         }
     }
 
@@ -862,15 +1013,23 @@ $timelineConvoys = array();
 $timelineDeploys = array();
 $timelineMoonshots = array();
 
+$colonizationKeys = array('colonization_dispatch', 'colonizer_recruit', 'colony_founded');
+$logisticsKeys    = array('logistics_supply_dispatched', 'moon_loot_evacuation', 'cargos_deployed_to_moon', 'logistics_dispatch');
+$deploymentKeys   = array('fleet_staging', 'fleet_staging_jump_gate', 'orbital_ascent_anti_phalanx', 'fob_deployment', 'jump_gate_stage');
+$moonshotKeys     = array('moonshot_dispatch', 'moonshot_success', 'moonshot_attempt_debris_created', 'moonshot_squadron_recruit', 'moon_created');
+
 foreach ($logisticsAndExpansionLog as $item) {
-    $t = $item['type'] ?? '';
-    if ($t === 'colonization_dispatch' || $t === 'colony_founded') {
+    $t   = $item['type'] ?? '';
+    $act = $item['action'] ?? '';
+    $cat = $item['category'] ?? '';
+
+    if ($cat === 'colonization' || in_array($t, $colonizationKeys) || in_array($act, $colonizationKeys)) {
         $timelineColos[] = $item;
-    } elseif ($t === 'logistics_dispatch') {
+    } elseif ($cat === 'logistics_convoys' || in_array($t, $logisticsKeys) || in_array($act, $logisticsKeys)) {
         $timelineConvoys[] = $item;
-    } elseif ($t === 'fob_deployment' || $t === 'jump_gate_stage') {
+    } elseif ($cat === 'orbital_deployments' || in_array($t, $deploymentKeys) || in_array($act, $deploymentKeys)) {
         $timelineDeploys[] = $item;
-    } elseif (strpos($t, 'moon') !== false) {
+    } elseif ($cat === 'moonshots' || in_array($t, $moonshotKeys) || in_array($act, $moonshotKeys) || strpos($t, 'moon') !== false) {
         $timelineMoonshots[] = $item;
     }
 }
@@ -888,6 +1047,7 @@ $report = array(
         'sim_end_time'      => date('Y-m-d H:i:s', $realEndTime),
         'real_start_time'   => date('Y-m-d H:i:s', (int)$realExecutionStart),
         'real_end_time'     => date('Y-m-d H:i:s', (int)$realExecutionEnd),
+        'kernel_errors'     => $kernelErrors,
     ),
     'empire_summary' => array(
         'total_planets'            => $planetsCount,

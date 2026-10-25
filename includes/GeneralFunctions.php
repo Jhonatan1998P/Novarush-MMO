@@ -296,8 +296,16 @@ function locale_date_format($format, $time, $LNG = NULL)
 	$months		= date('n', $time) - 1;
 	
 	$format     = str_replace(array('D', 'M'), array('$D$', '$M$'), $format);
-	$format		= str_replace('$D$', addcslashes($LNG['week_day'][$weekDay], 'A..z'), $format);
-	$format		= str_replace('$M$', addcslashes($LNG['months'][$months], 'A..z'), $format);
+	if (isset($LNG['week_day'][$weekDay])) {
+		$format	= str_replace('$D$', addcslashes($LNG['week_day'][$weekDay], 'A..z'), $format);
+	} else {
+		$format = str_replace('$D$', date('D', $time), $format);
+	}
+	if (isset($LNG['months'][$months])) {
+		$format	= str_replace('$M$', addcslashes($LNG['months'][$months], 'A..z'), $format);
+	} else {
+		$format = str_replace('$M$', date('M', $time), $format);
+	}
 	
 	return $format;
 }

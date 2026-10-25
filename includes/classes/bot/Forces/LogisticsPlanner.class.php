@@ -383,7 +383,7 @@ class BotLogisticsPlanner
             // Anti-Drip Filter (Filtro Anti-Goteo):
             // Prohibir micro-convoyes por déficits insignificantes (< 5M MSE o < 30 mins producción local),
             // a menos que sea Prioridad 1 (combustible militar), Luna (planet_type = 3) o Colonia en arranque inicial (minas < 10/8).
-            $isUnderdevelopedColony = ((string)($tData['planet_type'] ?? '1') === '1' && ((int)($tData['metal_mine'] ?? 0) < 10 || (int)($tData['crystal_mine'] ?? 0) < 8));
+            $isUnderdevelopedColony = ((string)($tData['planet_type'] ?? '1') === '1' && ((int)($tData['metal_mine'] ?? 0) < 14 || (int)($tData['crystal_mine'] ?? 0) < 12));
             if ((int)($demand['priority'] ?? 3) !== 1 && (string)($tData['planet_type'] ?? '1') !== '3' && !$isUnderdevelopedColony) {
                 $deficitMSE = BotEconomyValuator::toMSE((float)$netDeficit['metal'], (float)$netDeficit['crystal'], (float)$netDeficit['deuterium']);
                 $halfHourProdMSE = 0.5 * BotEconomyValuator::toMSE(
@@ -411,7 +411,11 @@ class BotLogisticsPlanner
             }
 
             // 5. Pool de Donantes Paralelos modulado por dificultad (Easy: 1, Normal: 2, Hard: 3, Titan: 4)
+            // Para demandas de colonias jóvenes (metal_mine < 14), limita maxDonorsPerDemand = 1
             $maxDonorsPerDemand = isset($this->ctx->difficulty) ? $this->ctx->difficulty->getMaxDonorsPerDemand() : 2;
+            if ($isUnderdevelopedColony) {
+                $maxDonorsPerDemand = 1;
+            }
             $remainingM = $netDeficit['metal'];
             $remainingC = $netDeficit['crystal'];
             $remainingD = $netDeficit['deuterium'];
@@ -1012,6 +1016,22 @@ class BotLogisticsPlanner
 
             // Si hay 2 o más slots y ninguno inicia en <= 3600s, la cola está ocupada a largo plazo
             if ($bQueueCount >= 2) {
+                if ($isYoungColony) {
+                    $curStockMC = (float)($pData['metal'] ?? 0.0) + (float)($pData['crystal'] ?? 0.0);
+                    $kickMC = $kickFloorM + $kickFloorC;
+                    if ($curStockMC < 0.30 * $kickMC) {
+                        $demands[] = array(
+                            'target_planet_id' => $pId,
+                            'type'             => 'building',
+                            'element_id'       => (int)($bQueue[0][0] ?? 1),
+                            'count'            => 1,
+                            'priority'         => 3,
+                            'urgency_score'    => 3800.0,
+                            'required'         => array('metal' => $kickFloorM, 'crystal' => $kickFloorC, 'deuterium' => $kickFloorD),
+                            'reason'           => "Kickstart logístico seguro para colonia joven #{$pId} (stock < 30% del piso kickstart)",
+                        );
+                    }
+                }
                 continue;
             }
 

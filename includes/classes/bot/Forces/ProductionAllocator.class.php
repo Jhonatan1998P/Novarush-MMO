@@ -436,7 +436,7 @@ class BotProductionAllocator
             113 => (int)floor($lM / 2.0),                                              // Por cada 2.0 Lm = +1 Energía
             108 => (int)floor($lM / 2.25),                                             // Por cada 2.25 Lm = +1 Informática
             123 => (int)floor($lM / 5.0),                                              // Por cada 5.0 Lm = +1 Red Intergaláctica IRN
-            199 => min(7, max(0, (int)floor(($lM - 20) / 4.0))),                      // Por cada 4.0 Lm (desde Lm 20) = +1 Gravitones (tope 7)
+            199 => min(7, max(0, (int)floor(($lM - 16) / 4.0))),                      // Nivel 1 desde Lm 20, +1 cada 4 Lm (tope 7)
 
             // Fase 2: Expansión Imperial, Motores y Reconocimiento
             106 => (int)floor($lM / 2.0),                                              // Por cada 2.0 Lm = +1 Espionaje
@@ -636,6 +636,17 @@ class BotProductionAllocator
             for ($stepLm = 1; $stepLm <= $lM; $stepLm++) {
                 $targets = $this->getTemplateTargetLevels($stepLm);
 
+                if ($isBestLab && $stepLm >= 20 && (int)($this->ctx->user[$resource[199]] ?? 0) === 0) {
+                    $targets[31] = max((int)($targets[31] ?? 0), 12);
+                    if ((int)($pData[$resource[31]] ?? 0) >= 12 && (float)($pData['energy'] ?? 0.0) < 300000.0) {
+                        $energyBId = (BuildFunctions::isTechnologieAccessible($this->ctx->user, $checkData, 12, array()) && (int)($pData[$resource[3]] ?? 0) >= 10) ? 12 : 4;
+                        if (BuildFunctions::isTechnologieAccessible($this->ctx->user, $checkData, $energyBId, array())) {
+                            $chosenId = $energyBId;
+                            break;
+                        }
+                    }
+                }
+
                 // Fase 0 — Energía del escalón: Planta Solar (#4) < meta del escalón
                 if ($solarLvl < $targets[4] && BuildFunctions::isTechnologieAccessible($this->ctx->user, $checkData, 4, array())) {
                     $chosenId = 4;
@@ -699,8 +710,26 @@ class BotProductionAllocator
             return 24;
         }
 
-        // --- Válvula B (Esfuerzo Económico en Fase 3) ---
-        if (!$isFutureQueueSlot && in_array($chosenId, array(31, 21, 22, 23, 24, 84, 83, 82, 44), true)) {
+        // --- Válvula B (Esfuerzo Económico) ---
+        $isValvulaBCandidate = false;
+        $maxCostHPThreshold = 3.0;
+        $useEmpireHPRef = false;
+        if (!$isFutureQueueSlot) {
+            $isGravitonLab = ($chosenId === 31 && $isBestLab && $lM >= 20 && (int)($this->ctx->user[$resource[199]] ?? 0) === 0);
+            if ($isGravitonLab) {
+                $isValvulaBCandidate = true;
+                $maxCostHPThreshold = 6.0;
+                $useEmpireHPRef = true;
+            } elseif (in_array($chosenId, array(31, 21, 22, 23, 24, 84, 83, 82, 44), true)) {
+                $isValvulaBCandidate = true;
+            } elseif ($chosenId === 15 && (int)($pData[$resource[15]] ?? 0) >= 1) {
+                $isValvulaBCandidate = true;
+            } elseif ($chosenId === 14 && (int)($pData[$resource[14]] ?? 0) >= 5) {
+                $isValvulaBCandidate = true;
+            }
+        }
+
+        if ($isValvulaBCandidate) {
             $availM = (float)($pData['metal'] ?? 0.0);
             $availC = (float)($pData['crystal'] ?? 0.0);
             $availD = max(0.0, (float)($pData['deuterium'] ?? 0.0) - 25000.0);
@@ -709,9 +738,10 @@ class BotProductionAllocator
             if (!$canAffordNow) {
                 $costMSE = BotEconomyValuator::arrayToMSE($cost);
                 $localRefMSE = ($planetHourlyMSE > 0.0) ? $planetHourlyMSE : ($hourlyEmpireMSE / 5.0);
-                $localCostHP = BotEconomyValuator::toHP($costMSE, max(500.0, $localRefMSE));
+                $refMSE = ($useEmpireHPRef && $hourlyEmpireMSE > 0.0) ? $hourlyEmpireMSE : max(500.0, $localRefMSE);
+                $localCostHP = BotEconomyValuator::toHP($costMSE, $refMSE);
 
-                if ($localCostHP > 3.0) {
+                if ($localCostHP > $maxCostHPThreshold) {
                     $defM_MSE = max(0.0, $costM - $availM) * 1.0;
                     $defC_MSE = max(0.0, $costC - $availC) * 2.0;
                     $defD_MSE = max(0.0, $costD - $availD) * 4.0;
@@ -818,19 +848,28 @@ class BotProductionAllocator
         $topLabPlanetIds = array_slice(array_keys($empireLabSpeeds), 0, $maxConnectedLabs, true);
         $topLabPlanetMap = array_fill_keys($topLabPlanetIds, true);
 
-        // Designated Graviton Energy Hub: planet with lab >= 10/12 and hangar >= 8 that already has the highest energy / satellites built
+        // Designated Graviton Energy Hub: planet with lab >= 12 (or highest lab >= 10) and highest energy / satellites built
         $curGravLvl = (int)($this->ctx->user[$resource[199]] ?? 0);
         $gravitonHubPlanetId = 0;
         $bestHubScore = -1.0;
         $bestLabPlanetId = !empty($topLabPlanetIds) ? (int)reset($topLabPlanetIds) : 0;
+        $hasLab12InEmpire = false;
+        foreach ($planets as $pCandEntry) {
+            if ((int)($pCandEntry['data'][$resource[31]] ?? 0) >= 12) {
+                $hasLab12InEmpire = true;
+                break;
+            }
+        }
         foreach ($planets as $pCandId => $pCandEntry) {
             $pCandData = $pCandEntry['data'];
             $candLab = (int)($pCandData[$resource[31]] ?? 0);
             $candHangar = (int)($pCandData[$resource[21]] ?? 0);
-            if (($candLab >= 12 || ($curGravLvl === 0 && $candLab >= 10)) && ($candHangar >= 8 || $curGravLvl === 0)) {
+            $candEnergy = (float)($pCandData['energy'] ?? 0.0);
+            $labEligible = $hasLab12InEmpire ? ($candLab >= 12) : ($candLab >= 10);
+            if ($labEligible && ($candHangar >= 8 || $curGravLvl === 0 || $candEnergy >= 300000.0)) {
                 $satE = max(1.0, (($pCandData['temp_max'] + 160) / 6.0));
                 $existingSats = (int)($pCandData[$resource[212]] ?? 0);
-                $hubScore = ($existingSats * $satE) + ($satE * 500.0);
+                $hubScore = $candEnergy + ($existingSats * $satE) + ($satE * 500.0) + ($candLab * 100000.0);
                 if ($hubScore > $bestHubScore) {
                     $bestHubScore = $hubScore;
                     $gravitonHubPlanetId = (int)$pCandId;
@@ -906,8 +945,9 @@ class BotProductionAllocator
                             $empireHourlyMSE = $empire->getHourlyProductionMSE();
                             $botMoonsCount = count($empire->getMoons());
                             $planetCount = count($planets);
+                            $lM = (int)($pData[$resource[1]] ?? 0);
 
-                            if ($targetGravLvl === 1 && ($botMoonsCount >= 1 || $planetCount >= 6)) {
+                            if ($targetGravLvl === 1 && ($botMoonsCount >= 1 || $planetCount >= 4 || $lM >= 20)) {
                                 $allowGravSatPush = true;
                             } elseif ($targetGravLvl <= 3 && $empireHourlyMSE >= 250000000 && $planetCount >= 10) {
                                 $allowGravSatPush = true;
@@ -2253,18 +2293,27 @@ class BotProductionAllocator
 
         $bestLabPlanet = reset($rankedLabPlanets);
 
-        // Designated Graviton Energy Hub: planet with lab >= 10/12 and hangar >= 8 that already has the highest energy / satellites built
+        // Designated Graviton Energy Hub: planet with lab >= 12 (or highest lab >= 10) and highest energy / satellites built
         $curGrav = (int)($this->ctx->user[$resource[199]] ?? 0);
         $gravitonHubPlanetId = 0;
         $bestHubScore = -1.0;
+        $hasLab12InEmpire = false;
+        foreach ($planets as $pCandEntry) {
+            if ((int)($pCandEntry['data'][$resource[31]] ?? 0) >= 12) {
+                $hasLab12InEmpire = true;
+                break;
+            }
+        }
         foreach ($planets as $pCandId => $pCandEntry) {
             $pCandData = $pCandEntry['data'];
             $candLab = (int)($pCandData[$resource[31]] ?? 0);
             $candHangar = (int)($pCandData[$resource[21]] ?? 0);
-            if (($candLab >= 12 || ($curGrav === 0 && $candLab >= 10)) && ($candHangar >= 8 || $curGrav === 0)) {
+            $candEnergy = (float)($pCandData['energy'] ?? 0.0);
+            $labEligible = $hasLab12InEmpire ? ($candLab >= 12) : ($candLab >= 10);
+            if ($labEligible && ($candHangar >= 8 || $curGrav === 0 || $candEnergy >= 300000.0)) {
                 $satE = max(1.0, (($pCandData['temp_max'] + 160) / 6.0));
                 $existingSats = (int)($pCandData[$resource[212]] ?? 0);
-                $hubScore = ($existingSats * $satE) + ($satE * 500.0);
+                $hubScore = $candEnergy + ($existingSats * $satE) + ($satE * 500.0) + ($candLab * 100000.0);
                 if ($hubScore > $bestHubScore) {
                     $bestHubScore = $hubScore;
                     $gravitonHubPlanetId = (int)$pCandId;
